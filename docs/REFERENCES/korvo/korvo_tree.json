@@ -1,0 +1,1047 @@
+{
+  "sha": "4b39b279c407df2c165500b0c6ed627667831a08",
+  "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/trees/4b39b279c407df2c165500b0c6ed627667831a08",
+  "tree": [
+    {
+      "path": ".gitignore",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f2f59a7dc41fea50437fbbe69fb6002833a37e25",
+      "size": 198,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/f2f59a7dc41fea50437fbbe69fb6002833a37e25"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bea333c4c156ec9bdc7300bea4ccd17d7b3b3e8b",
+      "size": 261,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/bea333c4c156ec9bdc7300bea4ccd17d7b3b3e8b"
+    },
+    {
+      "path": "LICENSE",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "69c5142fb7b6bc9a4cd85aac869956c22eac1ada",
+      "size": 1096,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/69c5142fb7b6bc9a4cd85aac869956c22eac1ada"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "dfed24dd02c4e8bf2639714f484cb45171e0ef36",
+      "size": 3551,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/dfed24dd02c4e8bf2639714f484cb45171e0ef36"
+    },
+    {
+      "path": "README.zh-CN.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c300b955afe0121db789a3056d79db146c4946ad",
+      "size": 3370,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/c300b955afe0121db789a3056d79db146c4946ad"
+    },
+    {
+      "path": "assets",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "7423f1ffadb93fb3d3c78d8ec1c1bd549930d177",
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/trees/7423f1ffadb93fb3d3c78d8ec1c1bd549930d177"
+    },
+    {
+      "path": "assets/diagrams",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "13d6259cf4a115f083d038771fd61a1dec3fef8a",
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/trees/13d6259cf4a115f083d038771fd61a1dec3fef8a"
+    },
+    {
+      "path": "assets/diagrams/esp32-s31-korvo1-board-resources.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f562265e078d00cfb27501a16926366e9aca5e7e",
+      "size": 3954766,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/f562265e078d00cfb27501a16926366e9aca5e7e"
+    },
+    {
+      "path": "assets/photos",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "6a6fd9cadb540f62bf6c631e53da26a48d289353",
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/trees/6a6fd9cadb540f62bf6c631e53da26a48d289353"
+    },
+    {
+      "path": "assets/photos/esp32-s31-korvo1-board-top.jpg",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "37fc99a2cb2092593492d47c5faa916fbdf12c71",
+      "size": 145192,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/37fc99a2cb2092593492d47c5faa916fbdf12c71"
+    },
+    {
+      "path": "assets/photos/esp32-s31-korvo1-box.jpg",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a243e8eb78dfe3fa5cf72f94cc6cef8c99840a4c",
+      "size": 156103,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/a243e8eb78dfe3fa5cf72f94cc6cef8c99840a4c"
+    },
+    {
+      "path": "assets/photos/esp32-s31-korvo1-factory-demo.jpg",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3ed6359ed9a5e1d51c1f133a03af994d72fc7f08",
+      "size": 207594,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/3ed6359ed9a5e1d51c1f133a03af994d72fc7f08"
+    },
+    {
+      "path": "docs",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "1d7055c0dd6ec26d71c2ddee29d818f9ca4b87b4",
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/trees/1d7055c0dd6ec26d71c2ddee29d818f9ca4b87b4"
+    },
+    {
+      "path": "docs/audio-system.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a1840aa28af9965db65dfa3a049602e800a39289",
+      "size": 774,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/a1840aa28af9965db65dfa3a049602e800a39289"
+    },
+    {
+      "path": "docs/audio-system.zh-CN.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d598caf8474418a0c301138e3b494840b3913d2a",
+      "size": 743,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/d598caf8474418a0c301138e3b494840b3913d2a"
+    },
+    {
+      "path": "docs/board-overview.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "70745bb91ca9d3aeec5988786287f8bb0807f439",
+      "size": 1392,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/70745bb91ca9d3aeec5988786287f8bb0807f439"
+    },
+    {
+      "path": "docs/board-overview.zh-CN.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "878264e27458a965478d3830943516602651ed30",
+      "size": 1399,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/878264e27458a965478d3830943516602651ed30"
+    },
+    {
+      "path": "docs/esp32-s31-korvo1-schematic.pdf",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b08d67f251f13e89ba8d7c56caa8246822b51f0c",
+      "size": 1694038,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/b08d67f251f13e89ba8d7c56caa8246822b51f0c"
+    },
+    {
+      "path": "docs/pinout.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3af462d1f644b2985b99cc33d352b92432207aa6",
+      "size": 1370,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/3af462d1f644b2985b99cc33d352b92432207aa6"
+    },
+    {
+      "path": "docs/pinout.zh-CN.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4dd6ed3a037dd8f558c6950c674e2d911797f318",
+      "size": 1361,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/4dd6ed3a037dd8f558c6950c674e2d911797f318"
+    },
+    {
+      "path": "docs/roadmap.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c60355c131fc0f2ba31acb7f692c5801976b0ae9",
+      "size": 486,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/c60355c131fc0f2ba31acb7f692c5801976b0ae9"
+    },
+    {
+      "path": "docs/roadmap.zh-CN.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1b95bad98b9d4fecbc44f55de1abe4fcfa3d7137",
+      "size": 442,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/1b95bad98b9d4fecbc44f55de1abe4fcfa3d7137"
+    },
+    {
+      "path": "docs/troubleshooting-audio.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b592240704ae534578a53cce8eef1dff46313b50",
+      "size": 908,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/b592240704ae534578a53cce8eef1dff46313b50"
+    },
+    {
+      "path": "docs/troubleshooting-audio.zh-CN.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "14fd14d8678352dda13c5a7eba7c89e949f91997",
+      "size": 920,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/14fd14d8678352dda13c5a7eba7c89e949f91997"
+    },
+    {
+      "path": "examples",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "42312db827b479ba8661aa55d0f66a6e5279829d",
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/trees/42312db827b479ba8661aa55d0f66a6e5279829d"
+    },
+    {
+      "path": "examples/01-hello-world",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "631a54cb4c44872f903ef202ff7428473c6c96ee",
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/trees/631a54cb4c44872f903ef202ff7428473c6c96ee"
+    },
+    {
+      "path": "examples/01-hello-world/CMakeLists.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9673e51970b39e484d116f9748c56a78448f81ce",
+      "size": 370,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/9673e51970b39e484d116f9748c56a78448f81ce"
+    },
+    {
+      "path": "examples/01-hello-world/README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1e4b336b45a7b5855efd56c6e53ca05fde52acf8",
+      "size": 607,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/1e4b336b45a7b5855efd56c6e53ca05fde52acf8"
+    },
+    {
+      "path": "examples/01-hello-world/README.zh-CN.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b79f9a8cfb397c056c1047d0770c50c5c2251391",
+      "size": 559,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/b79f9a8cfb397c056c1047d0770c50c5c2251391"
+    },
+    {
+      "path": "examples/01-hello-world/main",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "69d026fe477b451058b7ff2b836adc6813616c7f",
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/trees/69d026fe477b451058b7ff2b836adc6813616c7f"
+    },
+    {
+      "path": "examples/01-hello-world/main/CMakeLists.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "28ab405bd662534036a3adfbd9474cee41a937a1",
+      "size": 136,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/28ab405bd662534036a3adfbd9474cee41a937a1"
+    },
+    {
+      "path": "examples/01-hello-world/main/hello_world_main.c",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7010f3ef61c35a9ddc0bb3ec210b7a0089374808",
+      "size": 1666,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/7010f3ef61c35a9ddc0bb3ec210b7a0089374808"
+    },
+    {
+      "path": "examples/01-hello-world/pytest_hello_world.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e3ae95b6542fc55146acd323d78d40776438eb86",
+      "size": 1888,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/e3ae95b6542fc55146acd323d78d40776438eb86"
+    },
+    {
+      "path": "examples/01-hello-world/sdkconfig",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0972d1195a949951bafb46c6ed1e190f50565d78",
+      "size": 60689,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/0972d1195a949951bafb46c6ed1e190f50565d78"
+    },
+    {
+      "path": "examples/01-hello-world/sdkconfig.ci",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+    },
+    {
+      "path": "examples/02-ws2812-rgb-led",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "a59f6a84a0f93d83a91636dc51ec295222c65ab4",
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/trees/a59f6a84a0f93d83a91636dc51ec295222c65ab4"
+    },
+    {
+      "path": "examples/02-ws2812-rgb-led/CMakeLists.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4cc53af65e030c9f88652199cd88dc6c30b31365",
+      "size": 146,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/4cc53af65e030c9f88652199cd88dc6c30b31365"
+    },
+    {
+      "path": "examples/02-ws2812-rgb-led/README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "02d08da0daae995325f784eef105053c85a3ea87",
+      "size": 396,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/02d08da0daae995325f784eef105053c85a3ea87"
+    },
+    {
+      "path": "examples/02-ws2812-rgb-led/README.zh-CN.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b9fdcc35a0fa6b8dfdf91ab04003300758fcd93e",
+      "size": 385,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/b9fdcc35a0fa6b8dfdf91ab04003300758fcd93e"
+    },
+    {
+      "path": "examples/02-ws2812-rgb-led/docs",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "5a9dcb46cedf46cd746b1a5772e41866715423ad",
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/trees/5a9dcb46cedf46cd746b1a5772e41866715423ad"
+    },
+    {
+      "path": "examples/02-ws2812-rgb-led/docs/bringup.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3322959ed1937b6581bc588fdf5ab6755a1b37fe",
+      "size": 2294,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/3322959ed1937b6581bc588fdf5ab6755a1b37fe"
+    },
+    {
+      "path": "examples/02-ws2812-rgb-led/docs/bringup.zh-CN.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "96efc92081db38ce901fb950bbd726d04e0d89bb",
+      "size": 2291,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/96efc92081db38ce901fb950bbd726d04e0d89bb"
+    },
+    {
+      "path": "examples/02-ws2812-rgb-led/docs/code-walkthrough.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3b98f8bee7a6435bdb9ae8d8bb943e4a8614487b",
+      "size": 3689,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/3b98f8bee7a6435bdb9ae8d8bb943e4a8614487b"
+    },
+    {
+      "path": "examples/02-ws2812-rgb-led/docs/code-walkthrough.zh-CN.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8bb6e9e0e7a8224e39867203420e5b2314cc2c84",
+      "size": 3697,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/8bb6e9e0e7a8224e39867203420e5b2314cc2c84"
+    },
+    {
+      "path": "examples/02-ws2812-rgb-led/main",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "b74b6f7a7e0fad15e01f950f0f8a6d447573328b",
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/trees/b74b6f7a7e0fad15e01f950f0f8a6d447573328b"
+    },
+    {
+      "path": "examples/02-ws2812-rgb-led/main/CMakeLists.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4968893875b947469caff510d4dd99bd710ba59e",
+      "size": 128,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/4968893875b947469caff510d4dd99bd710ba59e"
+    },
+    {
+      "path": "examples/02-ws2812-rgb-led/main/led_strip_encoder.c",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "243c4273ed76dbf2b60b21d98391660a33c98e7e",
+      "size": 5142,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/243c4273ed76dbf2b60b21d98391660a33c98e7e"
+    },
+    {
+      "path": "examples/02-ws2812-rgb-led/main/led_strip_encoder.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "db5ef076b3ea665c722420df8a894c2c316e3cc3",
+      "size": 906,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/db5ef076b3ea665c722420df8a894c2c316e3cc3"
+    },
+    {
+      "path": "examples/02-ws2812-rgb-led/main/rgb_led_main.c",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a84db0df9e4ec2f69e8deca8572e9c86fb3fd599",
+      "size": 2417,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/a84db0df9e4ec2f69e8deca8572e9c86fb3fd599"
+    },
+    {
+      "path": "examples/02-ws2812-rgb-led/sdkconfig",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "933b4c894b2fa8adebeecd12cf9282677418e831",
+      "size": 61359,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/933b4c894b2fa8adebeecd12cf9282677418e831"
+    },
+    {
+      "path": "examples/03-adc-buttons",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "fffc46af2694261900246fd92478f9fe43215235",
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/trees/fffc46af2694261900246fd92478f9fe43215235"
+    },
+    {
+      "path": "examples/03-adc-buttons/CMakeLists.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8a169eef844be6a7cb5330d44b3d726bbf01bf40",
+      "size": 150,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/8a169eef844be6a7cb5330d44b3d726bbf01bf40"
+    },
+    {
+      "path": "examples/03-adc-buttons/README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f3290128c7ad04023c459d74780a140c490b597e",
+      "size": 1630,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/f3290128c7ad04023c459d74780a140c490b597e"
+    },
+    {
+      "path": "examples/03-adc-buttons/README.zh-CN.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a07067f0b4336a0a59e8b098513df555006b944d",
+      "size": 1598,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/a07067f0b4336a0a59e8b098513df555006b944d"
+    },
+    {
+      "path": "examples/03-adc-buttons/docs",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "a24170e26315a4adfe39d688c7a4b00220467962",
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/trees/a24170e26315a4adfe39d688c7a4b00220467962"
+    },
+    {
+      "path": "examples/03-adc-buttons/docs/bringup.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "95f5809d407b76b4e07856eab2204222984db0a6",
+      "size": 3371,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/95f5809d407b76b4e07856eab2204222984db0a6"
+    },
+    {
+      "path": "examples/03-adc-buttons/docs/bringup.zh-CN.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7b776f19f64904772a204db986396e62a5ffe89a",
+      "size": 3184,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/7b776f19f64904772a204db986396e62a5ffe89a"
+    },
+    {
+      "path": "examples/03-adc-buttons/docs/code-walkthrough.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1ed38c6d4794aab19d86b5692a16dfe76372e7d2",
+      "size": 7419,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/1ed38c6d4794aab19d86b5692a16dfe76372e7d2"
+    },
+    {
+      "path": "examples/03-adc-buttons/docs/code-walkthrough.zh-CN.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "24bf6e25dcf6fa24f3ab1adaa562effc3cb7c83b",
+      "size": 7253,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/24bf6e25dcf6fa24f3ab1adaa562effc3cb7c83b"
+    },
+    {
+      "path": "examples/03-adc-buttons/main",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "aab70a8a8e30a29846fc93fb85862f082029c280",
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/trees/aab70a8a8e30a29846fc93fb85862f082029c280"
+    },
+    {
+      "path": "examples/03-adc-buttons/main/CMakeLists.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6994f94f4422469609c66d666f36e77c95ad4a26",
+      "size": 103,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/6994f94f4422469609c66d666f36e77c95ad4a26"
+    },
+    {
+      "path": "examples/03-adc-buttons/main/adc_buttons_main.c",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4b5aec249a279699b248b9e199b03997bf943a59",
+      "size": 4717,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/4b5aec249a279699b248b9e199b03997bf943a59"
+    },
+    {
+      "path": "examples/03-adc-buttons/sdkconfig",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6ec12b282c39825d66908ace16305549df7a1206",
+      "size": 61083,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/6ec12b282c39825d66908ace16305549df7a1206"
+    },
+    {
+      "path": "examples/04-i2c-device-scan",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "6d316193e644cab233c474b5bee2695a536b2e64",
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/trees/6d316193e644cab233c474b5bee2695a536b2e64"
+    },
+    {
+      "path": "examples/04-i2c-device-scan/CMakeLists.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "23c922ed22fac35a57d9bf5272e155a7b032b306",
+      "size": 154,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/23c922ed22fac35a57d9bf5272e155a7b032b306"
+    },
+    {
+      "path": "examples/04-i2c-device-scan/README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0cbaf4574d64447b7a89484f428405014a3d2e8e",
+      "size": 806,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/0cbaf4574d64447b7a89484f428405014a3d2e8e"
+    },
+    {
+      "path": "examples/04-i2c-device-scan/README.zh-CN.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c6121e217279c8091267058efb893ee661f5b40a",
+      "size": 795,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/c6121e217279c8091267058efb893ee661f5b40a"
+    },
+    {
+      "path": "examples/04-i2c-device-scan/main",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "9827639fdf5582a09cc696b483ba29e6622f6b7d",
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/trees/9827639fdf5582a09cc696b483ba29e6622f6b7d"
+    },
+    {
+      "path": "examples/04-i2c-device-scan/main/CMakeLists.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "48403a02aeece6d04d17bb2e4bee5ef9c1da83a8",
+      "size": 114,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/48403a02aeece6d04d17bb2e4bee5ef9c1da83a8"
+    },
+    {
+      "path": "examples/04-i2c-device-scan/main/i2c_codec_probe_main.c",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2128401596aa011ce7a73a751c66c74f168c19f2",
+      "size": 3771,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/2128401596aa011ce7a73a751c66c74f168c19f2"
+    },
+    {
+      "path": "examples/04-i2c-device-scan/sdkconfig",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c43e429d5a1d4fc7cc9f9f1627bd1a59485a2527",
+      "size": 61074,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/c43e429d5a1d4fc7cc9f9f1627bd1a59485a2527"
+    },
+    {
+      "path": "examples/05-es8389-i2s-playback",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "b140f659905d159d1f51c3591eea42ca4c66fe6d",
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/trees/b140f659905d159d1f51c3591eea42ca4c66fe6d"
+    },
+    {
+      "path": "examples/05-es8389-i2s-playback/CMakeLists.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c7f1544f49fba178526ed986f7ef83534ca32df4",
+      "size": 157,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/c7f1544f49fba178526ed986f7ef83534ca32df4"
+    },
+    {
+      "path": "examples/05-es8389-i2s-playback/README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "59c2b3aff78d83223bfa11f4fc88743b5046974d",
+      "size": 1260,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/59c2b3aff78d83223bfa11f4fc88743b5046974d"
+    },
+    {
+      "path": "examples/05-es8389-i2s-playback/README.zh-CN.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a054193f657f1f017b9a23c8e4200f59c2af2d03",
+      "size": 1220,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/a054193f657f1f017b9a23c8e4200f59c2af2d03"
+    },
+    {
+      "path": "examples/05-es8389-i2s-playback/dependencies.lock",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7ee90dacce3cbc688d748860e58b1cb0796b6310",
+      "size": 525,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/7ee90dacce3cbc688d748860e58b1cb0796b6310"
+    },
+    {
+      "path": "examples/05-es8389-i2s-playback/docs",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "9ae5a8b4fbfd3123873bb399f3a7c2924e384816",
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/trees/9ae5a8b4fbfd3123873bb399f3a7c2924e384816"
+    },
+    {
+      "path": "examples/05-es8389-i2s-playback/docs/bringup.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b484523109d900be0c7a7dc36754e9d0e86dab63",
+      "size": 4017,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/b484523109d900be0c7a7dc36754e9d0e86dab63"
+    },
+    {
+      "path": "examples/05-es8389-i2s-playback/docs/bringup.zh-CN.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ded94418fbbaa99323723eb40cde7522e68c7246",
+      "size": 4034,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/ded94418fbbaa99323723eb40cde7522e68c7246"
+    },
+    {
+      "path": "examples/05-es8389-i2s-playback/docs/code-walkthrough.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9016d9a1a72af6932492da8ae9cd5c2c69c0e67f",
+      "size": 10138,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/9016d9a1a72af6932492da8ae9cd5c2c69c0e67f"
+    },
+    {
+      "path": "examples/05-es8389-i2s-playback/docs/code-walkthrough.zh-CN.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ab5cff2d498fa182c629d1dc5e073b0d017e549c",
+      "size": 10435,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/ab5cff2d498fa182c629d1dc5e073b0d017e549c"
+    },
+    {
+      "path": "examples/05-es8389-i2s-playback/main",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "2153cfd199979d4fc8beb96fae16f604c6323a01",
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/trees/2153cfd199979d4fc8beb96fae16f604c6323a01"
+    },
+    {
+      "path": "examples/05-es8389-i2s-playback/main/CMakeLists.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "cdf4bda5d0f26ff50529fa70b574fd087a925dcb",
+      "size": 173,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/cdf4bda5d0f26ff50529fa70b574fd087a925dcb"
+    },
+    {
+      "path": "examples/05-es8389-i2s-playback/main/i2s_audio_playback_main.c",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d6066185ad5c87c7a48dd6f6017b442f08d3e230",
+      "size": 6168,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/d6066185ad5c87c7a48dd6f6017b442f08d3e230"
+    },
+    {
+      "path": "examples/05-es8389-i2s-playback/main/idf_component.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "05ee5051b7817a9f6c1ce4989ea49cac51b1e726",
+      "size": 50,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/05ee5051b7817a9f6c1ce4989ea49cac51b1e726"
+    },
+    {
+      "path": "examples/05-es8389-i2s-playback/sdkconfig",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c2cbb6637f3deb46d06c0aa13532808000cb6ea7",
+      "size": 62637,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/c2cbb6637f3deb46d06c0aa13532808000cb6ea7"
+    },
+    {
+      "path": "examples/06-gmf-es8389-playback",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "ed05dd4eb87a47cfa41f2587408d8c4061aa331b",
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/trees/ed05dd4eb87a47cfa41f2587408d8c4061aa331b"
+    },
+    {
+      "path": "examples/06-gmf-es8389-playback/CMakeLists.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bcbebf5b5df4b6f3d4bcade5c848f4d7ba66a166",
+      "size": 241,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/bcbebf5b5df4b6f3d4bcade5c848f4d7ba66a166"
+    },
+    {
+      "path": "examples/06-gmf-es8389-playback/README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d19acd31cf57d7819d0e263f555e20608fa20ab1",
+      "size": 1132,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/d19acd31cf57d7819d0e263f555e20608fa20ab1"
+    },
+    {
+      "path": "examples/06-gmf-es8389-playback/README.zh-CN.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b18c913cdf9178aa902ec83d29f1b3d92429acd1",
+      "size": 1036,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/b18c913cdf9178aa902ec83d29f1b3d92429acd1"
+    },
+    {
+      "path": "examples/06-gmf-es8389-playback/docs",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "650c5689334f20f867cb89cbe1ab2444c185d7e4",
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/trees/650c5689334f20f867cb89cbe1ab2444c185d7e4"
+    },
+    {
+      "path": "examples/06-gmf-es8389-playback/docs/bringup.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b2dc1e47d0fed91c0aaa15ef015019752e3ea32e",
+      "size": 5695,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/b2dc1e47d0fed91c0aaa15ef015019752e3ea32e"
+    },
+    {
+      "path": "examples/06-gmf-es8389-playback/docs/bringup.zh-CN.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1793c029098c4ebc9129ae95391bf7203db1dd04",
+      "size": 5592,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/1793c029098c4ebc9129ae95391bf7203db1dd04"
+    },
+    {
+      "path": "examples/06-gmf-es8389-playback/docs/code-walkthrough.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "090e52cc3374890932eb8f50f7850b4eb32e9fc1",
+      "size": 8993,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/090e52cc3374890932eb8f50f7850b4eb32e9fc1"
+    },
+    {
+      "path": "examples/06-gmf-es8389-playback/docs/code-walkthrough.zh-CN.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "902839448606bd2c41dd858957f363ee46533700",
+      "size": 8646,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/902839448606bd2c41dd858957f363ee46533700"
+    },
+    {
+      "path": "examples/06-gmf-es8389-playback/main",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "1b60bb012a802510759d6ad24702ca4263bfbf79",
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/trees/1b60bb012a802510759d6ad24702ca4263bfbf79"
+    },
+    {
+      "path": "examples/06-gmf-es8389-playback/main/CMakeLists.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "03bd31cb030e176215b6fee136443cca9a831bb0",
+      "size": 79,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/03bd31cb030e176215b6fee136443cca9a831bb0"
+    },
+    {
+      "path": "examples/06-gmf-es8389-playback/main/idf_component.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9d9fad381cd8d6b77f85789e57b4f5b8e9fa0acf",
+      "size": 582,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/9d9fad381cd8d6b77f85789e57b4f5b8e9fa0acf"
+    },
+    {
+      "path": "examples/06-gmf-es8389-playback/main/play_embed_music.c",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c789343b4c168a4827f5802fca4ba4457ea947bd",
+      "size": 6006,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/c789343b4c168a4827f5802fca4ba4457ea947bd"
+    },
+    {
+      "path": "examples/06-gmf-es8389-playback/partitions.csv",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "111f54784d38ad053b04d1bb41e44b916a24ab28",
+      "size": 159,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/111f54784d38ad053b04d1bb41e44b916a24ab28"
+    },
+    {
+      "path": "examples/06-gmf-es8389-playback/sdkconfig.defaults",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "fa4904648049a1775211f5bf7fce555790e381a6",
+      "size": 1614,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/fa4904648049a1775211f5bf7fce555790e381a6"
+    },
+    {
+      "path": "examples/06-gmf-es8389-playback/sdkconfig.defaults.esp32",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1ea70d9aa9059192bb8653d6ce99a53e2ac472d2",
+      "size": 177,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/1ea70d9aa9059192bb8653d6ce99a53e2ac472d2"
+    },
+    {
+      "path": "examples/06-gmf-es8389-playback/sdkconfig.defaults.esp32s3",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3a9856a2c3e2d3b6dcfec210b7bcf96a544a4484",
+      "size": 403,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/3a9856a2c3e2d3b6dcfec210b7bcf96a544a4484"
+    },
+    {
+      "path": "examples/06-gmf-es8389-playback/sdkconfig.defaults.esp32s31",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c9be58e1c6cc28bb0042c5e0118caba30ed8c382",
+      "size": 502,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/c9be58e1c6cc28bb0042c5e0118caba30ed8c382"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "d77de9823b04da06cd507ed9957d87a3163fbc3c",
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/trees/d77de9823b04da06cd507ed9957d87a3163fbc3c"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/CMakeLists.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "905a94108252d195efd2e705763b03856a96beaf",
+      "size": 320,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/905a94108252d195efd2e705763b03856a96beaf"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a2cafbe4becb3499d404eed5cc5c093a510f305d",
+      "size": 1090,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/a2cafbe4becb3499d404eed5cc5c093a510f305d"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/README.zh-CN.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "15d6e18e96c6a70fff858b49d4ec19fc57cfd031",
+      "size": 1000,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/15d6e18e96c6a70fff858b49d4ec19fc57cfd031"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/docs",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "13eb0716151ab9176dd2dd0a2e61033658abc045",
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/trees/13eb0716151ab9176dd2dd0a2e61033658abc045"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/docs/bringup.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4c18ebffca9b98e6e920d50400688c815e0b876d",
+      "size": 6224,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/4c18ebffca9b98e6e920d50400688c815e0b876d"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/docs/bringup.zh-CN.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a8153d386743e37ea6185ec1b5c9a69b53c6523c",
+      "size": 6051,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/a8153d386743e37ea6185ec1b5c9a69b53c6523c"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/docs/code-walkthrough.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d913fd832619ca5d3d8a4ddbdfa8da0f03982159",
+      "size": 10341,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/d913fd832619ca5d3d8a4ddbdfa8da0f03982159"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/docs/code-walkthrough.zh-CN.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9505190fde65a378674f953de29e05e742f9f602",
+      "size": 10157,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/9505190fde65a378674f953de29e05e742f9f602"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/main",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "d2f8cf1bebfb7524b49440f63fa415754bbbbe2b",
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/trees/d2f8cf1bebfb7524b49440f63fa415754bbbbe2b"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/main/CMakeLists.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "59616b829ebd50c794f9df6efda30439d88c3043",
+      "size": 713,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/59616b829ebd50c794f9df6efda30439d88c3043"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/main/Kconfig.projbuild",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "109a39166172bd135e76c568656427a5d1607734",
+      "size": 5261,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/109a39166172bd135e76c568656427a5d1607734"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/main/cmd_reg.c",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5f8db0ed9510f30e636fbdd9c55cce53ed20b0f9",
+      "size": 31106,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/5f8db0ed9510f30e636fbdd9c55cce53ed20b0f9"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/main/cmd_reg.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "53dc68339c8dc4ed5f5475a29ec2adbf530c6e73",
+      "size": 709,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/53dc68339c8dc4ed5f5475a29ec2adbf530c6e73"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/main/codec_defs.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "31664c24fef25f66ce6d00abbf65fcdae87a6a55",
+      "size": 620,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/31664c24fef25f66ce6d00abbf65fcdae87a6a55"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/main/idf_component.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "332e5f3f68c5e44c454ba96c49ebac79df5d3ffb",
+      "size": 775,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/332e5f3f68c5e44c454ba96c49ebac79df5d3ffb"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/main/main.c",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "156ffa0e0187adba42250af728b2b3da1504cd6b",
+      "size": 34574,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/156ffa0e0187adba42250af728b2b3da1504cd6b"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/main/pool_reg.c",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "029b52b454f35810c278244301b22f03fda372f8",
+      "size": 8648,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/029b52b454f35810c278244301b22f03fda372f8"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/main/pool_reg.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1dcb1ee3c3509ec936db46329ccdf320a736be62",
+      "size": 434,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/1dcb1ee3c3509ec936db46329ccdf320a736be62"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/main/stream_proc.c",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e5e67345fdd164cbe87afda6c9d136c3354b18fb",
+      "size": 29341,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/e5e67345fdd164cbe87afda6c9d136c3354b18fb"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/main/stream_proc.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c47b5a94aaf8f8356cc3d5765f415596f8d313ec",
+      "size": 1011,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/c47b5a94aaf8f8356cc3d5765f415596f8d313ec"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/partitions.csv",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "219da01c0af4c7b7c65799a83655192439f73838",
+      "size": 286,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/219da01c0af4c7b7c65799a83655192439f73838"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/partitions_esp32s31.csv",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "fb9038977fadb3ae90bda7e21e6f693323dc93b9",
+      "size": 286,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/fb9038977fadb3ae90bda7e21e6f693323dc93b9"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/sdkconfig.defaults",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c5e683f4444b9c81f67088f3221f7bf707d305b7",
+      "size": 554,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/c5e683f4444b9c81f67088f3221f7bf707d305b7"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/sdkconfig.defaults.esp32",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ddf5e503517e7d98db758c6c79d3e96a25f59f6d",
+      "size": 1223,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/ddf5e503517e7d98db758c6c79d3e96a25f59f6d"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/sdkconfig.defaults.esp32s31",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8cc3693ac8458de2efc06f6bc434ba0fabd8216c",
+      "size": 2648,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/8cc3693ac8458de2efc06f6bc434ba0fabd8216c"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/sdkconfig.defaults.esp32s31.a2dp_sink",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "610ad996e5ff43cd3eb355187436aeee2593bf36",
+      "size": 1566,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/610ad996e5ff43cd3eb355187436aeee2593bf36"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/sdkconfig.defaults.esp32s31.classic",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "51e5093b386de19d47a1ef326df7b4a218b207d9",
+      "size": 2270,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/51e5093b386de19d47a1ef326df7b4a218b207d9"
+    },
+    {
+      "path": "examples/07-gmf-a2dp-sink/sdkconfig.defaults.esp32s31.le",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7f8200a1145ce48a679cf2a11a29997f8ba6f2e7",
+      "size": 3563,
+      "url": "https://api.github.com/repos/kmyclab/esp32-s31-korvo1-bringup/git/blobs/7f8200a1145ce48a679cf2a11a29997f8ba6f2e7"
+    }
+  ],
+  "truncated": false
+}

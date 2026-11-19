@@ -1,0 +1,4 @@
+﻿## IDF Component Manager 依赖
+## （全部组件已本地化到 components/ 目录，不再走组件管理器联网解析）
+dependencies:
+  idf: ">=6.0"

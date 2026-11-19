@@ -1,0 +1,13 @@
+============================================
+ watching: C:\Users\Admin\Desktop\sample_project\live.log
+ handles log recreation / truncation
+ Ctrl+C to quit
+============================================
+A: watcher started
+B: build 45/2087
+C: build 2087/2087 done
+
+--- log recreated (new task) ---
+
+D: log recreated by new task
+E: appended after recreate

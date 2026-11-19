@@ -1,0 +1,103 @@
+# 硬件事实（活体核对版）
+
+> 来源等级：**实测**（串口启动日志）／**一手资料**（原理图文本层 `REFERENCES/schematic/s31sch.txt`、芯片 `soc_caps.h`）／**推断**（未验证的推论会标注）。
+> 本文件只写"确定的事实"，推测一律标注。
+
+## 1. 板子与芯片
+
+| 项 | 值 | 来源 |
+|---|---|---|
+| 板子 | 慧勤智远 **ESP32-S31 CB V1.1**（与乐鑫 Korvo-1 同构） | 丝印/原理图 |
+| 芯片 | ESP32-S31：双核 RISC-V 最高 **320MHz** | 官方规格 |
+| 内部 SRAM | 512KB（应用实际可用 ≈ **310KB**，启动日志实测） | 实测 |
+| 外部 Flash | **16MB**（`SPI Flash Size: 16MB`） | 实测 |
+| 外部 PSRAM | **16MB @ 250MHz，8-bit DDR**（合封在芯片内） | 实测 |
+| WiFi | 2.4GHz Wi-Fi 6 + BLE 5.4 | 官方 |
+| 蓝牙 | **支持经典蓝牙 BR/EDR + LE Audio**（`SOC_BT_CLASSIC_SUPPORTED=1`；ESP32-S3 没有这一项） | `soc_caps.h` |
+
+## 2. 显示屏（4.3" 800×480 RGB）
+
+- 面板：WKS43WV067（HX8264/HX8664 时序，**无 GRAM** ⇒ 显存靠 PSRAM 双 framebuffer）
+- PCLK **25MHz**（976×528 总周期 ≈ 48.5Hz），`.pclk_active_neg = false`（这是消除边缘闪的关键参数）
+- 时序：HSW48 / HBP88 / HFP40 / VSW3 / VBP32 / VFP13
+- **引脚（全部 IOMUX 直连）**：
+
+| 信号 | GPIO | 信号 | GPIO |
+|---|---|---|---|
+| HSYNC | 44 | DE | 43 |
+| VSYNC | 45 | PCLK | 40 |
+| B3~B7 | 8,9,10,11,12 | G2~G7 | 13,14,15,16,17,18 |
+| R3~R7 | 19,33,34,36,35 | — | — |
+
+- 帧缓冲：2 × 768KB（PSRAM），LVGL 用 `LV_DISPLAY_RENDER_MODE_FULL` + vsync
+
+## 3. 触摸
+
+- **GT1151Q**（I2C0，与 ES8389 共用总线；配置表起始 **0x8050**，注意不是 GT911 的 0x8047）
+- 独立触摸任务 + 16 深度事件队列，LVGL 以 50Hz 采样
+
+## 4. 音频（详见 BOARD_AUDIO.md）
+
+| 器件 | 位号/型号 | 说明 |
+|---|---|---|
+| Codec | **U3 ES8389** | 2×ADC + 2×DAC，I2C 7 位地址 **0x10**（8 位写 0x20） |
+| 功放 | **U4/U5 NS4150B** ×2 | D 类，BTL 输出到 SPKL/SPKR 两个 2P 座 |
+| 麦克风 | MIC1/MIC2（模拟 MEMS） | MIC1 接 codec 的 MIC2 通道（左右交叉） |
+| I2S（ESP32 侧） | BCLK=**IO3**、WS=**IO4**、DOUT=**IO5**、DIN=IO6 | MCLK=IO2，但 **R56 标 NC 未贴** |
+| 功放使能 | **IO7**（高有效，R11 10k 下拉） | 复位后默认静音 |
+
+**已知事实**：`DSDIN`/`ASDOUT` 是 codec 侧命名 ⇒ ESP32 的 `dout` 接 IO5、`din` 接 IO6，接反就"只能放音不能录音"。
+
+## 5. 三个 USB 口（别混）
+
+| 丝印 | 类型 | 数据线 | 用途 |
+|---|---|---|---|
+| **COM** | Type-C 16P | `USB_D±` → **CH343P** → UART0；DTR/RTS 自动下载 | **烧录 + 看日志（COM5）** |
+| **USB** | USB-A 母座 | `USB_DM/DP` → 模组 pin41/40（原生 USB） | OTG **Host**（读 U 盘/键鼠），VCC 直连 SYS_5V **对外供电** |
+| **PWR** | Type-C 16P | D± 串 R50/R51 标 **NC** | **纯供电，不能传数据** |
+
+电源：两个 Type-C 的 VBUS 并联 → `F1`（1.5A 自恢复保险）→ `SYS_5V` → `U10 SY8089A1AAC` 降压 → 3.3V。
+
+## 6. TF 卡座（SDMMC 4-bit）
+
+> ★★ **2026-11-18 更正**：早期本文写"SD_CLK=31 / CMD=32 / D0~D3=27~30"是**错的**——
+> 那是把原理图文本里的"模组引脚号"误当成了 GPIO 号。用 300 DPI 重渲染原理图核对后，
+> 实际连接如下（6 条线各经 22Ω 串阻 R63~R68）：
+
+| 信号 | GPIO | 模组引脚 | 串阻 |
+|---|---|---|---|
+| SD_D0 | **IO20** | pin 26 | R63 22R |
+| SD_D1 | **IO21** | pin 27 | R64 22R |
+| SD_D2 | **IO22** | pin 28 | R65 22R |
+| SD_D3 | **IO23** | pin 29 | R66 22R |
+| SD_CLK | **IO24** | pin 30 | R67 22R |
+| SD_CMD | **IO25** | pin 31 | R68 22R |
+
+- 与屏、音频、I2C **零冲突**；
+- **SDMMC 是独立控制器 + 独立 DMA，不占 MSPI** ⇒ 读卡不会像 flash 那样打断 LCD DMA（这是它能当播放源的关键）。
+
+## 7. Flash 分区（partitions-16MiB.csv）
+
+| 分区 | 偏移 | 大小 | 用途 |
+|---|---|---|---|
+| nvs | 0x9000 | 24KB | WiFi 校准等 |
+| phy_init | 0xF000 | 4KB | 射频校准 |
+| factory (app) | 0x10000 | **1.9MB** | 固件（当前 ≈1.27MB） |
+| **vfs (fat)** | 0x200000 | **10MB** | 音乐文件（当前 8.64MB） |
+| storage (spiffs) | 0xC00000 | 4MB | **空置**，可并给 vfs |
+
+## 8. 总线共用关系（理解一切"闪烁/卡顿"的钥匙）
+
+```
+        ┌──────────── MSPI 总线（共享）────────────┐
+CPU ────┤  Flash 16MB        PSRAM 16MB           │
+        └────────┬───────────────────┬────────────┘
+                 │                   │
+           代码/文件读取        RGB LCD DMA 持续读 50MB/s
+                                   ↑
+                          CPU 读 flash / 写 PSRAM 会打断它
+                          ⇒ 屏幕条纹（已用"音频预载 PSRAM"解决）
+```
+
+- SD 卡走 **SDMMC 控制器**（不在上图里）⇒ 未来用它放歌不会引起条纹；
+- I2S 音频 DMA 走内部 RAM，不占 MSPI。

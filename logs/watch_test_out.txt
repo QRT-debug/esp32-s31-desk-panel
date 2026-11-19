@@ -1,0 +1,8 @@
+============================================
+ watching: C:\Users\Admin\Desktop\sample_project\live.log
+ (each new task recreates the log; reopen)
+ Ctrl+C to quit
+============================================
+line-1 task started
+line-2 build 45/2087
+line-3 build 2087/2087 done
