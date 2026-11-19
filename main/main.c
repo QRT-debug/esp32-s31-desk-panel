@@ -18,6 +18,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/idf_additions.h"
 #include "freertos/task.h"
 #include "audio_player.h"
 #include "backlight.h"
@@ -36,9 +37,34 @@
 
 static const char *TAG = "main";
 
+/* ★ 11-20 诊断：一次性 dump 全部任务的核归属（回答"多核真的用上了吗"）。
+ *   9 秒后打（WiFi 已连、splash 已过、四页已跑，代表稳态负载）。
+ *   结论确认后整段可删（TRACE_FACILITY 也一并关回）。 */
+static void task_core_dump_task(void *arg)
+{
+    vTaskDelay(pdMS_TO_TICKS(9000));
+    TaskStatus_t st[48];
+    UBaseType_t n = uxTaskGetSystemState(st, 48, NULL);
+    ESP_LOGI(TAG, "=== task/core dump: %u tasks ===", (unsigned)n);
+    for (UBaseType_t k = 0; k < n; k++)
+    {
+        /* ★ xTaskGetCoreID：任务钉住的核（0/1），tskNO_AFFINITY = 两核皆可自由调度 */
+        BaseType_t core = xTaskGetCoreID(st[k].xHandle);
+        const char *aff = (core == 0) ? "pin0" : (core == 1) ? "pin1" : "any";
+        ESP_LOGI(TAG, "%-16s aff=%-4s prio=%2u state=%d stack_free=%6u",
+                 st[k].pcTaskName, aff,
+                 (unsigned)st[k].uxCurrentPriority,
+                 (int)st[k].eCurrentState,
+                 (unsigned)st[k].usStackHighWaterMark);
+    }
+    vTaskDelete(NULL);
+}
+
 void app_main(void)
 {
     ESP_LOGI(TAG, "=== PC MONITOR  (ESP32-S31 + 800x480 RGB) ===");
+
+    xTaskCreate(task_core_dump_task, "taskdump", 4096, NULL, 3, NULL);
 
     /* NVS 必须最先初始化：WiFi 驱动要在里面存校准数据 */
     esp_err_t ret = nvs_flash_init();
