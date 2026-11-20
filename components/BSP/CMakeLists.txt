@@ -42,5 +42,5 @@ component_compile_options(-ffast-math -O3 -Wno-error=format=-Wno-format)
 # ★ 必须带 FORCE：CACHE 变量一旦写进 build/CMakeCache.txt，改这里的默认值不会生效，
 #   会出现"明明改了 20，烧进去日志还显示 25"的情况。
 # 实测 25 / 20 / 16 MHz 对边缘闪无影响 ⇒ 不是时间余量问题，恢复 25 保证帧率。
-set(LCD_PCLK_MHZ 30 CACHE STRING "RGB LCD pixel clock in MHz" FORCE)
+set(LCD_PCLK_MHZ 25 CACHE STRING "RGB LCD pixel clock in MHz" FORCE)
 target_compile_definitions(${COMPONENT_LIB} PUBLIC LCD_PCLK_MHZ=${LCD_PCLK_MHZ})

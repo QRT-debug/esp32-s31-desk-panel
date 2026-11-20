@@ -256,6 +256,40 @@ void bsp_led_set_hsv(uint16_t hue, uint8_t sat, uint8_t val)
 }
 void bsp_led_off(void) { }
 
+/* ---- 天气（PC 模拟：固定假数据，便于调 UI） ---- */
+#include "weather.h"
+
+static wx_data_t s_wx_fake;
+static bool      s_wx_inited;
+
+void weather_start(void)
+{
+    if (s_wx_inited) { return; }
+    s_wx_inited = true;
+    s_wx_fake.state     = WX_STATE_OK;
+    s_wx_fake.temp_c    = 23;
+    s_wx_fake.feels_c   = 25;
+    s_wx_fake.humidity  = 68;
+    s_wx_fake.wind_kmph = 14;
+    snprintf(s_wx_fake.wind_dir, sizeof(s_wx_fake.wind_dir), "%s", "SE");
+    snprintf(s_wx_fake.desc, sizeof(s_wx_fake.desc), "%s", "Cloudy");
+    snprintf(s_wx_fake.city, sizeof(s_wx_fake.city), "%s", "Beijing");
+    snprintf(s_wx_fake.region, sizeof(s_wx_fake.region), "%s", "China");
+    {   /* 今日逐 3 小时假曲线（00..21 时） */
+        static const int fake_h[8] = { -2, -1, 1, 4, 8, 6, 3, 1 };
+        for (int i = 0; i < 8; i++) { s_wx_fake.hourly_t[i] = fake_h[i]; }
+    }
+    s_wx_fake.today_max = 26;
+    s_wx_fake.today_min = 18;
+    s_wx_fake.tmrw_max  = 24;
+    s_wx_fake.tmrw_min  = 16;
+    snprintf(s_wx_fake.updated, sizeof(s_wx_fake.updated), "%s", "17:20");
+    s_wx_fake.http_code = 200;
+}
+
+void weather_refresh_now(void) { }
+void weather_get(wx_data_t *out) { *out = s_wx_fake; }
+
 /* 模拟器专用：按键 S 切换"插卡/拔卡"，用来验证状态栏图标 */
 void sim_sd_toggle(void)
 {

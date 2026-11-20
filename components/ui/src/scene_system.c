@@ -199,8 +199,9 @@ static void theme_cb(lv_event_t *e)
 {
     lv_obj_t *sw = lv_event_get_target(e);
     bool dark = lv_obj_has_state(sw, LV_STATE_CHECKED);
+    /* ★ 只换色板 + 请求重建；状态栏刷新放到重建那一帧（build_system 末尾），
+     *   否则会出现"顶部新色 + 页面旧色"的一帧混色。 */
     ui_theme_set(dark);
-    ui_statusbar_refresh();
     ui_goto_scene(UI_SCENE_SYSTEM);
 }
 
@@ -468,6 +469,7 @@ void scene_system(uint16_t *fb, int frame)
     if (frame == 0)
     {
         build_system();
+        ui_statusbar_refresh();   /* 重建完再刷状态栏：整屏同帧换色，无混色过渡 */
     }
     else if (frame % 25 == 0)     /* 约 500ms 刷新一次（原 1s，加快一倍） */
     {

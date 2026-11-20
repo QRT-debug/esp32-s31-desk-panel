@@ -78,7 +78,9 @@ Desktop.ini
 *.sln.docstates # Visual Studio
 
 # ---- 本项目追加（11-20 git init）----
-Temp/          # 调试临时目录（规格书 PDF/笔记/脚本/渲染图，~286MB）
-.workbuddy/    # AI 协作工具数据与记忆
+# 调试临时目录（规格书 PDF/笔记/脚本/渲染图）
+Temp/
+# AI 协作工具数据与记忆
+.workbuddy/
 live*.log
 boot_capture.log

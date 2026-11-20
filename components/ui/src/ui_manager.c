@@ -32,10 +32,11 @@ static const char *TAG = "ui";
  *   20ms  → LVGL 50Hz：滑块拖动顺滑（音频页）
  *   100ms → 监控页数据本来就 1Hz，省 CPU */
 const ui_scene_t g_scenes[] = {
-    { "HOME",       scene_home,    20, -1, false, true },
+    { "WEATHER",    scene_weather, 20, -1, false, true },
     { "PC MONITOR", scene_monitor, 100, -1, false, true },
     { "AUDIO",      scene_audio,   20, -1, false, true },
     { "SYSTEM",     scene_system,   20, -1, false, true },
+    { "APPS",       scene_home,    20, -1, false, true },
 };
 const int g_scene_count = (int)(sizeof(g_scenes) / sizeof(g_scenes[0]));
 

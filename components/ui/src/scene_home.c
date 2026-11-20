@@ -47,6 +47,7 @@ static lv_obj_t *s_sub[4];   /* 每张卡的说明文字 */
 static void to_monitor_cb(lv_event_t *e) { (void)e; ui_goto_scene(UI_SCENE_MONITOR); }
 static void to_audio_cb(lv_event_t *e)   { (void)e; ui_goto_scene(UI_SCENE_AUDIO); }
 static void to_system_cb(lv_event_t *e)  { (void)e; ui_goto_scene(UI_SCENE_SYSTEM); }
+static void to_weather_cb(lv_event_t *e) { (void)e; ui_goto_scene(UI_SCENE_HOME); }
 
 /* 一张卡片：图标圆 + 标题 + 大数值 + 说明 */
 static lv_obj_t *make_card(lv_obj_t *parent, int x, int y,
@@ -145,6 +146,27 @@ static void build_home(void)
     lv_obj_set_style_text_color(sub, lv_color_hex(C_SUB), 0);
     lv_label_set_text(sub, "desktop terminal");
     lv_obj_set_pos(sub, 34, 62);
+
+    /* ★ 11-20：本页降级为"应用页"，右上角返回天气主页 */
+    {
+        lv_obj_t *back = lv_button_create(root);
+        lv_obj_set_size(back, 120, 32);
+        lv_obj_set_pos(back, 648, 58);   /* 状态栏本体到 y32、阴影到 y46，再留 12px 间隙 */
+        lv_obj_set_style_radius(back, 17, 0);
+        lv_obj_set_style_bg_color(back, lv_color_hex(C_CARD), 0);
+        lv_obj_set_style_bg_opa(back, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(back, 0, 0);
+        lv_obj_set_style_shadow_width(back, 8, 0);
+        lv_obj_set_style_shadow_opa(back, LV_OPA_20, 0);
+        lv_obj_set_style_shadow_color(back, lv_color_hex(C_SHADOW), 0);
+        lv_obj_set_style_shadow_offset_y(back, 2, 0);
+        lv_obj_add_event_cb(back, to_weather_cb, LV_EVENT_CLICKED, NULL);
+        lv_obj_t *bl = lv_label_create(back);
+        lv_obj_set_style_text_font(bl, &lv_font_montserrat_14, 0);   /* symbol 只在 montserrat 有字形 */
+        lv_obj_set_style_text_color(bl, lv_color_hex(C_TITLE), 0);
+        lv_label_set_text(bl, LV_SYMBOL_LEFT " WEATHER");
+        lv_obj_center(bl);
+    }
 
     /* 2x2 卡片 */
     make_card(scr,  32,  96, C_BLUE,   "\xEF\x8B\x9B", "PC MONITOR",  /* 芯片 */

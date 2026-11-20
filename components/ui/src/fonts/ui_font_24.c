@@ -1,7 +1,7 @@
 /*******************************************************************************
  * Size: 24 px
  * Bpp: 4
- * Opts: --font C:/Windows/Fonts/segoeui.ttf --size 24 --bpp 4 --format lvgl --range 0x20-0x7E --no-compress --lv-include lvgl.h --lv-font-name ui_font_24 -o components/ui/src/fonts/ui_font_24.c
+ * Opts: --font C:/Windows/Fonts/segoeui.ttf --size 24 --bpp 4 --format lvgl --range 0x20-0x7E --range 0xB0 --no-compress --lv-include lvgl.h --lv-font-name ui_font_24 -o ui_font_24.c
  ******************************************************************************/
 
 #ifdef LV_LVGL_H_INCLUDE_SIMPLE
@@ -1173,7 +1173,13 @@ static LV_ATTRIBUTE_LARGE_CONST const uint8_t glyph_bitmap[] = {
     /* U+007E "~" */
     0x0, 0x47, 0x61, 0x0, 0x0, 0x58, 0x9, 0xff,
     0xff, 0x80, 0x0, 0xdc, 0x3f, 0x90, 0x3b, 0xfe,
-    0x9b, 0xf6, 0x7f, 0x10, 0x0, 0x4b, 0xfd, 0x70
+    0x9b, 0xf6, 0x7f, 0x10, 0x0, 0x4b, 0xfd, 0x70,
+
+    /* U+00B0 "°" */
+    0x0, 0x0, 0x0, 0x0, 0x5e, 0xfd, 0x50, 0x4f,
+    0x95, 0x9f, 0x4a, 0xd0, 0x0, 0xca, 0xac, 0x0,
+    0xb, 0xa5, 0xf7, 0x27, 0xf5, 0x7, 0xff, 0xf8,
+    0x0, 0x1, 0x31, 0x0
 };
 
 
@@ -1277,7 +1283,8 @@ static const lv_font_fmt_txt_glyph_dsc_t glyph_dsc[] = {
     {.bitmap_index = 7315, .adv_w = 116, .box_w = 6, .box_h = 21, .ofs_x = 1, .ofs_y = -5},
     {.bitmap_index = 7378, .adv_w = 92, .box_w = 2, .box_h = 24, .ofs_x = 2, .ofs_y = -5},
     {.bitmap_index = 7402, .adv_w = 116, .box_w = 7, .box_h = 21, .ofs_x = 0, .ofs_y = -5},
-    {.bitmap_index = 7476, .adv_w = 263, .box_w = 12, .box_h = 4, .ofs_x = 2, .ofs_y = 5}
+    {.bitmap_index = 7476, .adv_w = 263, .box_w = 12, .box_h = 4, .ofs_x = 2, .ofs_y = 5},
+    {.bitmap_index = 7500, .adv_w = 145, .box_w = 7, .box_h = 8, .ofs_x = 1, .ofs_y = 10}
 };
 
 /*---------------------
@@ -1291,6 +1298,10 @@ static const lv_font_fmt_txt_cmap_t cmaps[] =
 {
     {
         .range_start = 32, .range_length = 95, .glyph_id_start = 1,
+        .unicode_list = NULL, .glyph_id_ofs_list = NULL, .list_length = 0, .type = LV_FONT_FMT_TXT_CMAP_FORMAT0_TINY
+    },
+    {
+        .range_start = 176, .range_length = 1, .glyph_id_start = 96,
         .unicode_list = NULL, .glyph_id_ofs_list = NULL, .list_length = 0, .type = LV_FONT_FMT_TXT_CMAP_FORMAT0_TINY
     }
 };
@@ -1316,7 +1327,7 @@ static lv_font_fmt_txt_dsc_t font_dsc = {
     .cmaps = cmaps,
     .kern_dsc = NULL,
     .kern_scale = 0,
-    .cmap_num = 1,
+    .cmap_num = 2,
     .bpp = 4,
     .kern_classes = 0,
     .bitmap_format = 0,

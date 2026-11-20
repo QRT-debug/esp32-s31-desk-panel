@@ -20,6 +20,7 @@
 #include "pc_monitor.h"
 #include "sd_card.h"
 #include "ui_scenes.h"
+#include "ui_theme.h"
 #include "wifi_sta.h"
 
 #define SCR_W 800
@@ -35,6 +36,7 @@ int  sim_scene_get(void);
 void sim_scene_set(int idx);
 void sim_sd_toggle(void);
 int  sim_rebuild_take(void);   /* 同场景重入请求（主题切换） */
+void weather_start(void);      /* 天气（PC 为固定假数据） */
 
 /* ---- 给 stub 层用的时间/延时（它们只依赖这两个） ---- */
 uint32_t xTaskGetTickCount(void) { return SDL_GetTicks(); }
@@ -56,6 +58,51 @@ static void flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
     SDL_RenderPresent(s_ren);
 
     lv_display_flush_ready(disp);
+}
+
+/* 把当前渲染器内容存 BMP（SDL 自带，零依赖；供 --shot 自动截图） */
+static void save_shot(const char *path)
+{
+    SDL_Surface *ss = SDL_CreateRGBSurfaceWithFormat(0, SCR_W, SCR_H, 32,
+                                                     SDL_PIXELFORMAT_ABGR8888);
+    if (ss == NULL)
+    {
+        printf("shot: surface failed\n");
+        return;
+    }
+    if (SDL_RenderReadPixels(s_ren, NULL, SDL_PIXELFORMAT_ARGB8888,
+                             ss->pixels, ss->pitch) != 0)
+    {
+        printf("shot: read pixels failed: %s\n", SDL_GetError());
+        SDL_FreeSurface(ss);
+        return;
+    }
+    /* 转 RGB24 再存；部分 GL 驱动的 ReadPixels 输出 BGR，手动交换 R/B 保证截图颜色正确 */
+    SDL_Surface *cv = SDL_ConvertSurfaceFormat(ss, SDL_PIXELFORMAT_RGB24, 0);
+    SDL_FreeSurface(ss);
+    if (cv != NULL)
+    {
+        uint8_t *px = (uint8_t *)cv->pixels;
+        int     np = cv->w * cv->h;
+        for (int i = 0; i < np; i++)
+        {
+            uint8_t t = px[i * 3];
+            px[i * 3]     = px[i * 3 + 2];
+            px[i * 3 + 2] = t;
+        }
+    }
+    if (cv == NULL || SDL_SaveBMP(cv, path) != 0)
+    {
+        printf("shot: save failed: %s\n", SDL_GetError());
+    }
+    else
+    {
+        printf("shot saved: %s\n", path);
+    }
+    if (cv != NULL)
+    {
+        SDL_FreeSurface(cv);
+    }
 }
 
 static void mouse_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
@@ -110,6 +157,7 @@ int main(int argc, char **argv)
      *   必须自己调，否则状态栏（时间/WiFi）和日志缓冲都不会出现。 */
     ui_logbuf_init();
     ui_statusbar_init();
+    ui_statusbar_refresh();   /* 应用当前色板（--dark 时需要立即刷） */
 
     bool demo_music = false;
     for (int i = 1; i < argc; i++)
@@ -121,19 +169,34 @@ int main(int argc, char **argv)
     }
 
     int  scene = UI_SCENE_HOME;
+    const char *shot_path = NULL;
+    int  shot_after = 0;
 
-    /* 可选：--scene N 直接打开指定页面（0=HOME 1=MONITOR 2=AUDIO 3=SYSTEM） */
+    weather_start();   /* PC 模拟：装载固定假天气数据（sim_impl.c） */
+
+    /* 可选：--scene N 直接打开指定页面（0=WEATHER 1=MONITOR 2=AUDIO 3=SYSTEM 4=APPS） */
     for (int i = 1; i < argc; i++)
     {
         if (strcmp(argv[i], "--scene") == 0 && i + 1 < argc)
         {
             sim_scene_set(atoi(argv[i + 1]));
         }
+        if (strcmp(argv[i], "--dark") == 0)
+        {
+            ui_theme_set(true);   /* 深色主题启动（验证深色配色用） */
+        }
+        if (strcmp(argv[i], "--shot") == 0 && i + 1 < argc)
+        {
+            shot_path  = argv[i + 1];
+            shot_after = 90;   /* 渲染 90 帧（约 1.5s）后截图 */
+        }
         if (strcmp(argv[i], "--nosd") == 0)
         {
             sim_sd_toggle();   /* 启动即"无卡"状态，用于截图对比 */
         }
     }
+    ui_statusbar_refresh();   /* --dark 在状态栏 init 之后才解析，这里按最终色板再刷一次 */
+
     int  last_scene = -1;
     int  frame = 0;
     bool running = true;
@@ -213,11 +276,19 @@ int main(int argc, char **argv)
 
         switch (scene)
         {
-        case UI_SCENE_HOME:    scene_home(NULL, frame++);    break;
+        case UI_SCENE_HOME:    scene_weather(NULL, frame++); break;
         case UI_SCENE_MONITOR: scene_monitor(NULL, frame++); break;
         case UI_SCENE_AUDIO:   scene_audio(NULL, frame++);   break;
         case UI_SCENE_SYSTEM:  scene_system(NULL, frame++);  break;
+        case UI_SCENE_APPS:    scene_home(NULL, frame++);    break;
         default: break;
+        }
+
+        if (shot_path != NULL && frame >= shot_after)
+        {
+            SDL_RenderPresent(s_ren);   /* 确保最后一帧已呈现 */
+            save_shot(shot_path);
+            running = false;
         }
 
         SDL_Delay(16);   /* ~60Hz */

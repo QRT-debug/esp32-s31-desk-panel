@@ -8,14 +8,12 @@
 
 LVGL 四页界面（HOME / PC 监控 / 音频播放器 / 系统信息+日志，状态栏常驻）+ **浅色/深色双主题**（系统页 DARK MODE 开关，NVS 记忆）+ **麦克风已打通**（16k 裸 I2S RX + 手动 ES8389 ADC 序列，录音/播放模式互斥）+ SD 卡播放 + 开机自播已删。固件 ≈1.8MB。
 
-## 音频架构（2026-11-20 定稿，推翻部分旧结论）
+## 音频架构（2026-11-20 定稿）
 
-- **旧 esp_codec_dev v1.x 回归**（新驱动 DAC@44.1k 嘶啦声修不动，整体退场到 `Temp/esp_codec_dev_old_backup`）；组件全部本地化到 `components/`，构建完全离线。
-- **I2S 双速率**：REC 16k = DEFAULT 源（160M÷4.096M 精确零抖动）/ PLAY 44.1k = APLL 22.5792M。**APLL 全芯片单资源且 reconfig 不释放**——两个频率分时切换必炸（enter PLAY failed），只有"一边完全不碰 APLL"才安全。
-- **mic 手动 ADC 序列**（`adc_manual_init`）= 厂商 open 序列 + **bias_on 全套**（0x69|=0x20、0x10=E4、0x64=0x8F）+ **coeff ratio=256 行**（05=41 06=04 07=C0 08=01 09=D1）+ 0xF0=0x12 + **0x01 固定 bit3=1**（厂商写 0x08，清成 0x00 会无数据）。no_mclk=true 下照此配置实测有声。
-- 播放时钟曾被旧驱动 data_if 覆盖回 DEFAULT（jitter 91% → 纯音拖长）：`audio_codec_i2s_cfg_t.clk_src` 必须显式传 APLL。
-- 模式互斥：`aud_enter()` 拿锁 → close 在用 → `i2s_set_rate()` 重配时钟 → open 目标；PA（IO7）应用层自管，REC 态强制关。
-- **背光时序（11-20 定稿）**：`backlight_init()` 只配 PWM（duty=0 不点亮），LVGL 首帧 flush 完成后 `backlight_default()`（75%）点亮；lcd_init 清**黑**且两块 fb 都清——消灭复位→首帧白屏。别再改回"init 即点亮"。
+- **旧 esp_codec_dev v1.x 回归**（新驱动修不动，退场 `Temp/esp_codec_dev_old_backup`）；组件全本地化，构建离线。
+- **I2S 双速率**：REC 16k=DEFAULT 源（零抖动）/ PLAY 44.1k=APLL。**APLL 全芯片单资源且 reconfig 不释放**——分时切换必炸，只有"一边完全不碰 APLL"才安全；`audio_codec_i2s_cfg_t.clk_src` 必须显式传 APLL。
+- **mic 手动 ADC 序列**（`adc_manual_init`）= 厂商 open + bias_on（0x69|=0x20、0x10=E4、0x64=0x8F）+ coeff 256 行（05=41 06=04 07=C0 08=01 09=D1）+ 0xF0=0x12 + 0x01 bit3=1。细节见 2026-11-20 日报。
+- 模式互斥：`aud_enter()` 拿锁 → close 在用 → `i2s_set_rate()` → open 目标；PA(IO7) REC 态强制关。
 
 ## 铁律（踩过坑，别再犯）
 
@@ -30,10 +28,27 @@ LVGL 四页界面（HOME / PC 监控 / 音频播放器 / 系统信息+日志，�
 ## 硬件要点（详见 docs/HARDWARE.md）
 
 - 屏：800×480 RGB，PCLK 25MHz，`.pclk_active_neg = false`（消边缘闪的关键）；
+  ★ **PCLK 必须 25MHz（11-20 定案）**：30MHz 时屏幕下方波浪状模糊（PSRAM 被 LCD DMA+PPA 抢，行消隐内取数不及=underflow），降 25 消失。25MHz×16bit=50MB/s 持续，已是 SPI 屏 80MHz(10MB/s 峰值) 的 5 倍带宽。再遇波浪先降 PCLK/加 VBP。
 - 音频：ES8389(I2C 0x10) + NS4150B×2；I2S BCLK=IO3 / WS=IO4 / DOUT=IO5 / PA=IO7；
 - 烧录用 **COM 口**（CH343P，COM5）；USB-A 是 Host 口；PWR 口不能传数据；
 - TF 卡 = **SDMMC 4-bit**：CLK=31, CMD=32, D0~D3=27~30，**不占 MSPI**（未来放歌的首选）；
 - 分区：app 1.9MB / **vfs(fat) 10MB**（音乐）/ storage 4MB（空置，可并给 vfs）。
+
+## S31 深层硬件能力索引（写软件前对照 · soc_caps.h 实测 11-20）
+
+触发式查表：写代码遇到场景 → 用对应硬件，别用 CPU 硬算。
+- 大块内存搬运（帧缓冲/音频缓冲拷贝）→ **ASYNC_MEMCPY**（esp_async_memcpy，DMA 零 CPU）；
+- 显示网络图片/JPEG → **硬件 JPEG 编解码**（esp_jpeg）；
+- 图像格式重排/颜色空间转换 → **BITSCRAMBLER**（DMA 字节流重排）；
+- UI 卡顿 → 先查 PPA 两行 sdkconfig（LV_USE_PPA=y + LV_DRAW_BUF_ALIGN=64，见渲染铁律）；
+- 16k↔44.1k 音频互转 → 芯片有 **ASRC** 但 IDF 6.1 驱动未实现（盯 esp_driver_i2s 更新，驱动落地可替代 APLL 独占方案）；
+- AI 流式/网络重任务 → **钉 core1**（xTaskCreatePinnedToCore(...,1)，与音频/渲染分核，core1 现闲置）；
+- 低功耗待机监听 → **LP Core**（独立 RISC-V 小核带 I2C/UART/SPI/GPIO/Timer，esp_lp_core）；
+- 无线音频双路 → **BT Classic A2DP + BLE 5.0 LE Audio(LC3)**；
+- 外设间硬件事件联动（零 CPU 响应）→ **ETM**（GPIO/GDMA/I2S/MCPWM/ANA_CMPR 均支持）；
+- 加密/签名 → 硬件 AES-GCM/ECC P-384/ECDSA/HMAC/KeyManager（量产加密用）；
+- 硬件三角函数/矢量 → CORDIC；
+- **用不上别碰**：EMAC(千兆网 MAC)、MCPWM/PCNT(电机)、IEEE802154、MIPI CSI、SDIO slave。
 
 ## 待办（按优先级）
 
