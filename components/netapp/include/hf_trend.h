@@ -40,6 +40,8 @@ typedef struct
     int        count;                  /* 有效条目数（正常 10） */
     hf_item_t  item[HF_TOP_N];
     char       updated[12];            /* 拉取时刻 "HH:MM" */
+    unsigned   gen;                    /* 数据代号：每次成功刷新 +1。★ 排名顺序变化时
+                                        * count/state 都不变，必须靠它触发 UI 重绘。 */
     int        http_code;
 } hf_data_t;
 

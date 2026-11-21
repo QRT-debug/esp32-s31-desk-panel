@@ -268,6 +268,7 @@ static void hf_task(void *arg)
                 }
             }
             tmp.state = HF_STATE_OK;
+            tmp.gen = s_snap.gen + 1;          /* ★ 代号自增：顺序变化也能被 UI 感知 */
             /* 记录拉取时刻 */
             time_t now = 0;
             struct tm tm_now;

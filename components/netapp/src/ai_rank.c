@@ -338,6 +338,7 @@ static void ar_task(void *arg)
             localtime_r(&now, &tm_now);
             /* strftime 而非 snprintf：-Werror=format-truncation 对 %02d 取值范围无法推断 */
             strftime(s_snap.updated, sizeof(s_snap.updated), "%m-%d %H:%M", &tm_now);
+            s_snap.gen++;                  /* ★ 代号自增：顺序变化也能被 UI 感知 */
             s_snap.state = AI_RANK_OK;
         }
         else

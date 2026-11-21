@@ -66,6 +66,7 @@ static lv_obj_t *s_upl;
 static int       s_last_w = -1;
 static int       s_last_a = -1;
 static int       s_last_state = -1;
+static unsigned  s_last_gen;
 
 static void refresh_cb(lv_event_t *e);
 
@@ -109,6 +110,42 @@ static void utf8_trunc(const char *src, char *dst, size_t dsz)
     }
     memcpy(dst, src, cut);
     dst[cut] = 0;
+}
+
+/* 判断字库（含 fallback 链）能否完整渲染该 UTF-8 串；缺字返回 false */
+static bool font_covers(const char *s, const lv_font_t *f)
+{
+    const uint8_t *p = (const uint8_t *)s;
+    while (*p)
+    {
+        uint32_t cp;
+        if (*p < 0x80)
+        {
+            cp = *p;
+            p += 1;
+        }
+        else if ((*p & 0xE0) == 0xC0)
+        {
+            cp = ((uint32_t)(*p & 0x1F) << 6) | (p[1] & 0x3F);
+            p += 2;
+        }
+        else if ((*p & 0xF0) == 0xE0)
+        {
+            cp = ((uint32_t)(*p & 0x0F) << 12) | ((uint32_t)(p[1] & 0x3F) << 6) | (p[2] & 0x3F);
+            p += 3;
+        }
+        else
+        {
+            p += 1;
+            continue;
+        }
+        lv_font_glyph_dsc_t dsc;
+        if (!lv_font_get_glyph_dsc(f, &dsc, cp, 0))
+        {
+            return false;      /* 主字体与整条 fallback 链都没有这个字 */
+        }
+    }
+    return true;
 }
 
 static void back_cb(lv_event_t *e)
@@ -251,6 +288,15 @@ static void build_ar(void)
     s_last_w = -1;
     s_last_a = -1;
     s_last_state = -1;
+    s_last_gen = 0;
+}
+
+static void clear_row(ar_row_t *r)
+{
+    lv_label_set_text(r->rk, "");
+    lv_label_set_text(r->en, "");
+    lv_label_set_text(r->cn, "");
+    lv_label_set_text(r->tag, "");
 }
 
 static void fill_row(ar_row_t *r, const ai_rank_item_t *it, const char *tag)
@@ -270,7 +316,14 @@ static void fill_row(ar_row_t *r, const ai_rank_item_t *it, const char *tag)
     {
         char cut[64];
         utf8_trunc(it->cn, cut, 58);
-        lv_label_set_text(r->cn, cut);
+        if (font_covers(cut, &ui_font_cn18))
+        {
+            lv_label_set_text(r->cn, cut);
+        }
+        else
+        {
+            lv_label_set_text(r->cn, "-");   /* 缺字降级：宁可不显示，也不出豆腐块 */
+        }
     }
 
     lv_label_set_text(r->tag, tag);
@@ -300,15 +353,24 @@ static void fill_ar(void)
         {
             fill_row(&s_web[i], &d.web[i], "WEB / VISITS");
         }
+        else
+        {
+            clear_row(&s_web[i]);      /* 条数变少时清掉残留文字 */
+        }
         if (i < d.app_count)
         {
             fill_row(&s_app[i], &d.app[i], "APP / MAU");
+        }
+        else
+        {
+            clear_row(&s_app[i]);
         }
     }
 
     s_last_w = d.web_count;
     s_last_a = d.app_count;
     s_last_state = (int)d.state;
+    s_last_gen   = d.gen;
 }
 
 void scene_ai_rank(uint16_t *fb, int frame)
@@ -330,7 +392,7 @@ void scene_ai_rank(uint16_t *fb, int frame)
         ai_rank_data_t d;
         ai_rank_get(&d);
         if ((int)d.state != s_last_state || d.web_count != s_last_w ||
-            d.app_count != s_last_a)
+            d.app_count != s_last_a || d.gen != s_last_gen)   /* ★ 排名顺序变化也重绘 */
         {
             fill_ar();
         }

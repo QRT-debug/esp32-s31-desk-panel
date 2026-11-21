@@ -77,6 +77,7 @@ static int        s_page;           /* 0..HF_PAGES-1 */
 static int        s_last_page = -1;
 static int        s_last_count = -1;
 static int        s_last_state = -1;
+static unsigned   s_last_gen;
 static hf_data_t  s_data;   /* 静态快照：避免在 LVGL 任务栈上开 1.1KB 局部 */
 
 /* ---------------- 小工具 ---------------- */
@@ -505,6 +506,7 @@ static void fill_list(void)
     s_last_page  = s_page;
     s_last_count = d->count;
     s_last_state = (int)d->state;
+    s_last_gen   = d->gen;
 }
 
 /* ---------------- 场景 ---------------- */
@@ -527,7 +529,8 @@ void scene_hf(uint16_t *fb, int frame)
     {
         /* 数据/状态变化时刷新文字（不创建对象） */
         hf_get(&s_data);
-        if (s_data.count != s_last_count || (int)s_data.state != s_last_state)
+        if (s_data.count != s_last_count || (int)s_data.state != s_last_state ||
+            s_data.gen != s_last_gen)     /* ★ 排名顺序变化也重绘 */
         {
             fill_list();
         }

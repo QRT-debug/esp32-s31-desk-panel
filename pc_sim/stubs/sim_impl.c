@@ -404,6 +404,7 @@ void ai_rank_get(ai_rank_data_t *out)
     snprintf(out->month, sizeof(out->month), "%s", "Jun 2026");
     snprintf(out->updated, sizeof(out->updated), "%s", "20:25");
     out->http_code = 200;
+    out->gen = 1;
     out->web_count = 10;
     out->app_count = 10;
     for (int i = 0; i < 10; i++)

@@ -27,4 +27,7 @@ extern const lv_font_t ui_font_32;
  *   f6ff 网线       f1eb WiFi    f2c9 温度计
  * 用法：lv_label_set_text(lbl, "\xEF\x8B\x9B")  // 芯片 */
 extern const lv_font_t ui_font_hw;
-extern const lv_font_t ui_font_cn18;   /* 黑体 18，仅 AICPB 榜单用字 + ASCII（70 字子集，从真实数据程序化提取） */
+extern const lv_font_t ui_font_cn18;   /* 黑体 18 + ASCII，fallback 链 head */
+extern const lv_font_t ui_font_cn18b;  /* GB2312 一级字库 2/4 块（~939 字） */
+extern const lv_font_t ui_font_cn18c;  /* 3/4 块 */
+extern const lv_font_t ui_font_cn18d;  /* 4/4 块 —— 合计覆盖 3755 常用汉字，榜单换名也不会缺字 */

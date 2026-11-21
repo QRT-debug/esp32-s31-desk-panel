@@ -36,6 +36,7 @@ typedef struct
     char            updated[20];   /* 本机拉取时刻 "MM-DD HH:MM" */
     int             web_count;
     int             app_count;
+    unsigned        gen;           /* 数据代号：每次成功刷新 +1（排名互换时触发重绘） */
     int             http_code;
     ai_rank_item_t  web[AI_RANK_N];
     ai_rank_item_t  app[AI_RANK_N];
