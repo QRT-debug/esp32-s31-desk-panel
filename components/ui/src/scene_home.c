@@ -23,6 +23,7 @@
 #include "ui_fonts.h"
 #include "hf_trend.h"
 #include "ai_rank.h"
+#include "bili_hot.h"
 #include "ui_anim.h"
 #include "ui_scenes.h"
 #include "ui_theme.h"
@@ -42,8 +43,8 @@
 #define C_GREEN    0x35D07F
 #define C_PURPLE   (ui_theme()->accent)
 
-static lv_obj_t *s_val[5];   /* 每张卡的大数值 */
-static lv_obj_t *s_sub[5];   /* 每张卡的说明文字 */
+static lv_obj_t *s_val[6];   /* 每张卡的大数值 */
+static lv_obj_t *s_sub[6];   /* 每张卡的说明文字 */
 
 /* ---------------- 跳转 ---------------- */
 static void to_monitor_cb(lv_event_t *e) { (void)e; ui_goto_scene(UI_SCENE_MONITOR); }
@@ -52,6 +53,7 @@ static void to_system_cb(lv_event_t *e)  { (void)e; ui_goto_scene(UI_SCENE_SYSTE
 static void to_weather_cb(lv_event_t *e) { (void)e; ui_goto_scene(UI_SCENE_HOME); }
 static void to_hf_cb(lv_event_t *e)      { (void)e; ui_goto_scene(UI_SCENE_HF); }
 static void to_airank_cb(lv_event_t *e)   { (void)e; ui_goto_scene(UI_SCENE_AIRANK); }
+static void to_bili_cb(lv_event_t *e)      { (void)e; ui_goto_scene(UI_SCENE_BILI); }
 
 /* 一张卡片：图标圆 + 标题 + 大数值 + 说明 */
 static lv_obj_t *make_card(lv_obj_t *parent, int x, int y,
@@ -82,6 +84,99 @@ static lv_obj_t *make_card(lv_obj_t *parent, int x, int y,
     lv_obj_set_style_border_width(circle, 0, 0);
     lv_obj_clear_flag(circle, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_clear_flag(circle, LV_OBJ_FLAG_CLICKABLE);
+    if (idx == 5)
+    {
+        /* ★ B 站小电视（按官方 logo 形态复刻，56x56 描边风）：
+         *   外框(描边) + 内屏(描边) + 两只斜笑眼 + 两根天线 + 两只脚
+         *   坑：① lv_line 画不出来（坐标受父 padding 影响）→ 全用旋转矩形拼线段
+         *       ② 图标圆默认 padding 会让绝对坐标偏移 → 先 pad_all(0) */
+        const uint32_t PINK = 0xFB7299;
+        lv_obj_set_style_pad_all(circle, 0, 0);
+
+        /* 外框 */
+        lv_obj_t *frame = lv_obj_create(circle);
+        lv_obj_set_size(frame, 44, 30);
+        lv_obj_set_pos(frame, 6, 15);
+        lv_obj_set_style_radius(frame, 5, 0);
+        lv_obj_set_style_bg_opa(frame, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(frame, 3, 0);
+        lv_obj_set_style_border_color(frame, lv_color_hex(PINK), 0);
+        lv_obj_set_style_pad_all(frame, 0, 0);
+        lv_obj_clear_flag(frame, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+
+        /* 内屏 */
+        lv_obj_t *scr = lv_obj_create(circle);
+        lv_obj_set_size(scr, 36, 22);
+        lv_obj_set_pos(scr, 10, 19);
+        lv_obj_set_style_radius(scr, 3, 0);
+        lv_obj_set_style_bg_opa(scr, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(scr, 2, 0);
+        lv_obj_set_style_border_color(scr, lv_color_hex(PINK), 0);
+        lv_obj_set_style_pad_all(scr, 0, 0);
+        lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+
+        /* 两只斜笑眼（左 / 右 \，各 2x8 旋转 40 度） */
+        for (int e = 0; e < 2; e++)
+        {
+            lv_obj_t *eye = lv_obj_create(circle);
+            lv_obj_set_size(eye, 2, 8);
+            lv_obj_set_pos(eye, e ? 32 : 20, 24);
+            lv_obj_set_style_radius(eye, 1, 0);
+            lv_obj_set_style_bg_color(eye, lv_color_hex(PINK), 0);
+            lv_obj_set_style_bg_opa(eye, LV_OPA_COVER, 0);
+            lv_obj_set_style_border_width(eye, 0, 0);
+            lv_obj_set_style_pad_all(eye, 0, 0);
+            lv_obj_clear_flag(eye, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_set_style_transform_pivot_x(eye, 1, 0);
+            lv_obj_set_style_transform_pivot_y(eye, 4, 0);
+            lv_obj_set_style_transform_rotation(eye, e ? 400 : -400, 0);
+        }
+
+        /* 嘴：短横条（56px 下画不出 w 曲线，用一条圆角短横示意） */
+        {
+            lv_obj_t *mouth = lv_obj_create(circle);
+            lv_obj_set_size(mouth, 9, 2);
+            lv_obj_set_pos(mouth, 23, 34);
+            lv_obj_set_style_radius(mouth, 1, 0);
+            lv_obj_set_style_bg_color(mouth, lv_color_hex(PINK), 0);
+            lv_obj_set_style_bg_opa(mouth, LV_OPA_COVER, 0);
+            lv_obj_set_style_border_width(mouth, 0, 0);
+            lv_obj_set_style_pad_all(mouth, 0, 0);
+            lv_obj_clear_flag(mouth, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+        }
+
+        /* 两根天线（2x12，绕底部转 ±32 度） */
+        for (int a = 0; a < 2; a++)
+        {
+            lv_obj_t *ant = lv_obj_create(circle);
+            lv_obj_set_size(ant, 2, 13);
+            lv_obj_set_pos(ant, a ? 38 : 16, 3);
+            lv_obj_set_style_radius(ant, 1, 0);
+            lv_obj_set_style_bg_color(ant, lv_color_hex(PINK), 0);
+            lv_obj_set_style_bg_opa(ant, LV_OPA_COVER, 0);
+            lv_obj_set_style_border_width(ant, 0, 0);
+            lv_obj_set_style_pad_all(ant, 0, 0);
+            lv_obj_clear_flag(ant, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_set_style_transform_pivot_x(ant, 1, 0);
+            lv_obj_set_style_transform_pivot_y(ant, a ? 0 : 12, 0);
+            lv_obj_set_style_transform_rotation(ant, a ? 320 : -320, 0);
+        }
+
+        /* 两只脚（外框底部两个小圆角块） */
+        for (int f = 0; f < 2; f++)
+        {
+            lv_obj_t *foot = lv_obj_create(circle);
+            lv_obj_set_size(foot, 7, 5);
+            lv_obj_set_pos(foot, f ? 32 : 17, 45);
+            lv_obj_set_style_radius(foot, 2, 0);
+            lv_obj_set_style_bg_color(foot, lv_color_hex(PINK), 0);
+            lv_obj_set_style_bg_opa(foot, LV_OPA_COVER, 0);
+            lv_obj_set_style_border_width(foot, 0, 0);
+            lv_obj_set_style_pad_all(foot, 0, 0);
+            lv_obj_clear_flag(foot, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+        }
+    }
+    else
     {
         lv_obj_t *ic = lv_label_create(circle);
         lv_obj_set_style_text_font(ic, &ui_font_hw, 0);
@@ -183,6 +278,8 @@ static void build_home(void)
               to_hf_cb, 3);
     make_card(scr, 280, 280, C_BLUE,   "\xEF\x82\x80", "AI RANK",     /* 榜单 */
               to_airank_cb, 4);
+    make_card(scr, 528, 280, C_ORANGE, "\xEF\x89\xAC", "BILI HOT",    /* 播放 */
+              to_bili_cb, 5);
 }
 
 /* 每 500ms 刷一次卡片数值（读各模块的真实/模拟状态） */
@@ -268,6 +365,30 @@ static void refresh_cards(void)
             lv_label_set_text(s_sub[3], "loading ranking");
         }
     }
+    /* 6) BILI HOT：B 站热搜 */
+    {
+        char b[48];
+        bili_data_t bl;
+        bili_get(&bl);
+        if (bl.state == BILI_OK && bl.count > 0)
+        {
+            snprintf(b, sizeof(b), "%d", bl.count);
+            lv_label_set_text(s_val[5], b);
+            snprintf(b, sizeof(b), "TRENDING / TOP %d", bl.count);   /* 卡片字体无汉字，用 ASCII */
+            lv_label_set_text(s_sub[5], b);
+        }
+        else if (bl.state == BILI_FAIL)
+        {
+            lv_label_set_text(s_val[5], "--");
+            lv_label_set_text(s_sub[5], "fetch failed");
+        }
+        else
+        {
+            lv_label_set_text(s_val[5], "..");
+            lv_label_set_text(s_sub[5], "loading");
+        }
+    }
+
     /* 5) AI RANK：国内 AI 产品榜（AICPB，季度更新） */
     {
         char b[48];

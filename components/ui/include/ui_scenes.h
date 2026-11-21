@@ -37,7 +37,8 @@ enum
     UI_SCENE_SYSTEM  = 3,
     UI_SCENE_APPS    = 4,   /* 原四卡片应用选择页 */
     UI_SCENE_HF      = 5,   /* HF 模型热榜监视器（终端风） */
-    UI_SCENE_AIRANK  = 6,   /* 国内 AI 产品榜（AICPB，PC 原型） */
+    UI_SCENE_AIRANK  = 6,   /* 国内 AI 产品榜（AICPB） */
+    UI_SCENE_BILI    = 7,   /* B 站热搜榜 */
 };
 
 /* 每个 scene 只负责画内容，不负责切换（badge 由 manager 画，除非 show_badge = false） */
@@ -55,7 +56,8 @@ void scene_monitor(uint16_t *fb, int frame);
 void scene_home(uint16_t *fb, int frame);      /* 应用选择页（原首页，现 UI_SCENE_APPS） */
 void scene_weather(uint16_t *fb, int frame);   /* 天气主页面（现 UI_SCENE_HOME） */
 void scene_hf(uint16_t *fb, int frame);        /* HF 模型热榜（终端风） */
-void scene_ai_rank(uint16_t *fb, int frame);   /* 国内 AI 产品榜（AICPB 原型） */
+void scene_ai_rank(uint16_t *fb, int frame);   /* 国内 AI 产品榜（AICPB） */
+void scene_bili(uint16_t *fb, int frame);      /* B 站热搜榜 */
 void scene_audio(uint16_t *fb, int frame);     /* 音频播放器：音量滑块 + 测试音 */
 void scene_system(uint16_t *fb, int frame);    /* 系统信息：芯片/内存/WiFi/日志 + 断连开关 */
 

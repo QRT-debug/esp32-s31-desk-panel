@@ -284,6 +284,8 @@ void weather_start(void)
     s_wx_fake.tmrw_max  = 24;
     s_wx_fake.tmrw_min  = 16;
     snprintf(s_wx_fake.updated, sizeof(s_wx_fake.updated), "%s", "17:20");
+    s_wx_fake.aqi      = 122;   /* PC 模拟：北京实测 AQI */
+    s_wx_fake.pm25_x10 = 1071;
     s_wx_fake.http_code = 200;
 }
 
@@ -420,3 +422,39 @@ void ai_rank_get(ai_rank_data_t *out)
 
 void ai_rank_start(void) { }
 void ai_rank_refresh_now(void) { }
+
+/* ---- B 站热搜（PC 模拟：2026-11-21 真实榜单快照） ---- */
+#include "bili_hot.h"
+
+void bili_start(void) { }
+void bili_refresh_now(void) { }
+
+void bili_get(bili_data_t *out)
+{
+    static const char *words[10] = {
+        "多国领导人就一个中国原则明确表态",
+        "终末地2.0版本卫星PV",
+        "AI宣称彻底击破NS方程问题",
+        "BLG庆功饭堂夜",
+        "AI解决黎曼猜想数学博后反应",
+        "探秘复旦大学食堂吃什么",
+        "新赛季版本前瞻",
+        "年度最佳游戏提名",
+        "考研数学难度",
+        "冬日治愈系vlog",
+    };
+    static const long heats[10] = { 39354137, 36251047, 3248060, 3109804, 2558510,
+                                    1575113, 1203888, 998211, 754332, 512000 };
+    memset(out, 0, sizeof(*out));
+    out->state = BILI_OK;
+    out->count = 10;
+    for (int i = 0; i < 10; i++)
+    {
+        out->item[i].rank = i + 1;
+        snprintf(out->item[i].word, sizeof(out->item[i].word), "%s", words[i]);
+        out->item[i].heat = heats[i];
+    }
+    snprintf(out->updated, sizeof(out->updated), "%s", "21:15");
+    out->gen = 1;
+    out->http_code = 200;
+}

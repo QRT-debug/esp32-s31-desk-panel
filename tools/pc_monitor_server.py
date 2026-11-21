@@ -207,6 +207,40 @@ def to_kv(d):
     return "\n".join(lines) + "\n"
 
 
+# ---------------- B 站热搜（中转：设备连不上 B 站 CDN，由 PC 代抓） ----------------
+_bili_cache = {"t": 0.0, "body": ""}
+
+
+def fetch_bili() -> str:
+    """抓 B 站热搜，返回纯文本：每行 `热搜词|热度`。缓存 5 分钟。"""
+    import time
+    import json
+    import urllib.request
+
+    now = time.time()
+    if _bili_cache["body"] and (now - _bili_cache["t"]) < 300:
+        return _bili_cache["body"]
+
+    # ★ 用 web-interface/search/square：data.trending.list[] 带 keyword/show_name/heat_score
+    #   （app.bilibili.com 的 v2 接口 list 里没有热度字段，只有 position）
+    url = "https://api.bilibili.com/x/web-interface/search/square?limit=10"
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=10) as r:
+        data = json.load(r)
+
+    lst = (((data.get("data") or {}).get("trending") or {}).get("list")) or []
+    lines = []
+    for it in lst[:10]:
+        w = (it.get("show_name") or it.get("keyword") or "").replace("\n", " ").replace("|", "/")
+        h = int(it.get("heat_score") or 0)
+        if w:
+            lines.append("%s|%d" % (w, h))
+    body = "\n".join(lines) + "\n"
+    _bili_cache["t"] = now
+    _bili_cache["body"] = body
+    return body
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         # 只打关键请求，避免 ESP32 每秒一次刷屏
@@ -224,7 +258,13 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(raw)
 
     def do_GET(self):
-        if self.path.startswith("/api/stats.txt"):
+        if self.path.startswith("/api/bili.txt"):
+            try:
+                body = fetch_bili()
+                self._send(200, body, "text/plain; charset=utf-8")
+            except Exception as e:                      # noqa: BLE001
+                self._send(502, "error: %s\n" % e, "text/plain; charset=utf-8")
+        elif self.path.startswith("/api/stats.txt"):
             with _state_lock:
                 body = to_kv(_state)
             self._send(200, body, "text/plain; charset=utf-8")

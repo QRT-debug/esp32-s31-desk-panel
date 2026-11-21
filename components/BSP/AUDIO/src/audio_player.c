@@ -828,7 +828,9 @@ esp_err_t audio_player_mount(void)
     esp_err_t err = esp_vfs_fat_spiflash_mount_ro(AUD_MOUNT_POINT, "vfs", &cfg);
     if (err != ESP_OK)
     {
-        ESP_LOGE(TAG, "mount music partition failed: %s", esp_err_to_name(err));
+        /* 音乐分区(/music)是历史遗留的备用源：现在音频只走 SD 卡（sd_card_scan_wav），
+         * 分区表调整后它本来就不再有有效 FAT，挂载失败属正常，降级为 I 避免误导。 */
+        ESP_LOGI(TAG, "music partition unused (SD-only): %s", esp_err_to_name(err));
         return err;
     }
     s_mounted = true;

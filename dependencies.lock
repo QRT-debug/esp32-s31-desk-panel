@@ -1,10 +1,4 @@
 dependencies:
-  cmake_utilities:
-    dependencies: []
-    source:
-      path: components/cmake_utilities
-      type: local
-    version: 0.5.3
   esp_codec_dev:
     dependencies: []
     source:
@@ -21,18 +15,10 @@ dependencies:
       path: components/tinyusb
       type: local
     version: 0.21.0~6
-  usb:
-    dependencies: []
-    source:
-      path: components/usb
-      type: local
-    version: 1.6.1
 direct_dependencies:
-- espressif/cmake_utilities
 - espressif/esp_codec_dev
 - espressif/tinyusb
-- espressif/usb
 - idf
-manifest_hash: 0be8a2e77dafccda7750ac3745baef99116c0493e9a460079964db18cf6c4adc
+manifest_hash: 69b51e542e376a7d2723bb60590170f2ec7ad8568f37640dbf38af54f83ecbc5
 target: esp32s31
 version: 3.0.0

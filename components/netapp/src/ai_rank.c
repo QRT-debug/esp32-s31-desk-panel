@@ -34,6 +34,7 @@
 #include "freertos/semphr.h"
 #include "miniz.h"          /* esp_rom 自带（ROM 实现，零 flash 成本） */
 #include "wifi_sta.h"
+#include "net_gate.h"
 
 static const char *TAG = "ai_rank";
 
@@ -326,7 +327,13 @@ static void ar_task(void *arg)
         s_snap.state = AI_RANK_LOADING;
         xSemaphoreGive(s_lock);
 
-        bool ok = fetch_once();
+            bool gate_ok = net_gate_take(120000);   /* ★ 串行化 HTTPS：TLS 握手 30KB+，并发必 -0x3000 */
+    bool ok = fetch_once();
+    net_gate_give();
+    if (!gate_ok)
+    {
+        ESP_LOGW(TAG, "net gate timeout (proceeded)");
+    }
 
         xSemaphoreTake(s_lock, portMAX_DELAY);
         if (ok)

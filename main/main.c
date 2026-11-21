@@ -36,6 +36,7 @@
 #include "weather.h"
 #include "hf_trend.h"
 #include "ai_rank.h"
+#include "bili_hot.h"
 #include "wifi_sta.h"
 
 static const char *TAG = "main";
@@ -134,6 +135,7 @@ void app_main(void)
         weather_start();          /* 天气：WiFi 就绪后首拉，之后 30 分钟一次 */
         hf_start();               /* HF 热榜：每小时一次 */
         ai_rank_start();          /* 国内 AI 产品榜：24 小时一次（站点季度更新） */
+        bili_start();             /* B 站热搜：30 分钟一次 */
         ESP_LOGI(TAG, "monitor target: %s", pc_monitor_url());
     }
     else

@@ -8,3 +8,5 @@ factory,app,factory,0x10000,0x400000,
 vfs,data,fat,0x410000,0x300000,
 # SPIFFS 配置（2MB，原 4MB）
 storage,data,spiffs,0x710000,0x200000,
+# 崩溃现场（ELF core dump）：panic 时自动写入，重启后用 idf.py coredump-info 读 backtrace
+coredump,data,coredump,0x910000,0x20000,

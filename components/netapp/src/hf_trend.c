@@ -21,6 +21,7 @@
 #include "freertos/semphr.h"
 #include "esp_heap_caps.h"
 #include "wifi_sta.h"
+#include "net_gate.h"
 
 static const char *TAG = "hf_trend";
 
@@ -243,7 +244,13 @@ static void hf_task(void *arg)
 
         hf_data_t tmp;
         memset(&tmp, 0, sizeof(tmp));
-        bool ok = fetch_once(&tmp);
+            bool gate_ok = net_gate_take(120000);   /* ★ 串行化 HTTPS：TLS 握手 30KB+，并发必 -0x3000 */
+    bool ok = fetch_once(&tmp);
+    net_gate_give();
+    if (!gate_ok)
+    {
+        ESP_LOGW(TAG, "net gate timeout (proceeded)");
+    }
 
         xSemaphoreTake(s_lock, portMAX_DELAY);
         if (ok)

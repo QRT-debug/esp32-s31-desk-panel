@@ -44,6 +44,7 @@ static lv_obj_t *s_hl_tmrw;
 static lv_obj_t *s_icon;      /* 图标容器（整块重建换形态） */
 static lv_obj_t *s_hum_val;
 static lv_obj_t *s_wind_val;
+static lv_obj_t *s_aqi_val;
 static lv_obj_t *s_feel_val;
 static lv_obj_t *s_state_lbl; /* 加载中/失败提示 */
 
@@ -223,7 +224,7 @@ static void bg_apply(const char *desc)
 static lv_obj_t *make_metric(lv_obj_t *parent, int x, const char *title, lv_obj_t **val_out)
 {
     lv_obj_t *c = lv_obj_create(parent);
-    lv_obj_set_size(c, 200, 92);
+    lv_obj_set_size(c, 176, 92);
     lv_obj_set_pos(c, x, 0);
     lv_obj_set_style_radius(c, 16, 0);
     lv_obj_set_style_bg_color(c, lv_color_hex(C_CARD), 0);
@@ -376,15 +377,16 @@ static void build_weather(void)
     /* ---- 中部三指标卡 ---- */
     {
         lv_obj_t *row = lv_obj_create(scr);
-        lv_obj_set_size(row, 660, 92);
+        lv_obj_set_size(row, 740, 92);
         lv_obj_set_pos(row, 40, 272);
         lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
         lv_obj_set_style_border_width(row, 0, 0);
         lv_obj_set_style_pad_all(row, 0, 0);
         lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
         make_metric(row, 0,   "HUMIDITY", &s_hum_val);
-        make_metric(row, 220, "WIND", &s_wind_val);
-        make_metric(row, 440, "FEELS", &s_feel_val);
+        make_metric(row, 188, "WIND",     &s_wind_val);
+        make_metric(row, 376, "FEELS",    &s_feel_val);
+        make_metric(row, 564, "AIR AQI",  &s_aqi_val);   /* 空气质量（open-meteo） */
     }
 
     bg_apply(NULL);   /* 首帧默认渐变（多云），数据到达后随描述切换 */
@@ -453,6 +455,35 @@ static void refresh_ui(void)
         snprintf(b, sizeof(b), "%d%%", w.humidity);
         lv_label_set_text(s_hum_val, b);
     }
+    if (w.aqi > 0)
+    {
+        snprintf(b, sizeof(b), "%d", w.aqi);
+        lv_label_set_text(s_aqi_val, b);
+        /* 分级配色（US AQI）：好=绿 中等=黄 敏感=橙 不健康=红 很差=紫 */
+        uint32_t col = 0x4CAF50;
+        if (w.aqi > 300)
+        {
+            col = 0x7E3B3B;
+        }
+        else if (w.aqi > 200)
+        {
+            col = 0x8E44AD;
+        }
+        else if (w.aqi > 150)
+        {
+            col = 0xE0443E;
+        }
+        else if (w.aqi > 100)
+        {
+            col = 0xF57C00;
+        }
+        else if (w.aqi > 50)
+        {
+            col = 0xE6A700;
+        }
+        lv_obj_set_style_text_color(s_aqi_val, lv_color_hex(col), 0);
+    }
+
     if (w.wind_kmph >= 0)
     {
         snprintf(b, sizeof(b), "%d km/h", w.wind_kmph);

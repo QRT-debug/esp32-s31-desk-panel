@@ -84,3 +84,4 @@ Temp/
 .workbuddy/
 live*.log
 boot_capture.log
+disabled_components/

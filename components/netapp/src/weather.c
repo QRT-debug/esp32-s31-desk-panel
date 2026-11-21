@@ -27,6 +27,7 @@
 #include "freertos/semphr.h"
 #include "esp_heap_caps.h"
 #include "wifi_sta.h"
+#include "net_gate.h"
 
 static const char *TAG = "weather";
 
@@ -157,6 +158,98 @@ static bool jafter(const char *json, const char *anchor, const char *key,
 
 /* ---------------- 一次拉取 ---------------- */
 
+/* 城市 → 坐标（wttr.in 给英文城市名；未匹配一律按北京） */
+static const struct
+{
+    const char *city;
+    float lat, lon;
+} s_geo[] = {
+    { "Beijing",   39.9042f, 116.4074f },
+    { "Shanghai",  31.2304f, 121.4737f },
+    { "Shenzhen",  22.5431f, 114.0579f },
+    { "Guangzhou", 23.1291f, 113.2644f },
+    { "Hangzhou",  30.2741f, 120.1551f },
+    { "Chengdu",   30.5728f, 104.0668f },
+    { "Wuhan",     30.5928f, 114.3055f },
+    { "Xi'an",     34.3416f, 108.9398f },
+    { "Xian",      34.3416f, 108.9398f },
+    { "Nanjing",   32.0603f, 118.7969f },
+    { "Chongqing", 29.5630f, 106.5516f },
+    { "Tianjin",   39.3434f, 117.3616f },
+    { "Suzhou",    31.2989f, 120.5853f },
+};
+
+/* 抓空气质量（open-meteo，免 key，实测 200/1.9s）。失败只影响 AQI，不动天气主数据 */
+static void fetch_aqi(wx_data_t *out)
+{
+    out->aqi      = -1;
+    out->pm25_x10 = -1;
+
+    float lat = 39.9042f, lon = 116.4074f;
+    for (size_t i = 0; i < sizeof(s_geo) / sizeof(s_geo[0]); i++)
+    {
+        if (strcasecmp(out->city, s_geo[i].city) == 0)
+        {
+            lat = s_geo[i].lat;
+            lon = s_geo[i].lon;
+            break;
+        }
+    }
+
+    char url[192];
+    snprintf(url, sizeof(url),
+             "https://air-quality-api.open-meteo.com/v1/air-quality"
+             "?latitude=%.4f&longitude=%.4f&current=pm2_5,us_aqi", (double)lat, (double)lon);
+
+    s_rx_len = 0;
+    s_rx[0]  = 0;
+
+    esp_http_client_config_t cfg = {
+        .url               = url,
+        .event_handler     = on_http,
+        .timeout_ms        = WX_TIMEOUT_MS,
+        .crt_bundle_attach = esp_crt_bundle_attach,
+        .user_agent        = "s31-weather/1.0",
+        .keep_alive_enable = false,
+    };
+    esp_http_client_handle_t cli = esp_http_client_init(&cfg);
+    if (cli == NULL)
+    {
+        return;
+    }
+    esp_err_t err  = esp_http_client_perform(cli);
+    int       code = esp_http_client_get_status_code(cli);
+    esp_http_client_cleanup(cli);
+
+    if (err != ESP_OK || code != 200 || s_rx_len < 40)
+    {
+        ESP_LOGW(TAG, "aqi fetch failed: %s http %d", esp_err_to_name(err), code);
+        return;
+    }
+
+    /* 响应里 us_aqi / pm2_5 各出现两次：current_units（字符串）在前、current（数字）在后 */
+    const char *k = strstr(s_rx, "\"us_aqi\":");
+    if (k != NULL)
+    {
+        k = strstr(k + 1, "\"us_aqi\":");
+    }
+    out->aqi = (k != NULL) ? atoi(k + 9) : -1;
+    if (out->aqi <= 0)
+    {
+        out->aqi = -1;
+    }
+
+    const char *m = strstr(s_rx, "\"pm2_5\":");
+    if (m != NULL)
+    {
+        m = strstr(m + 1, "\"pm2_5\":");
+    }
+    out->pm25_x10 = (m != NULL) ? (int)(atof(m + 8) * 10.0f + 0.5f) : -1;
+
+    ESP_LOGI(TAG, "AQI %d, PM2.5 %d.%d (%.3f,%.3f)", out->aqi,
+             out->pm25_x10 / 10, out->pm25_x10 % 10, (double)lat, (double)lon);
+}
+
 static bool fetch_once(wx_data_t *out)
 {
     if (s_rx == NULL)
@@ -282,6 +375,10 @@ static bool fetch_once(wx_data_t *out)
         }
     }
 
+    if (ok)
+    {
+        fetch_aqi(out);       /* 失败不影响天气主数据 */
+    }
     return ok;
 }
 
@@ -308,7 +405,13 @@ static void weather_task(void *arg)
         wx_data_t tmp;
         memset(&tmp, 0, sizeof(tmp));
         snprintf(tmp.city, sizeof(tmp.city), "%.*s", (int)sizeof(tmp.city) - 1, s_snap.city);   /* 失败时保留城市名 */
-        bool ok = fetch_once(&tmp);
+            bool gate_ok = net_gate_take(120000);   /* ★ 串行化 HTTPS：TLS 握手 30KB+，并发必 -0x3000 */
+    bool ok = fetch_once(&tmp);
+    net_gate_give();
+    if (!gate_ok)
+    {
+        ESP_LOGW(TAG, "net gate timeout (proceeded)");
+    }
 
         xSemaphoreTake(s_lock, portMAX_DELAY);
         if (ok)

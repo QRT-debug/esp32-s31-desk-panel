@@ -38,6 +38,7 @@ void sim_sd_toggle(void);
 int  sim_rebuild_take(void);   /* 同场景重入请求（主题切换） */
 void weather_start(void);      /* 天气（PC 为固定假数据） */
 void hf_start(void);           /* HF 热榜（PC 为固定假榜单） */
+void bili_start(void);         /* B 站热搜（PC 为固定假数据） */
 
 /* ---- 给 stub 层用的时间/延时（它们只依赖这两个） ---- */
 uint32_t xTaskGetTickCount(void) { return SDL_GetTicks(); }
@@ -285,6 +286,7 @@ int main(int argc, char **argv)
         case UI_SCENE_APPS:    scene_home(NULL, frame++);    break;
         case UI_SCENE_HF:      scene_hf(NULL, frame++);      break;
         case UI_SCENE_AIRANK:  scene_ai_rank(NULL, frame++);  break;
+        case UI_SCENE_BILI:    scene_bili(NULL, frame++);     break;
         default: break;
         }
 

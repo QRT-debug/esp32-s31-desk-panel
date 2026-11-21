@@ -34,6 +34,8 @@ typedef struct
     int  tmrw_max, tmrw_min;
     /* 今天逐 3 小时温度（00/03/06/…/21），-99 = 无效 */
     int  hourly_t[8];
+    int  aqi;            /* US AQI（-1 = 未取到；来源 open-meteo air-quality） */
+    int  pm25_x10;       /* PM2.5 μg/m³ × 10（-1 = 未取到） */
     char updated[12];    /* 数据时刻 "HH:MM" */
     int  http_code;      /* 最近一次 HTTP 状态码（调试用） */
 } wx_data_t;
