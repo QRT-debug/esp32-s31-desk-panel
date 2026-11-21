@@ -164,6 +164,9 @@ esp_err_t lvgl_port_init(void)
                            LV_DISPLAY_RENDER_MODE_FULL);
 
     lv_indev_t *indev = lv_indev_create();
+    /* ★★ 11-21 教训：全局调低手势阈值会让"拖动滑条"被误判为手势，
+     *   System 页拖 LED 滑条时崩溃（乱屏+重启）。这里保持 LVGL 默认值；
+     *   需要更灵敏翻页的页面（HF）自行用 PRESSED/RELEASED 算位移，不走手势引擎。 */
     lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
     lv_indev_set_read_cb(indev, indev_read_cb);
 

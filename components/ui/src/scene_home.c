@@ -21,6 +21,7 @@
 #include "pc_monitor.h"
 #include "sd_card.h"
 #include "ui_fonts.h"
+#include "hf_trend.h"
 #include "ui_anim.h"
 #include "ui_scenes.h"
 #include "ui_theme.h"
@@ -48,6 +49,7 @@ static void to_monitor_cb(lv_event_t *e) { (void)e; ui_goto_scene(UI_SCENE_MONIT
 static void to_audio_cb(lv_event_t *e)   { (void)e; ui_goto_scene(UI_SCENE_AUDIO); }
 static void to_system_cb(lv_event_t *e)  { (void)e; ui_goto_scene(UI_SCENE_SYSTEM); }
 static void to_weather_cb(lv_event_t *e) { (void)e; ui_goto_scene(UI_SCENE_HOME); }
+static void to_hf_cb(lv_event_t *e)      { (void)e; ui_goto_scene(UI_SCENE_HF); }
 
 /* 一张卡片：图标圆 + 标题 + 大数值 + 说明 */
 static lv_obj_t *make_card(lv_obj_t *parent, int x, int y,
@@ -175,8 +177,8 @@ static void build_home(void)
               to_audio_cb, 1);
     make_card(scr,  32, 280, C_GREEN,  "\xEF\x80\x93", "SYSTEM",      /* 齿轮 */
               to_system_cb, 2);
-    make_card(scr, 408, 280, C_PURPLE, "\xEF\x9F\x82", "STORAGE",     /* SD 卡 */
-              to_audio_cb, 3);
+    make_card(scr, 408, 280, C_PURPLE, "\xEF\x81\xAD", "HF TREND",    /* 图表 */
+              to_hf_cb, 3);
 }
 
 /* 每 500ms 刷一次卡片数值（读各模块的真实/模拟状态） */
@@ -239,23 +241,27 @@ static void refresh_cards(void)
         }
     }
 
-    /* 4) STORAGE：SD 卡 */
+    /* 4) HF TREND：模型热榜（原 STORAGE 位） */
     {
-        char b[40];
-        if (sd_card_ready())
+        char b[48];
+        hf_data_t h;
+        hf_get(&h);
+        if (h.state == HF_STATE_OK && h.count > 0)
         {
-            char names[16][64];
-            int n = sd_card_scan_wav(names, 16);
-            snprintf(b, sizeof(b), "%d", n);
+            snprintf(b, sizeof(b), "%d", h.count);
             lv_label_set_text(s_val[3], b);
-            snprintf(b, sizeof(b), "TRACKS   %.1f GB CARD",
-                     (double)sd_card_capacity() / (1024.0 * 1024 * 1024));
+            snprintf(b, sizeof(b), "MODELS   #1 %.14s", h.item[0].id);
             lv_label_set_text(s_sub[3], b);
+        }
+        else if (h.state == HF_STATE_FAIL)
+        {
+            lv_label_set_text(s_val[3], "--");
+            lv_label_set_text(s_sub[3], "fetch failed");
         }
         else
         {
-            lv_label_set_text(s_val[3], "NO SD");
-            lv_label_set_text(s_sub[3], "insert a card");
+            lv_label_set_text(s_val[3], "..");
+            lv_label_set_text(s_sub[3], "loading ranking");
         }
     }
 }

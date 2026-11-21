@@ -34,6 +34,7 @@
 #include "ui_scenes.h"
 #include "ui_theme.h"
 #include "weather.h"
+#include "hf_trend.h"
 #include "wifi_sta.h"
 
 static const char *TAG = "main";
@@ -130,6 +131,7 @@ void app_main(void)
     {
         pc_monitor_start();
         weather_start();          /* 天气：WiFi 就绪后首拉，之后 30 分钟一次 */
+        hf_start();               /* HF 热榜：每小时一次 */
         ESP_LOGI(TAG, "monitor target: %s", pc_monitor_url());
     }
     else

@@ -206,12 +206,17 @@ static void theme_cb(lv_event_t *e)
 }
 
 /* ★ 板载 RGB 灯调色（HUE/VAL 滑块实时驱动 WS2812） */
+/* ★★ 11-21 教训：滑条 VALUE_CHANGED 每帧几十次，若在事件回调里直接走 RMT
+ *   发 WS2812 波形（led_strip_refresh），RMT 与 LCD 共用 DMA，
+ *   高频抢占会崩溃（乱屏 + 重启）。现在事件里只记值，由场景周期限速发送。 */
+static volatile bool s_led_dirty;
+
 static void led_cb(lv_event_t *e)
 {
     (void)e;
     s_led_hue = (uint16_t)lv_slider_get_value(s_slider_hue);
     s_led_val = (uint8_t)lv_slider_get_value(s_slider_val);
-    bsp_led_set_hsv(s_led_hue, 255, s_led_val);
+    s_led_dirty = true;                     /* 交给 scene 周期发送 */
     lv_obj_set_style_bg_color(s_led_swatch,
                               lv_color_hsv_to_rgb(s_led_hue, 255, s_led_val), 0);
 }
@@ -474,6 +479,13 @@ void scene_system(uint16_t *fb, int frame)
     else if (frame % 25 == 0)     /* 约 500ms 刷新一次（原 1s，加快一倍） */
     {
         refresh_all();
+    }
+
+    /* 滑条 → WS2812：限速 ~16Hz，且只在 LVGL 场景循环里发（不在事件回调里） */
+    if (s_led_dirty && (frame % 3) == 0)
+    {
+        s_led_dirty = false;
+        bsp_led_set_hsv(s_led_hue, 255, s_led_val);
     }
 
     /* 麦克风电平单独快刷（100ms）：说话时条要跟得上，慢了像卡住 */

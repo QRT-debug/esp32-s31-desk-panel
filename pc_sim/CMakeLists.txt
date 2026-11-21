@@ -31,6 +31,7 @@ set(UI_SRC
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/ui/src/ui_anim.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/ui/src/ui_theme.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/ui/src/scene_weather.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/ui/src/scene_hf.c"
 )
 
 file(GLOB FONT_SRC CONFIGURE_DEPENDS

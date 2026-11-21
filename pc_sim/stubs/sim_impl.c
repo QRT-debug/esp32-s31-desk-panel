@@ -87,7 +87,7 @@ static volatile int s_rebuild = 0;   /* ★ 同场景重入请求（主题切换
 
 void ui_goto_scene(int idx)
 {
-    if (idx >= 0 && idx <= UI_SCENE_SYSTEM)
+    if (idx >= 0 && idx <= UI_SCENE_HF)
     {
         /* 板端 ui_manager 对同场景 goto 也会 frame=0 重建；
          * PC 侧等价语义 = 置重建标志，main_sim 每帧检查消费。 */
@@ -324,3 +324,54 @@ esp_err_t backlight_init(void) { return ESP_OK; }
 void backlight_set(int pct) { s_bl = (pct < 0) ? 0 : (pct > 100 ? 100 : pct); }
 int  backlight_get(void) { return s_bl; }
 void audio_player_mic_debug_log(void) {}
+
+/* ---- HF 热榜（PC 模拟：固定假榜单） ---- */
+#include "hf_trend.h"
+
+static hf_data_t s_hf_fake;
+static bool      s_hf_inited;
+
+void hf_start(void)
+{
+    if (s_hf_inited) { return; }
+    s_hf_inited = true;
+    static const char *ids[10] = {
+        "thinkingmachines/Inkling-2-Mini",
+        "Sentinel7/h3",
+        "higurashi-ai/Haru-4B",
+        "harness-hub/Qwen3.8-27B-pi-adapted",
+        "unsloth/Inkling-2-Mini-GGUF",
+        "Qwen/Qwen3.8-27B",
+        "Lightricks/LTX-2.5",
+        "tencent/Hy4-flash",
+        "sensenova/SenseNova-Loop-9B",
+        "inworld/voice-isolator",
+    };
+    static const char *tasks[10] = {
+        "image-text-to-text", "--", "audio-to-audio", "image-text-to-text",
+        "image-text-to-text", "image-text-to-text", "image-to-video",
+        "image-text-to-text", "image-text-to-text", "audio-to-audio",
+    };
+    static const int likes[10]  = { 908, 443, 5704, 872, 298, 20823, 12925, 555, 453, 510 };
+    static const int dloads[10] = { 136, 0, 7323, 1874, 0, 6454419, 2964523, 3949, 1631, 0 };
+    static const char *created[10] = {
+        "11-20 14:32", "11-21 09:10", "11-19 22:44", "11-18 16:01",
+        "11-20 08:22", "11-15 12:30", "11-17 19:05", "11-21 06:40",
+        "11-20 21:18", "11-14 10:14",
+    };
+    s_hf_fake.state = HF_STATE_OK;
+    s_hf_fake.count = 10;
+    for (int i = 0; i < 10; i++)
+    {
+        snprintf(s_hf_fake.item[i].id, sizeof(s_hf_fake.item[i].id), "%s", ids[i]);
+        snprintf(s_hf_fake.item[i].task, sizeof(s_hf_fake.item[i].task), "%s", tasks[i]);
+        s_hf_fake.item[i].likes = likes[i];
+        s_hf_fake.item[i].downloads = dloads[i];
+        snprintf(s_hf_fake.item[i].created, sizeof(s_hf_fake.item[i].created), "%s", created[i]);
+    }
+    snprintf(s_hf_fake.updated, sizeof(s_hf_fake.updated), "%s", "18:45");
+    s_hf_fake.http_code = 200;
+}
+
+void hf_refresh_now(void) { }
+void hf_get(hf_data_t *out) { *out = s_hf_fake; }

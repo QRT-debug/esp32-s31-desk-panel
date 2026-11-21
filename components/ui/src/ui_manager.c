@@ -37,6 +37,7 @@ const ui_scene_t g_scenes[] = {
     { "AUDIO",      scene_audio,   20, -1, false, true },
     { "SYSTEM",     scene_system,   20, -1, false, true },
     { "APPS",       scene_home,    20, -1, false, true },
+    { "HF TREND",   scene_hf,      50, -1, false, true },
 };
 const int g_scene_count = (int)(sizeof(g_scenes) / sizeof(g_scenes[0]));
 

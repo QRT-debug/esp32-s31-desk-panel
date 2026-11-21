@@ -37,6 +37,7 @@ void sim_scene_set(int idx);
 void sim_sd_toggle(void);
 int  sim_rebuild_take(void);   /* 同场景重入请求（主题切换） */
 void weather_start(void);      /* 天气（PC 为固定假数据） */
+void hf_start(void);           /* HF 热榜（PC 为固定假榜单） */
 
 /* ---- 给 stub 层用的时间/延时（它们只依赖这两个） ---- */
 uint32_t xTaskGetTickCount(void) { return SDL_GetTicks(); }
@@ -173,6 +174,7 @@ int main(int argc, char **argv)
     int  shot_after = 0;
 
     weather_start();   /* PC 模拟：装载固定假天气数据（sim_impl.c） */
+    hf_start();        /* PC 模拟：装载固定假 HF 榜单 */
 
     /* 可选：--scene N 直接打开指定页面（0=WEATHER 1=MONITOR 2=AUDIO 3=SYSTEM 4=APPS） */
     for (int i = 1; i < argc; i++)
@@ -281,6 +283,7 @@ int main(int argc, char **argv)
         case UI_SCENE_AUDIO:   scene_audio(NULL, frame++);   break;
         case UI_SCENE_SYSTEM:  scene_system(NULL, frame++);  break;
         case UI_SCENE_APPS:    scene_home(NULL, frame++);    break;
+        case UI_SCENE_HF:      scene_hf(NULL, frame++);      break;
         default: break;
         }
 
