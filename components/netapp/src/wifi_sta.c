@@ -101,6 +101,11 @@ esp_err_t wifi_sta_init(void)
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wc));
     ESP_ERROR_CHECK(esp_wifi_start());
 
+    /* ★★ 11-21 实测：**不要把 WiFi 功率调低**。
+     *   降到 8.5dBm 后屏幕闪烁**更严重**——因为信号弱→重传增多→WiFi DMA 更频繁，
+     *   与 RGB LCD 抢 PSRAM 带宽更凶，LCD 扫描丢像素 → 四周随机闪。
+     *   结论：闪的根因是 PSRAM 带宽仲裁，不是电源纹波。保持默认 20dBm。 */
+
     ESP_LOGI(TAG, "connecting to \"%s\" ...", WIFI_SSID);
     return ESP_OK;
 }

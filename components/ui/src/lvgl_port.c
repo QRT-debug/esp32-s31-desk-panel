@@ -8,6 +8,7 @@
 
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_cache.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "lcd.h"
@@ -42,8 +43,6 @@ static lv_display_t *s_disp  = NULL;
  */
 static void flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
 {
-    (void)area;
-
     static uint32_t cnt = 0;
     cnt++;
 
@@ -56,19 +55,44 @@ static void flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
                  (px_map == (uint8_t *)lcd_buffer[0]) ? "0" : "1");
     }
 
-    /* 先清标志再提交：提交后到来的 vsync 才不会被误清 */
-    refresh_done_flag = 0;
-    esp_lcd_panel_draw_bitmap(lcddev.lcd_panel_handle, 0, 0, LCD_H_RES, LCD_V_RES, px_map);
-
-    int64_t t0 = esp_timer_get_time();
-    while (!refresh_done_flag)
+    /* ★★ DIRECT 模式下 LVGL 会把一次刷新拆成**多个脏区**，每块调一次本回调。
+     *   只有最后一块才需要"切帧缓冲 + 等 vsync"；中间的块若也等，
+     *   实测 flush 会被拉到 175ms（8 块 × 20ms），界面卡顿、CPU 空转 43%。
+     *   中间块直接 flush_ready —— 它们已经画进 buf_act，最后一块切过去时一起显示。 */
+    /* ★★★ 11-22 关键：帧缓冲在 PSRAM 且 cacheable，CPU 画的像素先留在 CPU cache，
+     *   LCD 的 DMA **绕过 cache 直读 PSRAM** ⇒ 读到旧帧数据。
+     *   判据（区别于硬件闪）：出现"局部不该有的内容（如黄色竖线）"，**下次重绘后消失**。
+     *   本 IDF 版本的 esp_lcd_panel_rgb 没有 fb_behind_cache 字段，只能手动同步。
+     *   FULL 模式 area 是整屏，一次 sync 768KB（800×2×480，能被 64 字节整除）。 */
     {
-        vTaskDelay(1);
-        __sync_synchronize();
-        if (esp_timer_get_time() - t0 > 200000)     /* 200 ms 超时保护 */
+        size_t bytes = (size_t)LCD_H_RES * LCD_V_RES * 2;
+        esp_err_t cerr = esp_cache_msync((void *)px_map, bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
+        if (cerr != ESP_OK)
         {
-            ESP_LOGW(TAG, "vsync timeout");
-            break;
+            static int once = 0;
+            if (once++ == 0)
+            {
+                ESP_LOGW(TAG, "cache msync: %s", esp_err_to_name(cerr));
+            }
+        }
+    }
+
+    if (lv_display_flush_is_last(disp))
+    {
+        /* 先清标志再提交：提交后到来的 vsync 才不会被误清 */
+        refresh_done_flag = 0;
+        esp_lcd_panel_draw_bitmap(lcddev.lcd_panel_handle, 0, 0, LCD_H_RES, LCD_V_RES, px_map);
+
+        int64_t t0 = esp_timer_get_time();
+        while (!refresh_done_flag)
+        {
+            vTaskDelay(1);
+            __sync_synchronize();
+            if (esp_timer_get_time() - t0 > 200000)     /* 200 ms 超时保护 */
+            {
+                ESP_LOGW(TAG, "vsync timeout");
+                break;
+            }
         }
     }
 
@@ -76,7 +100,7 @@ static void flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
      *   消灭复位后到首帧之间的白屏期（lcd_init 已改清黑 + 背光 init 不点亮） */
     {
         static bool s_bl_on = false;
-        if (!s_bl_on)
+        if (!s_bl_on && lv_display_flush_is_last(disp))
         {
             s_bl_on = true;
             backlight_default();
@@ -154,9 +178,10 @@ esp_err_t lvgl_port_init(void)
     lv_display_set_color_format(s_disp, LV_COLOR_FORMAT_RGB565);
     lv_display_set_flush_cb(s_disp, flush_cb);
 
-    /* 双缓冲 + FULL：LVGL 每帧把整屏渲染到"不在显示"的那块，画完由 flush_cb 切过去。
-     * ★ 必须 FULL 而不是 DIRECT：DIRECT 只重绘脏区，轮换到另一块时那边是上一轮的旧内容，
-     *   会出现"新旧交替"的缺损。 */
+    /* ★★★ 11-22 回退：DIRECT 是 11-21 深夜为"减少 PSRAM 写入"引入的，
+     *   实测写入量确实从 768KB/帧降到 7.5KB，但**闪没有改善**，
+     *   说明根因不在 CPU 写 PSRAM 的总量。回到原有 FULL 模式（用户最初的状态）。
+     *   注：FULL 模式下每帧整屏渲染，render 约 60ms。 */
     lv_display_set_buffers(s_disp,
                            lcd_buffer[0],
                            lcd_buffer[1],

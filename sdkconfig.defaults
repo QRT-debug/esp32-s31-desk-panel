@@ -61,3 +61,7 @@ CONFIG_LV_FONT_MONTSERRAT_24=y
 # ---- 11-21 mbedTLS 大块缓冲放 PSRAM（否则 B 站等长证书链站点握手 -0x3000 内存不足）----
 CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
 CONFIG_MBEDTLS_SSL_IN_CONTENT_LEN=16384
+
+# ---- 11-21 屏幕边缘随机闪排查：PSRAM 250MHz -> 200MHz（AP Memory 八线，250M 属高性能档）
+#      若 200M 仍闪，说明与 PSRAM 时序无关，可改回 250M（性能更好）
+CONFIG_SPIRAM_SPEED_200M=y

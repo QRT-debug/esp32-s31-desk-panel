@@ -29,15 +29,22 @@
  *   30MHz -> 58.2Hz，33MHz -> 64.0Hz（均超商家验证值，可能出白条，用于探边界）
  */
 #ifndef LCD_PCLK_MHZ
+/* ★★★ 11-22 诊断结论：PCLK 10/16/20/25MHz 全试过——
+ *   10MHz **更闪且失真**（低于 HX8264 最低 PCLK，且帧率低让闪更显眼），
+ *   20/16MHz 无改善 ⇒ **与时钟频率无关**，不是时序余量/带宽问题。
+ *   恢复商家验证值 25MHz。 */
 #define LCD_PCLK_MHZ            25
 #endif
 #define    LCD_PIXEL_CLOCK_HZ      (LCD_PCLK_MHZ * 1000 * 1000)
 #define    LCD_H_RES               800                   /* 水平有效像素 */
 #define    LCD_V_RES               480                   /* 垂直有效行数 */
 #define    LCD_HSYNC_WIDTH         48                    /* 水平同步脉冲宽度(HSW) */
+/* ★★★ 11-21 实验记录（不要再动）：把 HBP/HFP/VBP/VFP 从 88/40/32/13 加大到 104/56/40/20
+ *   后，**闪得更明显且出现小区域失真** ⇒ 商家验证值就是最佳值，加大反而破坏 HX8264 的行频/同步。
+ *   结论：porch 保持商家值，不要"留余量"。 */
 #define    LCD_HBP                 88                    /* 水平后廊(HBP) */
 #define    LCD_HFP                 40                    /* 水平前廊(HFP) */
-#define    LCD_VSYNC_WIDTH         3                     /* 垂直同步脉冲宽度(VSW) */
+#define    LCD_VSYNC_WIDTH         3                   /* 垂直同步脉冲宽度(VSW) */
 #define    LCD_VBP                 32                    /* 垂直后廊(VBP) */
 #define    LCD_VFP                 13                    /* 垂直前廊(VFP) */
 

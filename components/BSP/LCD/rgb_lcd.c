@@ -51,7 +51,10 @@ static esp_err_t rgb_lcd_new_panel(esp_lcd_panel_handle_t *panel_handle)
 
     esp_lcd_rgb_panel_config_t panel_config = {
         .clk_src               = LCD_CLK_SRC_PLL160M,     /* 时钟源 */
-        .dma_burst_size        = 64,                      /* DMA突发传输64字节 */
+        /* ★★★ 11-21 实验记录（不要再动）：改 128 后屏幕"闪得更明显 + 小区域失真"。
+         *   原因：每行 = 800 × 2 = **1600 字节**，1600/128 = 12.5 ⇒ 半个突发跨行，
+         *   行尾数据错位；1600/64 = 25 正好整除。⇒ 64 是逐行扫描的最优值。 */
+        .dma_burst_size        = 64,
         .data_width            = 16,                      /* RGB565并行16线 */
         .in_color_format       = LCD_COLOR_FMT_RGB565,    /* 颜色格式 */
         .num_fbs               = LCD_RGB_PANEL_NUM_FBS,   /* 帧缓冲区数量 */
@@ -72,10 +75,8 @@ static esp_err_t rgb_lcd_new_panel(esp_lcd_panel_handle_t *panel_handle)
             .vsync_back_porch  = LCD_VBP,                 /* 垂直后廊 */
             .vsync_front_porch = LCD_VFP,                 /* 垂直前廊 */
             .flags = {
-                /* ★ 采样沿实验：原为 true（数据在 PCLK 下降沿输出），改成 false。
-                 *   采样点若落在数据跳变沿上，中间区域数据稳定还能对，
-                 *   边缘几列/行的建立时间最短，最先出错 —— 与"边缘闪、中间正常"吻合。
-                 *   若改后整屏偏色/错位，说明原值才是对的，改回 true 即可。 */
+                /* ★★ 采样沿：true/false 都实测过，视觉都能正常显示、都闪 ⇒ 不是采样沿问题。
+                 *   保持 11-15 的 false（当时结论"明显改善"）。 */
                 .pclk_active_neg = false,
             },
         },
