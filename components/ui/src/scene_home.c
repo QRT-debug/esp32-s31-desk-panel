@@ -120,7 +120,7 @@ static lv_obj_t *make_card(lv_obj_t *parent, int x, int y,
         {
             lv_obj_t *eye = lv_obj_create(circle);
             lv_obj_set_size(eye, 2, 8);
-            lv_obj_set_pos(eye, e ? 32 : 20, 24);
+            lv_obj_set_pos(eye, e ? 35 : 17, 24);   /* 两眼拉到更开（用户要求） */
             lv_obj_set_style_radius(eye, 1, 0);
             lv_obj_set_style_bg_color(eye, lv_color_hex(PINK), 0);
             lv_obj_set_style_bg_opa(eye, LV_OPA_COVER, 0);
@@ -129,20 +129,28 @@ static lv_obj_t *make_card(lv_obj_t *parent, int x, int y,
             lv_obj_clear_flag(eye, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
             lv_obj_set_style_transform_pivot_x(eye, 1, 0);
             lv_obj_set_style_transform_pivot_y(eye, 4, 0);
-            lv_obj_set_style_transform_rotation(eye, e ? 400 : -400, 0);
+            /* 左眼 \ （+40°）、右眼 / （-40°）——向中间聚拢，才是 B 站的眯眼笑 */
+            lv_obj_set_style_transform_rotation(eye, e ? -400 : 400, 0);
         }
 
-        /* 嘴：短横条（56px 下画不出 w 曲线，用一条圆角短横示意） */
+        /* 嘴：两个下半圆弧拼成 ω（B 站 logo 的嘴；横线是错的） */
+        for (int m = 0; m < 2; m++)
         {
-            lv_obj_t *mouth = lv_obj_create(circle);
-            lv_obj_set_size(mouth, 9, 2);
-            lv_obj_set_pos(mouth, 23, 34);
-            lv_obj_set_style_radius(mouth, 1, 0);
-            lv_obj_set_style_bg_color(mouth, lv_color_hex(PINK), 0);
-            lv_obj_set_style_bg_opa(mouth, LV_OPA_COVER, 0);
-            lv_obj_set_style_border_width(mouth, 0, 0);
-            lv_obj_set_style_pad_all(mouth, 0, 0);
-            lv_obj_clear_flag(mouth, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_t *arc = lv_arc_create(circle);
+            lv_obj_set_size(arc, 8, 8);
+            lv_obj_set_pos(arc, m ? 28 : 21, 31);
+            lv_obj_set_style_arc_width(arc, 2, LV_PART_INDICATOR);
+            lv_obj_set_style_arc_color(arc, lv_color_hex(PINK), LV_PART_INDICATOR);
+            lv_obj_set_style_arc_opa(arc, LV_OPA_TRANSP, LV_PART_MAIN);       /* 不要背景弧 */
+            lv_obj_set_style_arc_width(arc, 0, LV_PART_MAIN);
+            lv_obj_set_style_bg_opa(arc, LV_OPA_TRANSP, 0);
+            lv_obj_set_style_border_width(arc, 0, 0);
+            lv_obj_set_style_pad_all(arc, 0, 0);
+            /* ★ LVGL 角度从 3 点方向顺时针增加：0~180 才是下半圆（下凸 ∪）
+             *   写 180~360 会画成上半圆 ∩（像眉毛）——实测踩过。 */
+            lv_arc_set_angles(arc, 0, 180);
+            lv_obj_remove_style(arc, NULL, LV_PART_KNOB);   /* 去掉旋钮 */
+            lv_obj_clear_flag(arc, LV_OBJ_FLAG_CLICKABLE);
         }
 
         /* 两根天线（2x12，绕底部转 ±32 度） */
@@ -150,7 +158,7 @@ static lv_obj_t *make_card(lv_obj_t *parent, int x, int y,
         {
             lv_obj_t *ant = lv_obj_create(circle);
             lv_obj_set_size(ant, 2, 13);
-            lv_obj_set_pos(ant, a ? 38 : 16, 3);
+            lv_obj_set_pos(ant, a ? 38 : 16, 2);   /* 底边 y=15 贴外框顶 */
             lv_obj_set_style_radius(ant, 1, 0);
             lv_obj_set_style_bg_color(ant, lv_color_hex(PINK), 0);
             lv_obj_set_style_bg_opa(ant, LV_OPA_COVER, 0);
@@ -158,7 +166,8 @@ static lv_obj_t *make_card(lv_obj_t *parent, int x, int y,
             lv_obj_set_style_pad_all(ant, 0, 0);
             lv_obj_clear_flag(ant, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
             lv_obj_set_style_transform_pivot_x(ant, 1, 0);
-            lv_obj_set_style_transform_pivot_y(ant, a ? 0 : 12, 0);
+            /* ★ 两根都绕底部中心转：支点在顶部时旋转会把底端甩离电视框（右天线实测有缝） */
+            lv_obj_set_style_transform_pivot_y(ant, 12, 0);
             lv_obj_set_style_transform_rotation(ant, a ? 320 : -320, 0);
         }
 
