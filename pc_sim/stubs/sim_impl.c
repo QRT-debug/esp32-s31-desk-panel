@@ -87,7 +87,7 @@ static volatile int s_rebuild = 0;   /* ★ 同场景重入请求（主题切换
 
 void ui_goto_scene(int idx)
 {
-    if (idx >= 0 && idx <= UI_SCENE_HF)
+    if (idx >= 0)   /* 不设上界：新场景只在 switch 里兜底，避免每次扩枚举都要改这里 */
     {
         /* 板端 ui_manager 对同场景 goto 也会 frame=0 重建；
          * PC 侧等价语义 = 置重建标志，main_sim 每帧检查消费。 */
@@ -375,3 +375,47 @@ void hf_start(void)
 
 void hf_refresh_now(void) { }
 void hf_get(hf_data_t *out) { *out = s_hf_fake; }
+
+/* ---- 国内 AI 产品榜（PC 模拟：2026-06 真实榜单快照，已映射英文名） ---- */
+#include "ai_rank.h"
+
+void ai_rank_get(ai_rank_data_t *out)
+{
+    static const char *web[10] = {
+        "DeepSeek", "Nano AI Search", "Doubao", "Nano AI", "Baidu AI Search",
+        "Qwen (Alibaba)", "Kimi", "Qwen.ai", "Baidu Wenku", "Tencent Yuanbao",
+    };
+    static const char *web_cn[10] = {
+        "DeepSeek", "纳米AI搜索", "豆包｜抖音", "纳米AI", "AI 搜索｜百度",
+        "千问 qianwen.com｜阿里", "Kimi｜月之暗面", "Qwen.ai｜阿里", "百度文库", "腾讯元宝",
+    };
+    static const char *app[10] = {
+        "Doubao", "Qwen", "Quark", "DeepSeek", "Tencent Yuanbao",
+        "Baidu Netdisk", "Jimeng AI", "Kimi", "Kling AI", "Nano AI",
+    };
+    static const char *app_cn[10] = {
+        "豆包 - 字节跳动旗下 AI 助手", "千问 - 阿里最强模型官方AI助手", "夸克-阿里AI旗舰应用",
+        "DeepSeek - AI 智能助手", "腾讯元宝-「DeepSeek+」智能新体验", "百度网盘",
+        "即梦AI - 抖音旗下AI图片和视频工具", "Kimi", "可灵AI - AI图片&视频创作工具",
+        "纳米AI - 首创多智能体蜂群",
+    };
+    memset(out, 0, sizeof(*out));
+    out->state = AI_RANK_OK;
+    snprintf(out->month, sizeof(out->month), "%s", "Jun 2026");
+    snprintf(out->updated, sizeof(out->updated), "%s", "20:25");
+    out->http_code = 200;
+    out->web_count = 10;
+    out->app_count = 10;
+    for (int i = 0; i < 10; i++)
+    {
+        out->web[i].rank = i + 1;
+        snprintf(out->web[i].name, sizeof(out->web[i].name), "%s", web[i]);
+        snprintf(out->web[i].cn, sizeof(out->web[i].cn), "%s", web_cn[i]);
+        out->app[i].rank = i + 1;
+        snprintf(out->app[i].name, sizeof(out->app[i].name), "%s", app[i]);
+        snprintf(out->app[i].cn, sizeof(out->app[i].cn), "%s", app_cn[i]);
+    }
+}
+
+void ai_rank_start(void) { }
+void ai_rank_refresh_now(void) { }

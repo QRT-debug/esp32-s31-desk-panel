@@ -284,6 +284,7 @@ int main(int argc, char **argv)
         case UI_SCENE_SYSTEM:  scene_system(NULL, frame++);  break;
         case UI_SCENE_APPS:    scene_home(NULL, frame++);    break;
         case UI_SCENE_HF:      scene_hf(NULL, frame++);      break;
+        case UI_SCENE_AIRANK:  scene_ai_rank(NULL, frame++);  break;
         default: break;
         }
 

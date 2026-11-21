@@ -22,6 +22,7 @@
 #include "sd_card.h"
 #include "ui_fonts.h"
 #include "hf_trend.h"
+#include "ai_rank.h"
 #include "ui_anim.h"
 #include "ui_scenes.h"
 #include "ui_theme.h"
@@ -41,8 +42,8 @@
 #define C_GREEN    0x35D07F
 #define C_PURPLE   (ui_theme()->accent)
 
-static lv_obj_t *s_val[4];   /* 每张卡的大数值 */
-static lv_obj_t *s_sub[4];   /* 每张卡的说明文字 */
+static lv_obj_t *s_val[5];   /* 每张卡的大数值 */
+static lv_obj_t *s_sub[5];   /* 每张卡的说明文字 */
 
 /* ---------------- 跳转 ---------------- */
 static void to_monitor_cb(lv_event_t *e) { (void)e; ui_goto_scene(UI_SCENE_MONITOR); }
@@ -50,6 +51,7 @@ static void to_audio_cb(lv_event_t *e)   { (void)e; ui_goto_scene(UI_SCENE_AUDIO
 static void to_system_cb(lv_event_t *e)  { (void)e; ui_goto_scene(UI_SCENE_SYSTEM); }
 static void to_weather_cb(lv_event_t *e) { (void)e; ui_goto_scene(UI_SCENE_HOME); }
 static void to_hf_cb(lv_event_t *e)      { (void)e; ui_goto_scene(UI_SCENE_HF); }
+static void to_airank_cb(lv_event_t *e)   { (void)e; ui_goto_scene(UI_SCENE_AIRANK); }
 
 /* 一张卡片：图标圆 + 标题 + 大数值 + 说明 */
 static lv_obj_t *make_card(lv_obj_t *parent, int x, int y,
@@ -170,15 +172,17 @@ static void build_home(void)
         lv_obj_center(bl);
     }
 
-    /* 2x2 卡片 */
+    /* 3 + 2 卡片（232 宽，间距 16） */
     make_card(scr,  32,  96, C_BLUE,   "\xEF\x8B\x9B", "PC MONITOR",  /* 芯片 */
               to_monitor_cb, 0);
-    make_card(scr, 408,  96, C_ORANGE, "\xEF\x80\x81", "AUDIO",       /* 音符 */
+    make_card(scr, 280,  96, C_ORANGE, "\xEF\x80\x81", "AUDIO",       /* 音符 */
               to_audio_cb, 1);
-    make_card(scr,  32, 280, C_GREEN,  "\xEF\x80\x93", "SYSTEM",      /* 齿轮 */
+    make_card(scr, 528,  96, C_GREEN,  "\xEF\x80\x93", "SYSTEM",      /* 齿轮 */
               to_system_cb, 2);
-    make_card(scr, 408, 280, C_PURPLE, "\xEF\x81\xAD", "HF TREND",    /* 图表 */
+    make_card(scr,  32, 280, C_PURPLE, "\xEF\x81\xAD", "HF TREND",    /* 火焰 */
               to_hf_cb, 3);
+    make_card(scr, 280, 280, C_BLUE,   "\xEF\x82\x80", "AI RANK",     /* 榜单 */
+              to_airank_cb, 4);
 }
 
 /* 每 500ms 刷一次卡片数值（读各模块的真实/模拟状态） */
@@ -262,6 +266,29 @@ static void refresh_cards(void)
         {
             lv_label_set_text(s_val[3], "..");
             lv_label_set_text(s_sub[3], "loading ranking");
+        }
+    }
+    /* 5) AI RANK：国内 AI 产品榜（AICPB，季度更新） */
+    {
+        char b[48];
+        ai_rank_data_t a;
+        ai_rank_get(&a);
+        if (a.state == AI_RANK_OK && a.web_count > 0)
+        {
+            snprintf(b, sizeof(b), "%d", a.web_count);
+            lv_label_set_text(s_val[4], b);
+            snprintf(b, sizeof(b), "CN TOP   #1 %.12s", a.web[0].name);
+            lv_label_set_text(s_sub[4], b);
+        }
+        else if (a.state == AI_RANK_FAIL)
+        {
+            lv_label_set_text(s_val[4], "--");
+            lv_label_set_text(s_sub[4], "fetch failed");
+        }
+        else
+        {
+            lv_label_set_text(s_val[4], "..");
+            lv_label_set_text(s_sub[4], "loading ranking");
         }
     }
 }

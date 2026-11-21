@@ -342,7 +342,7 @@ static void build_hf(void)
         lv_obj_center(rl);
     }
 
-    mk_label(scr, 32, 84, &ui_font_14, p.dim, "MODEL INTELLIGENCE / TOP 10");
+    mk_label(scr, 32, 84, &ui_font_14, p.dim, "MODEL INTELLIGENCE / RECENT TREND");
     mk_hline(scr, 32, 108, 736, p.fg);
 
     /* ---- 三行槽：一次建好，翻页只改文字 ---- */
@@ -406,7 +406,7 @@ static void build_hf(void)
     }
 
     s_page_lbl = mk_label(scr, 224, 450, &ui_font_14, p.fg, "1/4");
-    mk_label(scr, 320, 450, &ui_font_14, p.dim, "[HF-01] LIVE MODEL SIGNAL");
+    mk_label(scr, 320, 450, &ui_font_14, p.dim, "[HF-01] RECENT TREND / LIVE");
 
     {
         lv_obj_t *b1 = lv_button_create(scr);
