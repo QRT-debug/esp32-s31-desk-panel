@@ -551,3 +551,43 @@ wifi_mode_t mode = wifi_sta_connected() ? WIFI_MODE_APSTA : WIFI_MODE_AP;
 2. **`netsh wlan show networks` 返回的是缓存**，Windows 约 60s 才真扫一次
    （连续两次一次 10 个网络、一次 6 个即为证据）。
    ⇒ **不能用它判断"AP 有没有广播"**，要结合设备端日志或手机实际连接结果。
+
+### 11-23 01:50 屏保时钟 + SD 壁纸：五连坑复盘（全部实测定位）
+
+最终形态：System 页绿色 CLOCK 按钮 → SD 随机壁纸（硬件 JPEG 解码）+ 96px 等宽时间胶囊，
+触摸任意处返回来源场景。**已实测：解码 768000 字节精确、画质干净、时间清晰。**
+
+**五个坑，按发现顺序（每个都曾表现为"卡死"，实际各不相同）：**
+
+1. **渲染驱动模式**：本项目 LVGL 是"每个场景在 draw 里调 `lvgl_port_task()`"驱动的
+   （它跑 `lv_timer_handler` = 定时器+渲染+flush）。scene_clock 漏了这行 ⇒
+   **LVGL 从不被驱动，屏幕永远停在上一帧**。症状是"卡死"，实际是画面没换过——
+   心跳日志证明芯片和对象树全程正常。★ 新场景必查这一行。
+
+2. **场景切换清理惯例**：`ui_goto_scene` 只改索引，**各场景 frame==0 自己调
+   `lv_obj_clean(lv_scr_act())`**。漏了 ⇒ 旧页对象盖在新页上——"卡死在 System、
+   点哪都没反应"，其实 System 的按钮还在吃点击。★ 九个场景九个 clean，新场景照抄。
+
+3. **LVGL 线程安全**：解码放独立任务后，用 `lv_async_call` 通知 → **死锁**
+   （它也进 LVGL 内部队列，从别的线程调就是雷）。正确模式：任务只写
+   `volatile s_wp_ready`，LVGL 定时器 100ms 轮询、主上下文更新。
+
+4. **JPEG 硬件解码的缓冲对齐**：2D-DMA 要求 **16 字节对齐**（地址和 size 都要），
+   普通 `heap_caps_malloc` 不保证 ⇒ `ESP_ERR_INVALID_ARG`。必须用
+   `jpeg_alloc_decoder_mem(size, {buffer_direction}, &alloc_sz)`（输入输出都是）。
+
+5. **大图层级**：壁纸 lv_image 异步创建天然在**顶层**（盖住时间胶囊）；
+   `move_background` 又会压到**不透明 bg 的下面**（壁纸整个被盖，只剩灰屏）。
+   正确位置 = **`lv_obj_move_to_index(img, 1)`**：bg(0) 之上、胶囊之下。
+
+**已排除的假说（别再走回头路）：**
+- ~~esp_cache_msync(INVALIDATE) 必须做~~：官方示例**解码后不做任何 msync**，
+  S31 的 2D-DMA 写 PSRAM 硬件保证一致性；对 768KB 做 INVALIDATE 反而曾疑似死锁（已删）。
+- ~~CFF 亮度理论（壁纸闪）~~：用户实测"收敛后再进同一张明亮壁纸不闪"——
+  闪的机制是**全屏新数据扰动面板偏压 → 离子迁移 → 几分钟收敛**（VCOM 同源），
+  与亮度无关。物理特性，无解也不需解；换新壁纸会再闪一次然后安静。
+
+**调试方法论（这次靠它破案）**：三层日志定位"屏幕死但芯片活"——
+① `sysmon`（refr_cnt/render/flush：LVGL 渲染层）② 场景心跳（ui_manager 循环）③
+flush_cb 节流日志（refr→flush 链路）。三层都活着而屏幕不动 ⇒ 问题在"驱动缺失/对象层级"，
+不在性能。

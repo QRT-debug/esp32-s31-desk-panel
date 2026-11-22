@@ -45,6 +45,12 @@ const ui_scene_t g_scenes[] = {
 const int g_scene_count = (int)(sizeof(g_scenes) / sizeof(g_scenes[0]));
 
 static volatile int s_goto = -1;
+static volatile int s_cur  = UI_SCENE_HOME;   /* 当前场景：给时钟页"返回"用 */
+
+int ui_current_scene(void)
+{
+    return s_cur;
+}
 
 void ui_goto_scene(int idx)
 {
@@ -131,6 +137,7 @@ void ui_manager_run(void)
     while (1)
     {
         const ui_scene_t *sc = &g_scenes[idx];
+        s_cur = idx;
 
         if (sc->self_managed)
         {

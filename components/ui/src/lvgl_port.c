@@ -113,6 +113,16 @@ static void flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
      *   中间块直接 flush_ready —— 它们已经画进 buf_act，最后一块切过去时一起显示。 */
     if (lv_display_flush_is_last(disp))
     {
+        /* ★ 临时诊断：节流到每 2 秒一条，看 refr/flush 是否在跑 */
+        {
+            static int64_t s_last_log = 0;
+            int64_t now = esp_timer_get_time();
+            if (now - s_last_log > 2000000)
+            {
+                s_last_log = now;
+                ESP_LOGI("flush", "last flush at %lldms", now / 1000);
+            }
+        }
         /* ★★★ 见文件开头 MAX_DIRTY 处的说明：必须同时 sync
          *   ① 本帧新画的脏区  ② **上一帧的脏区**（被 refr_sync_areas 用 CPU memcpy 拷过、
          *   不经过本回调，不 sync 就会让 DMA 读到旧像素 = 局部闪）。

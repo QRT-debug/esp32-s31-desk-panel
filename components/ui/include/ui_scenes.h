@@ -65,6 +65,8 @@ void scene_clock(uint16_t *fb, int frame);   /* 屏保：SD 壁纸 + 96px 时间
 
 /* 场景跳转（LVGL 按钮里调用；ui_manager 每帧检查） */
 void ui_goto_scene(int idx);
+int  ui_current_scene(void);          /* 当前场景（时钟页返回用） */
+extern int g_clock_return_scene;      /* 进时钟前的场景，触摸返回回去 */
 
 /* 顶部状态栏（WiFi 扇形图标），建在 lv_layer_top，全界面共用；只调一次 */
 void ui_statusbar_init(void);

@@ -190,6 +190,16 @@ static lv_obj_t *panel(lv_obj_t *scr, int x, int y, int w, int h, uint32_t borde
  *   开哪个网址"就够了，不需要在屏上输入任何东西（输 WiFi 密码必须用真键盘）。
  * ★ 卡片挂在当前 scr 上，切页时随 lv_obj_clean 一起消失，不会残留。
  */
+/** 记住从哪进的时钟，触摸返回时回这个场景（全局变量，scene_clock.c 里用） */
+int g_clock_return_scene = UI_SCENE_HOME;
+
+static void clock_cb(lv_event_t *e)
+{
+    (void)e;
+    g_clock_return_scene = ui_current_scene();
+    ui_goto_scene(UI_SCENE_CLOCK);
+}
+
 static void prov_close_cb(lv_event_t *e)
 {
     lv_obj_t *mask = lv_event_get_user_data(e);
@@ -467,6 +477,27 @@ static void build_system(void)
         lv_obj_set_style_text_color(pvl, lv_color_hex(0xFFFFFF), 0);
         lv_label_set_text(pvl, "WIFI");
         lv_obj_center(pvl);
+
+        /* ---- 时钟/屏保按钮（WIFI 右边，DARK MODE 行的剩余空位） ----
+         * ★ 宽 88 不是 96：x=664 起，664+88=752 < 内边距 756，刚好放下；
+         *   96 宽会超出 4px 被裁。 */
+        lv_obj_t *ck = lv_obj_create(p3);
+        lv_obj_set_size(ck, 88, 26);
+        lv_obj_set_pos(ck, 664, 2);
+        lv_obj_set_style_bg_color(ck, lv_color_hex(0x35D07F), 0);
+        lv_obj_set_style_bg_opa(ck, LV_OPA_COVER, 0);
+        lv_obj_set_style_radius(ck, 8, 0);
+        lv_obj_set_style_border_width(ck, 0, 0);
+        lv_obj_set_style_pad_all(ck, 0, 0);
+        lv_obj_add_flag(ck, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_clear_flag(ck, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_event_cb(ck, clock_cb, LV_EVENT_CLICKED, NULL);
+
+        lv_obj_t *ckl = lv_label_create(ck);
+        lv_obj_set_style_text_font(ckl, &ui_font_14, 0);
+        lv_obj_set_style_text_color(ckl, lv_color_hex(0xFFFFFF), 0);
+        lv_label_set_text(ckl, "CLOCK");
+        lv_obj_center(ckl);
     }
 
     /* ---- 麦克风电平（日志卡第二行）：说话时条会跳 ---- */
