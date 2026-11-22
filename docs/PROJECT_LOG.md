@@ -591,3 +591,29 @@ wifi_mode_t mode = wifi_sta_connected() ? WIFI_MODE_APSTA : WIFI_MODE_AP;
 ① `sysmon`（refr_cnt/render/flush：LVGL 渲染层）② 场景心跳（ui_manager 循环）③
 flush_cb 节流日志（refr→flush 链路）。三层都活着而屏幕不动 ⇒ 问题在"驱动缺失/对象层级"，
 不在性能。
+
+### 11-23 02:14 屏保完整化：48px 字号 + 状态栏隐藏 + 自动进入
+
+- **字号三连降**（96→64→48px，各重新生成 Consolas 字库）：96/64 都压人物头部；
+  48px（8 字符约 210px）被采纳。★ 字库 25KB，比 96px 的 84KB 省一半。
+- **布局全自动化**：胶囊 `LV_SIZE_CONTENT` 自适应、日期 `lv_obj_align_to(OUT_BOTTOM_LEFT)`
+  相对时间对齐——换任何字号都不再重叠/留空隙（此前用魔法数字 y=112/68，各字号行高不同必翻车）。
+- **状态栏隐藏**：壁纸页时钟和状态栏时钟重复 ⇒ `ui_statusbar_show(false)` 进页隐藏、
+  返回时恢复（状态栏在 lv_layer_top，`lv_obj_clean` 清不掉，必须显式管理）。
+- **自动进入**：`ui_manager` 循环里 `touch_get_last(pressed)` 记最后触摸时刻，
+  无触摸 5 分钟 → 记来源场景 → 进 CLOCK。时钟页自身不触发。
+- **随机图修复**：`srand(time(NULL))+rand()` 对连续 seed 的首输出相关性高
+  （实测两次都抽中 up_5）→ 换 `esp_random()` 硬件真随机。
+
+### 11-23 02:14 屏保完整化：48px 字号 + 状态栏隐藏 + 自动进入
+
+- **字号三连降**（96→64→48px，各重新生成 Consolas 字库）：96/64 都压人物头部；
+  48px（8 字符约 210px）被采纳。★ 字库 25KB，比 96px 的 84KB 省一半。
+- **布局全自动化**：胶囊 `LV_SIZE_CONTENT` 自适应、日期 `lv_obj_align_to(OUT_BOTTOM_LEFT)`
+  相对时间对齐——换任何字号都不再重叠/留空隙（此前用魔法数字 y=112/68，各字号行高不同必翻车）。
+- **状态栏隐藏**：壁纸页时钟和状态栏时钟重复 ⇒ `ui_statusbar_show(false)` 进页隐藏、
+  返回时恢复（状态栏在 lv_layer_top，`lv_obj_clean` 清不掉，必须显式管理）。
+- **自动进入**：`ui_manager` 循环里 `touch_get_last(pressed)` 记最后触摸时刻，
+  无触摸 5 分钟 → 记来源场景 → 进 CLOCK。时钟页自身不触发。
+- **随机图修复**：`srand(time(NULL))+rand()` 对连续 seed 的首输出相关性高
+  （实测两次都抽中 up_5）→ 换 `esp_random()` 硬件真随机。

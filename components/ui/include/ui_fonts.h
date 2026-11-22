@@ -28,6 +28,8 @@ extern const lv_font_t ui_font_32;
  *         --format lvgl --range 0x30-0x3A --no-compress \
  *         --lv-include lvgl.h --lv-font-name ui_font_digit_96 -o ui_font_digit_96.c */
 extern const lv_font_t ui_font_digit_96;
+extern const lv_font_t ui_font_digit_64;
+extern const lv_font_t ui_font_digit_48;   /* 48px Consolas 等宽：时钟页（64 仍嫌大） */   /* 64px Consolas 等宽：时钟页（96px 压人物） */
 
 /* FontAwesome 图标字体（24px，只含 7 个硬件图标字形，16KB）：
  *   f2db 芯片(CPU)  f538 内存条  f108 显示器(GPU)  f0a0 硬盘

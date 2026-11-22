@@ -39,6 +39,7 @@ static const char *TAG = "statusbar";
 #define SB_RSSI_L2   (-77)
 #define SB_RSSI_L1   (-88)
 
+static lv_obj_t *s_bar_cont;     /* 整条状态栏容器（壁纸页隐藏用） */
 static lv_obj_t *s_arc[3];       /* 外 -> 内 */
 static lv_obj_t *s_dot;
 static lv_obj_t *s_lbl_time;
@@ -183,6 +184,23 @@ static void statusbar_apply_theme(void)
                                 lv_color_hex(sd_card_poll() ? SB_COL_SD : SB_COL_OFF), 0);
 }
 
+/** 壁纸/屏保页隐藏状态栏（时钟和它重复）；离开时恢复 */
+void ui_statusbar_show(bool show)
+{
+    if (s_bar_cont == NULL)
+    {
+        return;
+    }
+    if (show)
+    {
+        lv_obj_remove_flag(s_bar_cont, LV_OBJ_FLAG_HIDDEN);
+    }
+    else
+    {
+        lv_obj_add_flag(s_bar_cont, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
 void ui_statusbar_refresh(void)
 {
     if (s_cont != NULL)
@@ -202,6 +220,7 @@ void ui_statusbar_init(void)
 
     /* 容器：右上角 132x26（时间约 77px + 图标 30px + 间距） */
     lv_obj_t *cont = lv_obj_create(top);
+    s_bar_cont = cont;
     lv_obj_set_size(cont, 216, 30);
     lv_obj_align(cont, LV_ALIGN_TOP_RIGHT, -8, 2);
     lv_obj_set_style_bg_opa(cont, LV_OPA_80, 0);

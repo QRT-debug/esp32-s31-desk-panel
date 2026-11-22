@@ -70,7 +70,8 @@ extern int g_clock_return_scene;      /* 进时钟前的场景，触摸返回回
 
 /* 顶部状态栏（WiFi 扇形图标），建在 lv_layer_top，全界面共用；只调一次 */
 void ui_statusbar_init(void);
-void ui_statusbar_refresh(void);   /* 主题切换后重刷状态栏颜色（ui_theme.h） */
+void ui_statusbar_refresh(void);
+void ui_statusbar_show(bool show);   /* 壁纸/屏保页隐藏状态栏 */   /* 主题切换后重刷状态栏颜色（ui_theme.h） */
 
 /* 最近日志环形缓冲（拦截 esp_log 输出，供系统信息页显示） */
 void ui_logbuf_init(void);                 /* 在 ui_manager_run 开头调一次 */

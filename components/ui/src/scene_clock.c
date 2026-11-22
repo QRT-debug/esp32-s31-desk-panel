@@ -26,6 +26,7 @@
 #include "esp_cache.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_random.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "lvgl.h"
@@ -79,7 +80,9 @@ static bool pick_wallpaper(char *out, size_t outsz)
     {
         return false;
     }
-    snprintf(out, outsz, "%s", names[(unsigned)rand() % (unsigned)n]);
+    /* ★ 用硬件真随机，不用 rand()：srand(time(NULL)) 每次进场景重置序列，
+     *   而 newlib 的 rand 对连续 seed 的第一个输出相关性很高 ⇒ 实测两次都抽到同一张。 */
+    snprintf(out, outsz, "%s", names[(unsigned)(esp_random() % (unsigned)n)]);
     return true;
 }
 
@@ -244,6 +247,7 @@ static void decode_task(void *arg)
 static void clock_tap_cb(lv_event_t *e)
 {
     (void)e;
+    ui_statusbar_show(true);          /* 离开壁纸页恢复状态栏 */
     ui_goto_scene(g_clock_return_scene);
 }
 
@@ -293,6 +297,7 @@ void scene_clock(uint16_t *fb, int frame)
          *   漏了这行的症状：新页对象全被旧页盖住 —— 看起来"卡死在旧页、点哪都没反应"，
          *   实际芯片/渲染一切正常（本场景第一次上线时栽在这）。 */
         lv_obj_clean(lv_scr_act());
+        ui_statusbar_show(false);         /* ★ 壁纸页隐藏状态栏：时钟和它重复 */
 
         /* 解码引擎只建一次，跨场景复用 */
         if (s_dec == NULL)
@@ -307,8 +312,6 @@ void scene_clock(uint16_t *fb, int frame)
                 s_dec = NULL;
             }
         }
-
-        srand((unsigned)time(NULL));
 
         /* ---- 背景：先铺纯色兜底，壁纸异步解码成功后再叠上来 ---- */
         lv_obj_t *bg = lv_obj_create(lv_scr_act());
@@ -334,25 +337,28 @@ void scene_clock(uint16_t *fb, int frame)
         lv_obj_t *cap = lv_obj_create(lv_scr_act());
         /* ★ 宽度自适应内容：96px 等宽 8 字符约 424px，固定 430 会把秒的个位裁掉一角；
          *   LV_SIZE_CONTENT 让胶囊跟着文本走，永不裁切。 */
-        lv_obj_set_size(cap, LV_SIZE_CONTENT, 150);
+        lv_obj_set_size(cap, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
         lv_obj_set_pos(cap, 20, 14);
         lv_obj_set_style_bg_color(cap, lv_color_hex(0x000000), 0);
         lv_obj_set_style_bg_opa(cap, LV_OPA_50, 0);
         lv_obj_set_style_border_width(cap, 0, 0);
         lv_obj_set_style_radius(cap, 18, 0);
         lv_obj_clear_flag(cap, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_pad_all(cap, 10, 0);
 
         s_lbl_time = lv_label_create(cap);
-        lv_obj_set_style_text_font(s_lbl_time, &ui_font_digit_96, 0);
+        lv_obj_set_style_text_font(s_lbl_time, &ui_font_digit_48, 0);
         lv_obj_set_style_text_color(s_lbl_time, lv_color_hex(0xFFFFFF), 0);
         lv_label_set_text(s_lbl_time, "--:--:--");
-        lv_obj_set_pos(s_lbl_time, 14, 8);
+        lv_obj_set_pos(s_lbl_time, 4, 2);
 
         s_lbl_date = lv_label_create(cap);
         lv_obj_set_style_text_font(s_lbl_date, &ui_font_cn18, 0);
         lv_obj_set_style_text_color(s_lbl_date, lv_color_hex(0xD6E0F0), 0);
         lv_label_set_text(s_lbl_date, "");
-        lv_obj_set_pos(s_lbl_date, 18, 112);
+        /* ★ 相对时间标签对齐：字体的 line_height 各字号不同，用魔法数字摆 y
+         *   必然被某字号的时间行盖住（实测 48px 盖住日期）。align_to 永远贴对。 */
+        lv_obj_align_to(s_lbl_date, s_lbl_time, LV_ALIGN_OUT_BOTTOM_LEFT, 4, 2);
 
         s_lbl_hint = lv_label_create(lv_scr_act());
         lv_obj_set_style_text_font(s_lbl_hint, &ui_font_cn18, 0);

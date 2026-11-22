@@ -45,7 +45,9 @@ const ui_scene_t g_scenes[] = {
 const int g_scene_count = (int)(sizeof(g_scenes) / sizeof(g_scenes[0]));
 
 static volatile int s_goto = -1;
-static volatile int s_cur  = UI_SCENE_HOME;   /* 当前场景：给时钟页"返回"用 */
+static volatile int s_cur  = UI_SCENE_HOME;
+static int64_t     s_last_touch_ms = 0;   /* 最后触摸时刻（ms，esp_timer） */
+#define SCRSAVER_AFTER_MS  (5LL * 60 * 1000)   /* 无触摸 5 分钟进屏保 */   /* 当前场景：给时钟页"返回"用 */
 
 int ui_current_scene(void)
 {
@@ -148,6 +150,31 @@ void ui_manager_run(void)
              * 且不清会挡住"半屏 tap 切换"（对 LVGL 场景反而是干扰） */
             touch_evt_t e;
             while (touch_get_event(&e)) { }
+
+            /* ---- 屏保：无触摸 5 分钟自动进时钟页 ----
+             * ★ 只记"当前按住"（短按在 DOWN 一瞬为 true），click/长按语义无关紧要。
+             * ★ 时钟页自身不触发（否则进去 5 分钟又被切走）；触摸返回后重新计时。 */
+            {
+                uint16_t tx, ty;
+                bool     tp;
+                touch_get_last(&tx, &ty, &tp);
+                int64_t now_ms = esp_timer_get_time() / 1000;
+                if (tp)
+                {
+                    s_last_touch_ms = now_ms;
+                }
+                if (s_last_touch_ms == 0)
+                {
+                    s_last_touch_ms = now_ms;    /* 首次：以启动时刻起算 */
+                }
+                if (idx != UI_SCENE_CLOCK &&
+                    (now_ms - s_last_touch_ms) >= SCRSAVER_AFTER_MS)
+                {
+                    g_clock_return_scene = idx;
+                    s_goto = UI_SCENE_CLOCK;
+                    ESP_LOGI(TAG, "screensaver: idle 5min -> clock");
+                }
+            }
 
             if (s_goto >= 0)
             {
