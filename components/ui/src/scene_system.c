@@ -28,6 +28,7 @@
 #include "ui_theme.h"
 #include "bsp_led.h"
 #include "wifi_config.h"
+#include "wifi_prov.h"
 #include "wifi_sta.h"
 
 /* 11-20 主题化：指向可切换色板（本页还承载"深色模式"开关） */
@@ -180,6 +181,89 @@ static lv_obj_t *panel(lv_obj_t *scr, int x, int y, int w, int h, uint32_t borde
     lv_obj_set_style_pad_all(p, 12, 0);
     lv_obj_clear_flag(p, LV_OBJ_FLAG_SCROLLABLE);
     return p;
+}
+
+/**
+ * 配网按钮：开 SoftAP 并弹一张指引卡。
+ *
+ * ★ 为什么用弹出卡而不是切页面：配网时用户手上是手机，屏幕只需"告诉连哪个热点、
+ *   开哪个网址"就够了，不需要在屏上输入任何东西（输 WiFi 密码必须用真键盘）。
+ * ★ 卡片挂在当前 scr 上，切页时随 lv_obj_clean 一起消失，不会残留。
+ */
+static void prov_close_cb(lv_event_t *e)
+{
+    lv_obj_t *mask = lv_event_get_user_data(e);
+    if (mask != NULL)
+    {
+        lv_obj_del(mask);
+    }
+}
+
+static void prov_cb(lv_event_t *e)
+{
+    lv_obj_t *scr = lv_obj_get_screen(lv_event_get_target(e));
+
+    esp_err_t err = wifi_prov_start();
+    if (err != ESP_OK)
+    {
+        return;
+    }
+
+    lv_obj_t *mask = lv_obj_create(scr);
+    lv_obj_set_size(mask, 800, 480);
+    lv_obj_set_pos(mask, 0, 0);
+    lv_obj_set_style_bg_color(mask, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(mask, LV_OPA_70, 0);
+    lv_obj_set_style_border_width(mask, 0, 0);
+    lv_obj_set_style_pad_all(mask, 0, 0);
+    lv_obj_clear_flag(mask, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *card = lv_obj_create(mask);
+    lv_obj_set_size(card, 600, 300);
+    lv_obj_center(card);
+    lv_obj_set_style_bg_color(card, lv_color_hex(0x1A2233), 0);
+    lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(card, 18, 0);
+    lv_obj_set_style_border_width(card, 0, 0);
+    lv_obj_set_style_pad_all(card, 24, 0);
+    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *t1 = lv_label_create(card);
+    lv_obj_set_style_text_font(t1, &ui_font_cn18, 0);
+    lv_obj_set_style_text_color(t1, lv_color_hex(0x5B7CFA), 0);
+    lv_label_set_text(t1, "手机配网");
+    lv_obj_set_pos(t1, 0, 0);
+
+    char b[128];
+    lv_obj_t *t2 = lv_label_create(card);
+    lv_obj_set_style_text_font(t2, &ui_font_cn18, 0);
+    lv_obj_set_style_text_color(t2, lv_color_hex(0xE6EDF7), 0);
+    snprintf(b, sizeof(b), "1. 连热点  %s\n    密码  %s\n2. 打开  http://%s/",
+             wifi_prov_ssid(), PROV_AP_PASS, PROV_AP_IP);
+    lv_label_set_text(t2, b);
+    lv_obj_set_pos(t2, 0, 44);
+
+    lv_obj_t *t3 = lv_label_create(card);
+    lv_obj_set_style_text_font(t3, &ui_font_14, 0);
+    lv_obj_set_style_text_color(t3, lv_color_hex(0x8A97AD), 0);
+    lv_label_set_text(t3, "保存后设备会自动重启并连接新网络");
+    lv_obj_set_pos(t3, 0, 190);
+
+    lv_obj_t *btn = lv_obj_create(card);
+    lv_obj_set_size(btn, 140, 44);
+    lv_obj_set_pos(btn, 436, 226);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(0x5B7CFA), 0);
+    lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(btn, 10, 0);
+    lv_obj_set_style_border_width(btn, 0, 0);
+    lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(btn, prov_close_cb, LV_EVENT_CLICKED, mask);
+
+    lv_obj_t *bl = lv_label_create(btn);
+    lv_obj_set_style_text_font(bl, &ui_font_cn18, 0);
+    lv_obj_set_style_text_color(bl, lv_color_hex(0xFFFFFF), 0);
+    lv_label_set_text(bl, "关闭");
+    lv_obj_center(bl);
 }
 
 static void bl_cb(lv_event_t *e)
@@ -357,6 +441,27 @@ static void build_system(void)
         lv_obj_set_style_bg_color(sw, lv_color_hex(ui_theme()->card_line), LV_PART_MAIN);
         lv_obj_set_style_bg_color(sw, lv_color_hex(ui_theme()->accent), LV_PART_INDICATOR | LV_STATE_CHECKED);
         lv_obj_add_event_cb(sw, theme_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+        /* ---- 配网按钮（DARK MODE 右侧空位） ---- */
+        lv_obj_t *pv = lv_obj_create(p3);
+        lv_obj_set_size(pv, 96, 26);
+        /* ★ 放 MIC 行右侧（x 640）：DARK MODE 开关占到 662，那行右侧已被挤满，
+         *   硬塞会超出卡片内边距（756）被裁掉。MIC 数值标签只到 ~470，右边空着。 */
+        lv_obj_set_pos(pv, 640, 36);
+        lv_obj_set_style_bg_color(pv, lv_color_hex(0x5B7CFA), 0);
+        lv_obj_set_style_bg_opa(pv, LV_OPA_COVER, 0);
+        lv_obj_set_style_radius(pv, 8, 0);
+        lv_obj_set_style_border_width(pv, 0, 0);
+        lv_obj_set_style_pad_all(pv, 0, 0);
+        lv_obj_add_flag(pv, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_clear_flag(pv, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_event_cb(pv, prov_cb, LV_EVENT_CLICKED, NULL);
+
+        lv_obj_t *pvl = lv_label_create(pv);
+        lv_obj_set_style_text_font(pvl, &ui_font_14, 0);
+        lv_obj_set_style_text_color(pvl, lv_color_hex(0xFFFFFF), 0);
+        lv_label_set_text(pvl, "WIFI");
+        lv_obj_center(pvl);
     }
 
     /* ---- 麦克风电平（日志卡第二行）：说话时条会跳 ---- */

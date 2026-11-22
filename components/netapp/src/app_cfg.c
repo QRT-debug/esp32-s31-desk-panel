@@ -33,7 +33,9 @@ static void cfg_defaults(app_cfg_t *c)
     c->ver = APP_CFG_VER;
     snprintf(c->wifi_ssid, sizeof(c->wifi_ssid), "%s", WIFI_SSID);
     snprintf(c->wifi_pass, sizeof(c->wifi_pass), "%s", WIFI_PASS);
-    c->city[0] = '\0';                                   /* 空 = 按 IP 定位 */
+    c->city[0] = '\0';                                   /* 空 + 坐标 0 = 按 IP 定位 */
+    c->lat       = 0.0f;
+    c->lon       = 0.0f;
     snprintf(c->pc_host, sizeof(c->pc_host), "%s", PC_MONITOR_HOST);
     c->pc_port    = PC_MONITOR_PORT;
     c->backlight  = 75;
@@ -129,10 +131,11 @@ esp_err_t app_cfg_reset(void)
 void app_cfg_dump(void)
 {
     /* 密码只报"有没有"，不进日志 —— 串口日志经常被贴到 issue 里 */
-    ESP_LOGI(TAG, "ssid=\"%s\" pass=%s city=\"%s\" pc=%s:%u bl=%u%% tz=%+d theme=%u",
+    ESP_LOGI(TAG, "ssid=\"%s\" pass=%s city=\"%s\" lat/lon=%.4f,%.4f pc=%s:%u bl=%u%% tz=%+d theme=%u",
              s_cfg.wifi_ssid,
              s_cfg.wifi_pass[0] ? "***" : "(empty)",
              s_cfg.city[0] ? s_cfg.city : "(auto by IP)",
+             (double)s_cfg.lat, (double)s_cfg.lon,
              s_cfg.pc_host, (unsigned)s_cfg.pc_port,
              (unsigned)s_cfg.backlight, (int)s_cfg.tz, (unsigned)s_cfg.theme);
 }

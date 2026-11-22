@@ -35,6 +35,7 @@
 #include "ui_scenes.h"
 #include "ui_theme.h"
 #include "weather.h"
+#include "wifi_prov.h"
 #include "hf_trend.h"
 #include "ai_rank.h"
 #include "bili_hot.h"
@@ -61,6 +62,36 @@ static void task_core_dump_task(void *arg)
                  (unsigned)st[k].uxCurrentPriority,
                  (int)st[k].eCurrentState,
                  (unsigned)st[k].usStackHighWaterMark);
+    }
+    vTaskDelete(NULL);
+}
+
+/**
+ * 配网看门狗：开机 30 秒还没连上 WiFi 就开热点，让用户在手机浏览器里填表。
+ *
+ * ★ 只在"开机连不上"时触发，运行中断网不会自动开热点 —— 避免路由器重启、
+ *   信号抖动时设备莫名其妙地广播一个 AP。要手动改配置走 System 页按钮。
+ */
+static void prov_watchdog_task(void *arg)
+{
+    (void)arg;
+
+    for (int i = 0; i < 30; i++)
+    {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        if (wifi_sta_connected())
+        {
+            ESP_LOGI(TAG, "wifi up after %ds, no provisioning needed", i + 1);
+            vTaskDelete(NULL);
+            return;
+        }
+    }
+
+    ESP_LOGW(TAG, "wifi not connected in 30s -> starting provisioning AP");
+    if (wifi_prov_start() == ESP_OK)
+    {
+        ESP_LOGW(TAG, "connect phone to \"%s\" (pass %s), open http://%s/",
+                 wifi_prov_ssid(), PROV_AP_PASS, PROV_AP_IP);
     }
     vTaskDelete(NULL);
 }
@@ -143,6 +174,7 @@ void app_main(void)
         ai_rank_start();          /* 国内 AI 产品榜：24 小时一次（站点季度更新） */
         bili_start();             /* B 站热搜：30 分钟一次 */
         ESP_LOGI(TAG, "monitor target: %s", pc_monitor_url());
+        xTaskCreate(prov_watchdog_task, "provwd", 3072, NULL, 3, NULL);
     }
     else
     {

@@ -19,7 +19,7 @@
 
 #include "esp_err.h"
 
-#define APP_CFG_VER   1        /* 结构体版本：字段变动时 +1，旧 blob 会自动回落到默认值 */
+#define APP_CFG_VER   2        /* 结构体版本：字段变动时 +1，旧 blob 会自动回落到默认值 */
 
 typedef struct
 {
@@ -29,8 +29,12 @@ typedef struct
     char     wifi_ssid[33];
     char     wifi_pass[65];
 
-    /* 位置：留空 = 按公网 IP 自动定位（wttr.in 的默认行为） */
+    /* 位置：city 为空且 lat/lon 为 0 → 按公网 IP 自动定位（wttr.in 的默认行为）
+     * ★ 为什么要 lat/lon：open-meteo 的地理编码只认到**市级**（实测"海淀区"查不到），
+     *   而空气质量和天气最终都要经纬度。想要街道级精度，只能直接填坐标。 */
     char     city[24];
+    float    lat;          /* 0 = 未设置 */
+    float    lon;
 
     /* PC 中转（pc_monitor_server.py）：B 站热搜 + PC 状态共用这一组 */
     char     pc_host[40];
