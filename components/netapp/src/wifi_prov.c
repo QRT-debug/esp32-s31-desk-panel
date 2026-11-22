@@ -18,6 +18,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <dirent.h>
+#include <unistd.h>
 
 #include "app_cfg.h"
 #include "backlight.h"
@@ -207,6 +209,7 @@ static char *build_page(void)
         "<button type=button onclick=up() style='margin-top:10px'>上传到设备</button>"
         "<small>S31 的硬件解码器只认 JPEG。请先裁成 800×480（5:3），"
         "否则会变形。最多存 10 张，满了覆盖最旧的一张。</small>"
+        "<button type=button onclick=wpclr() style='margin-top:6px'>清空全部壁纸</button>"
         "<div id=ur style='margin-top:8px;color:#8a97ad;font-size:13px'></div>"
         "</fieldset>"
 
@@ -219,6 +222,14 @@ static char *build_page(void)
         "if(!f){r.textContent='请先选一张 JPG';return;}"
         "r.textContent='上传中…（'+Math.round(f.size/1024)+' KB）';"
         "fetch('/upload',{method:'POST',body:f})"
+        ".then(function(x){return x.text()})"
+        ".then(function(t){r.textContent=t})"
+        ".catch(function(e){r.textContent='失败：'+e});"
+        "}"
+        "function wpclr(){"
+        "var r=document.getElementById('ur');"
+        "r.textContent='清空中…';"
+        "fetch('/wpclear')"
         ".then(function(x){return x.text()})"
         ".then(function(t){r.textContent=t})"
         ".catch(function(e){r.textContent='失败：'+e});"
@@ -348,6 +359,40 @@ static esp_err_t h_upload(httpd_req_t *req)
                  (unsigned)written, (unsigned)req->content_len);
     }
 
+    httpd_resp_set_type(req, "text/plain; charset=utf-8");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_send(req, msg, HTTPD_RESP_USE_STRLEN);
+}
+
+/** 清空全部壁纸：GET /wpclear（用户要换一组图时，一张张传之前先清） */
+static esp_err_t h_clear(httpd_req_t *req)
+{
+    DIR *d = opendir(WP_DIR);
+    if (d == NULL)
+    {
+        httpd_resp_sendstr(req, "no wallpaper dir");
+        return ESP_OK;
+    }
+    struct dirent *e;
+    int    n    = 0;
+    char   path[72];
+    while ((e = readdir(d)) != NULL)
+    {
+        size_t l = strlen(e->d_name);
+        if (l > 4 && strcasecmp(e->d_name + l - 4, ".jpg") == 0)
+        {
+            snprintf(path, sizeof(path), WP_DIR "/%s", e->d_name);
+            if (unlink(path) == 0)
+            {
+                n++;
+            }
+        }
+    }
+    closedir(d);
+
+    char msg[64];
+    snprintf(msg, sizeof(msg), "OK  deleted %d wallpapers", n);
+    ESP_LOGI(TAG, "wallpaper cleared: %d", n);
     httpd_resp_set_type(req, "text/plain; charset=utf-8");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
     return httpd_resp_send(req, msg, HTTPD_RESP_USE_STRLEN);
@@ -549,9 +594,13 @@ esp_err_t wifi_prov_start(void)
     static const httpd_uri_t uri_upload = {
         .uri = "/upload", .method = HTTP_POST, .handler = h_upload, .user_ctx = NULL,
     };
+    static const httpd_uri_t uri_clear = {
+        .uri = "/wpclear", .method = HTTP_GET, .handler = h_clear, .user_ctx = NULL,
+    };
     httpd_register_uri_handler(s_srv, &uri_root);
     httpd_register_uri_handler(s_srv, &uri_save);
     httpd_register_uri_handler(s_srv, &uri_upload);
+    httpd_register_uri_handler(s_srv, &uri_clear);
 
     ESP_LOGI(TAG, "AP \"%s\" up, open http://%s/", s_ssid, PROV_AP_IP);
     return ESP_OK;
