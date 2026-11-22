@@ -69,6 +69,7 @@ typedef struct
 } hf_slot_t;
 
 static hf_slot_t  s_slot[HF_ROWS];
+static lv_obj_t  *s_root;       /* 本页根容器：承载滑动回调，随 clean 一起消亡 */
 static lv_obj_t  *s_page_lbl;
 static lv_obj_t  *s_time_lbl;
 static lv_obj_t  *s_state_lbl;
@@ -309,6 +310,25 @@ static void build_hf(void)
     s_state_lbl = NULL;
     memset(s_blocks, 0, sizeof(s_blocks));
 
+    /* ★★★ 11-22 崩溃终极修复：滑动回调不能再绑在 scr 上。
+     *   scr 是**常驻对象**，lv_obj_clean() 不会删它自身的回调，导致：
+     *   ① 每进一次 HF 页就多一对回调 ⇒ 一次滑动触发 N 次翻页；
+     *   ② **离开 HF 页后回调仍然活着**，此时别的页面 build 时 clean(scr)
+     *      把 HF 的 label 删了，残留回调再来就拿到已释放对象 ⇒ free() 越界 panic。
+     *   改绑到自己创建的 root 容器：root 被 clean 删除时，其上的回调随之释放，
+     *   离开页面后物理上不可能再被触发。root 先创建 ⇒ 位于最底层，
+     *   空白处的触摸落到 root，子控件（返回/刷新/翻页键）仍优先命中。 */
+    s_root = lv_obj_create(scr);
+    lv_obj_set_size(s_root, 800, 480);      /* 与全屏一致 */
+    lv_obj_set_pos(s_root, 0, 0);
+    lv_obj_set_style_bg_opa(s_root, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(s_root, 0, 0);
+    lv_obj_set_style_pad_all(s_root, 0, 0);
+    lv_obj_clear_flag(s_root, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(s_root, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(s_root, press_cb,   LV_EVENT_PRESSED,  NULL);
+    lv_obj_add_event_cb(s_root, release_cb, LV_EVENT_RELEASED, NULL);
+
     lv_obj_set_style_bg_color(scr, lv_color_hex(p.bg), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
     lv_obj_set_style_pad_all(scr, 0, 0);
@@ -333,17 +353,7 @@ static void build_hf(void)
         lv_obj_center(bl);
     }
 
-    /* 滑动翻页（自算位移；scr 需可点击才能接收空白处的按下事件）
-     * ★★★ 11-22 崩溃真因：scr 是常驻对象，lv_obj_clean(scr) **只删子对象、
-     *   不删 scr 自身的事件回调**。原来每次进 HF 页都 add 一次 ⇒ 回调累积：
-     *   进 N 次就有 N 对，一次滑动触发 N 次 hf_page_next ⇒ 连续 fill_list，
-     *   中间对象已被重建 ⇒ 拿到已释放的 label（free() 越界 panic）。
-     *   ⇒ 必须先解绑再注册，保证永远只有一对。 */
-    lv_obj_add_flag(scr, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_remove_event_cb(scr, press_cb);
-    lv_obj_remove_event_cb(scr, release_cb);
-    lv_obj_add_event_cb(scr, press_cb,   LV_EVENT_PRESSED,  NULL);
-    lv_obj_add_event_cb(scr, release_cb, LV_EVENT_RELEASED, NULL);
+    /* 滑动翻页：回调已改绑到 s_root（见 build_hf 开头），此处不再操作 scr。 */
 
     /* 头部 */
     mk_label(scr, 32, 36, &ui_font_32, p.fg, "HF / TRENDING");
