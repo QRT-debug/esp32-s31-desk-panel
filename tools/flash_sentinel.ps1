@@ -30,6 +30,15 @@ if (-not $ok) {
     exit
 }
 Write-Output ("FLASH=0 " + (Get-Date -Format "HH:mm:ss"))
+Write-Output "=================================================================="
+Write-Output "  *** RGB PANEL NOTICE *******************************************"
+Write-Output "  The LCD (HX8264) has NO reset pin and NO command channel -- it"
+Write-Output "  can ONLY be reset by cutting power. A chip-only reset (esptool"
+Write-Output "  hard-reset) leaves the panel in its previous scan state, which"
+Write-Output "  shows up as edge flicker / partial corruption."
+Write-Output "  => After flashing, if the screen flickers: UNPLUG USB 2s, replug."
+Write-Output "  Normal use (cold boot) is NOT affected -- this is debug-only."
+Write-Output "=================================================================="
 
 # Capture 25s of boot/run log after esptool hard reset
 try {
