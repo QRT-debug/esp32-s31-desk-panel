@@ -12,6 +12,8 @@
  */
 #include "wifi_prov.h"
 
+#include "wifi_sta.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -390,9 +392,20 @@ esp_err_t wifi_prov_start(void)
     wc.ap.authmode       = WIFI_AUTH_WPA2_PSK;
     strlcpy((char *)wc.ap.password, PROV_AP_PASS, sizeof(wc.ap.password));
 
-    /* ★ APSTA：已联网的设备改配置时不断网。set_mode 会让 WiFi 重启一次，
-     *   STA 会短暂断开再自动重连（凭据没变，所以能连回来）。 */
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
+    /* ★★★ 模式选择不是随便挑的（2026-11-22 实测踩到）：
+     *
+     *   APSTA 模式下 AP 与 STA **共用一个 radio，且必须同信道**。当 STA 连不上
+     *   （配网场景下最常见：密码填错了）它会在 1~13 信道反复扫描，
+     *   **AP 的 beacon 被反复打断** ⇒ 手机/电脑根本扫不到 SmartPanel-XXXX
+     *   （实测：日志显示 "AP xxx up"，但 netsh 扫描十个网络里没有它）。
+     *
+     *   ⇒ 已联网时用 APSTA（改配置不断网）；
+     *     未联网时用**纯 AP**（没有 STA 抢 radio，广播稳定）。
+     *     配网本身就是"连不上才来做"的事，纯 AP 才是常态。 */
+    wifi_mode_t mode = wifi_sta_connected() ? WIFI_MODE_APSTA : WIFI_MODE_AP;
+    ESP_LOGW(TAG, "starting AP in %s mode",
+             (mode == WIFI_MODE_APSTA) ? "APSTA (sta online, keeps internet)" : "AP-only (sta offline, stable beacon)");
+    ESP_ERROR_CHECK(esp_wifi_set_mode(mode));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wc));
     ESP_ERROR_CHECK(esp_wifi_start());
 

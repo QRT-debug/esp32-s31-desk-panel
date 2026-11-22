@@ -523,3 +523,31 @@ I (5517) ai_rank: cache hit: 2026-07-08 (updated 11-22 23:49)
 
 **未验证**：真正断网（关路由器）后的显示效果。逻辑上成立（缓存加载不依赖 WiFi），
 但没实测过"离线开机"整条路径。
+
+### 11-22 配网 AP 模式修正：按 STA 状态选 AP / APSTA
+
+**踩到的现象**：日志明确打出 `prov: AP "SmartPanel-1624" up`，
+但电脑 `netsh wlan show networks` 扫十个网络里**没有它**。
+
+**根因（ESP32 已知限制）**：`WIFI_MODE_APSTA` 下 AP 与 STA **共用一个 radio 且必须同信道**。
+STA 连不上时会在 1~13 信道反复扫描，**AP 的 beacon 被反复打断** ⇒ 客户端扫不到。
+而配网场景恰好就是"STA 连不上"，最坏组合。
+
+**修正**：
+```c
+wifi_mode_t mode = wifi_sta_connected() ? WIFI_MODE_APSTA : WIFI_MODE_AP;
+```
+- 已联网改配置 → APSTA（不断网）
+- 未联网自助 → **纯 AP**（无 STA 抢 radio，广播稳定）
+
+**★ 未在离线态实测**：烧录完时用户已把密码改回、设备一直在线，
+改动的原理依据充分但没有现场验证。下次真正断网时再看一次。
+
+### 顺带澄清两个误判（避免以后重走）
+
+1. **"无线局域网接口电源关闭"不等于 radio 被关**。
+   `netsh wlan show interfaces` 显示 `Radio status: Hardware On / Software On`，
+   当次报错是瞬时/调用问题。**判据要用 `show interfaces`，不是看 `show networks` 的报错。**
+2. **`netsh wlan show networks` 返回的是缓存**，Windows 约 60s 才真扫一次
+   （连续两次一次 10 个网络、一次 6 个即为证据）。
+   ⇒ **不能用它判断"AP 有没有广播"**，要结合设备端日志或手机实际连接结果。
