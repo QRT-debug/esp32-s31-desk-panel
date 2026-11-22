@@ -393,3 +393,57 @@ PCLK 40MHz · H_total 1120 (800+48+160+112) · V_total 576 (480+3+48+45)
 
 **教训**：★★ 帧率够不够不是绝对值，**是亮度、视角、疲劳程度的函数**。
 定帧率下限必须绑定当时的背光档位；本板背光被 PWM 斩到"只能 100% 或很暗"，所以只能靠提帧率解决。
+
+---
+
+## 11-22 软件架构：运行时配置层（NVS）上线
+
+**动机**：WiFi 凭据、PC 中转地址、城市原本全是编译期宏（`wifi_config.h`），
+换网络就得改代码重烧；同一份固件无法发给不同的人。这是"能不能交付"的分水岭。
+
+### 做法
+
+新增 `components/netapp/{include,src}/app_cfg.{h,c}`：
+
+```c
+typedef struct {
+    uint16_t ver;              /* 结构版本，字段变动 +1，旧 blob 自动回落默认值 */
+    char     wifi_ssid[33], wifi_pass[65];
+    char     city[24];         /* 空 = 按公网 IP 自动定位（wttr.in 默认行为） */
+    char     pc_host[40]; uint16_t pc_port;
+    uint8_t  backlight; int8_t tz; uint8_t theme;
+} app_cfg_t;
+```
+
+- **整个结构体存一个 NVS blob**（ns `appcfg` / key `cfg`）。不逐项存：
+  配置项会随功能增长，逐项存要维护一堆 key 和"缺项怎么办"的分支。
+- `wifi_config.h` 降级为**首次上电 / 恢复出厂的默认值** ⇒ 现有设备行为完全不变。
+- 接入点三处：`wifi_sta.c`（SSID/密码，密码空则自动降为 OPEN）、
+  `pc_monitor.c` 与 `bili_hot.c`（共用同一组 PC 中转地址）。
+- `main.c` 在 `nvs_flash_init()` 之后、`lcd_init()` 之前调用 `app_cfg_init()`。
+
+### 验证（实测日志）
+
+```
+I (1220) appcfg: loaded from NVS
+I (1221) appcfg: ssid="MY_WIFI" pass=*** city="(auto by IP)" pc=192.168.1.2:8080 bl=75% tz=+8 theme=0
+I (5449) wifi: connecting to "MY_WIFI" ...
+I (5452) pcmon: polling http://192.168.1.2:8080/api/stats.txt every 1000 ms
+I (7083) wifi: got ip 192.168.1.3
+```
+⇒ 三处下游确认走的是 NVS 配置，不是宏。
+
+### 三个编译期坑（记下来）
+
+1. **`SRC_DIRS` 用 CMake glob，新增 .c 必须 `idf.py reconfigure`**，否则链接期
+   `undefined reference to app_cfg_init` —— 报错长得像"函数没写"，实际是"文件没进构建"。
+2. **netapp 的 REQUIRES 要加 `nvs_flash`**，否则 `nvs.h: No such file or directory`。
+3. **`wifi_config_t.sta.ssid/password` 是 `uint8_t[32]/[64]`，不含结尾 NUL**，
+   而配置里是 `char[33]/[65]`。用 `snprintf` 会触发 `-Werror=format-truncation`，
+   用 `strncpy` 触发 `-Werror=stringop-truncation` ⇒ **用 `strlcpy`**（语义正确且不告警）。
+
+### 还没做（下一步）
+
+- **SoftAP + 网页表单**：现在只能靠改 NVS（或重烧）改配置，用户还没有入口。
+- 背光 / 时区 / 主题**已在结构体里但还没接到 UI**（System 页仍直接调 `backlight_set`）。
+- 城市字段**还没接进 weather.c**（现在仍是 `s_geo[]` 查表 + IP 定位）。

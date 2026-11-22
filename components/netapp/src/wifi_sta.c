@@ -4,6 +4,7 @@
  */
 #include "wifi_sta.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "esp_event.h"
@@ -16,6 +17,7 @@
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
+#include "app_cfg.h"
 #include "wifi_config.h"
 
 static const char *TAG = "wifi";
@@ -92,10 +94,18 @@ esp_err_t wifi_sta_init(void)
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
                                                         on_event, NULL, NULL));
 
+    /* ★★★ 11-22：凭据改为从 app_cfg（NVS）读，编译期宏只作首次上电的默认值。
+     *   这样同一份固件换网络不用重烧。 */
+    const app_cfg_t *cfg = app_cfg_get();
+
     wifi_config_t wc = {0};
-    strncpy((char *)wc.sta.ssid, WIFI_SSID, sizeof(wc.sta.ssid) - 1);
-    strncpy((char *)wc.sta.password, WIFI_PASS, sizeof(wc.sta.password) - 1);
-    wc.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+    /* ★ wifi_config_t 的 ssid/password 是 uint8_t[32]/[64]（**不含结尾 NUL**），
+     *   而配置里是 char[33]/[65]（含 NUL）⇒ 必须按目标长度截断，
+     *   用 snprintf 会被 -Werror=format-truncation 判定"可能截断"。
+     *   strlcpy 语义正确：最多写 dstsz-1 字节并补 NUL。 */
+    strlcpy((char *)wc.sta.ssid, cfg->wifi_ssid, sizeof(wc.sta.ssid));
+    strlcpy((char *)wc.sta.password, cfg->wifi_pass, sizeof(wc.sta.password));
+    wc.sta.threshold.authmode = (cfg->wifi_pass[0] != '\0') ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wc));
@@ -106,7 +116,7 @@ esp_err_t wifi_sta_init(void)
      *   与 RGB LCD 抢 PSRAM 带宽更凶，LCD 扫描丢像素 → 四周随机闪。
      *   结论：闪的根因是 PSRAM 带宽仲裁，不是电源纹波。保持默认 20dBm。 */
 
-    ESP_LOGI(TAG, "connecting to \"%s\" ...", WIFI_SSID);
+    ESP_LOGI(TAG, "connecting to \"%s\" ...", cfg->wifi_ssid);
     return ESP_OK;
 }
 

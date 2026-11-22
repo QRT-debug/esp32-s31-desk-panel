@@ -2,6 +2,7 @@
  * @file    pc_monitor.c
  * @brief   轮询电脑的 /api/stats，解析成快照
  */
+#include "app_cfg.h"
 #include "pc_monitor.h"
 
 #include <ctype.h>
@@ -230,8 +231,10 @@ esp_err_t pc_monitor_start(void)
     }
 
     memset(&s_snap, 0, sizeof(s_snap));
-    snprintf(s_url, sizeof(s_url), "http://%s:%d/api/stats.txt",
-             PC_MONITOR_HOST, PC_MONITOR_PORT);
+    /* ★ 11-22：地址改为运行时配置（配网页可改），编译期宏只作默认值 */
+    const app_cfg_t *cfg = app_cfg_get();
+    snprintf(s_url, sizeof(s_url), "http://%s:%u/api/stats.txt",
+             cfg->pc_host, (unsigned)cfg->pc_port);
     ESP_LOGI(TAG, "polling %s every %d ms", s_url, POLL_MS);
 
     BaseType_t ok = xTaskCreate(monitor_task, "pcmon", 8192, NULL, 5, NULL);

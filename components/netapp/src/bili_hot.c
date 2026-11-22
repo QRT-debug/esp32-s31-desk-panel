@@ -34,10 +34,10 @@ static const char *TAG = "bili_hot";
  *   ⇒ 由 PC 的 pc_monitor_server.py 代抓（端点 /api/bili.txt，纯文本 `词|热度`），
  *     设备只拉 HTTP，不碰 TLS。代价：PC 需开机跑服务。
  */
+#include "app_cfg.h"
 #include "wifi_config.h"   /* PC_MONITOR_HOST / PC_MONITOR_PORT */
 
-#define BILI_HOST      PC_MONITOR_HOST
-#define BILI_PORT      PC_MONITOR_PORT
+/* ★ 11-22：host/port 改为与 pc_monitor 共用同一组运行时配置（同一台 PC 上的中转脚本） */
 #define BILI_PATH      "/api/bili.txt"
 #define BILI_RX_MAX    (24 * 1024)      /* 实测响应 ~2KB，留足余量 */
 #define BILI_PERIOD_MS (10 * 60 * 1000)
@@ -127,7 +127,8 @@ static bool fetch_once(bili_data_t *out)
     s_rx[0]  = 0;
 
     char url[128];
-    snprintf(url, sizeof(url), "http://%s:%d" BILI_PATH, BILI_HOST, BILI_PORT);
+    const app_cfg_t *acfg = app_cfg_get();
+    snprintf(url, sizeof(url), "http://%s:%u" BILI_PATH, acfg->pc_host, (unsigned)acfg->pc_port);
 
     esp_http_client_config_t cfg = {
         .url               = url,

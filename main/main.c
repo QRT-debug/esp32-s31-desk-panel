@@ -21,6 +21,7 @@
 #include "freertos/idf_additions.h"
 #include "freertos/task.h"
 #include "audio_player.h"
+#include "app_cfg.h"
 #include "backlight.h"
 #include "bsp_led.h"
 #include "sd_card.h"
@@ -78,6 +79,11 @@ void app_main(void)
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
+
+    /* ★★★ 11-22 运行时配置：必须在 NVS 之后、WiFi/背光/网络任务之前。
+     *   首次上电会把 wifi_config.h 里的编译期宏写成默认值，所以行为与改造前一致；
+     *   以后配网页只改 NVS，业务代码不用动。 */
+    app_cfg_init();
 
     lcd_init();
     ESP_LOGI(TAG, "LCD ready  PCLK %d MHz", LCD_PCLK_MHZ);
