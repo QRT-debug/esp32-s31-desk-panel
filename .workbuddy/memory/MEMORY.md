@@ -4,9 +4,20 @@
 > 完整文档在 `docs/`（README / HARDWARE / PROJECT_LOG / PLAYBOOK / BOARD_AUDIO）。
 > 本文件只放"下次开工必须先知道"的结论，**详细内容查 docs，不要在这里重复**。
 
-## 一句话现状（2026-11-20）
+## 一句话现状（2026-11-23）
 
-LVGL 四页界面（HOME / PC 监控 / 音频播放器 / 系统信息+日志，状态栏常驻）+ **浅色/深色双主题**（系统页 DARK MODE 开关，NVS 记忆）+ **麦克风已打通**（16k 裸 I2S RX + 手动 ES8389 ADC 序列，录音/播放模式互斥）+ SD 卡播放 + 开机自播已删。固件 ≈1.8MB。
+**9 个场景**（天气 HOME / PC 监控 / 音频 / 系统 / APPS / HF 热榜 / AI 榜 / B 站 / **屏保时钟**），
+**浅深双主题 + 运行时配置层 + 手机配网 + 四源数据缓存**。固件 ≈2.6MB / 4MB 分区（36% 余量）。
+
+**11-22 晚新增（这是当前最值钱的部分）**：
+- **配置层** `app_cfg.{h,c}`：WiFi/城市/坐标/PC 地址/背光/时区全存 NVS 一个 blob，
+  `wifi_config.h` 降级为"首次上电默认值"⇒ **换网络不用重烧**。
+- **配网** `wifi_prov.{h,c}`：SoftAP + 内嵌网页表单（不依赖文件系统）+ SYSTEM 页 WIFI 按钮；
+  开机 30s 连不上自动开热点。**实测配错密码能自救**。
+- **数据缓存** `data_cache.{h,c}`：`wx/hf/ai/bili` 四源落 NVS，**断网/开机瞬间都有画面**
+  （缓存 5.5s 读完，WiFi 要 7s 才连上）。
+- **壁纸上传** `POST /upload`：4KB 缓冲边收边写 SD，已实测 6 张进 `/sdcard/wallpaper/`。
+- **屏保时钟** `scene_clock.c`：SD 壁纸 + **硬件 JPEG 解码** + 96px 等宽时间。**尚未烧录验证**。
 
 ## 音频架构（2026-11-20 定稿）
 
@@ -24,15 +35,34 @@ LVGL 四页界面（HOME / PC 监控 / 音频播放器 / 系统信息+日志，�
 5. **烧录提速配置**：`NO_STUB` 必须为 not set；`flash` = 1.5Mbps + stub + 增量（18 s 全流程）。
 6. **抓日志先看 `pwd`**：`boot_capture.py` 用相对路径写 `boot_log.txt`，曾因此读错旧日志误判。
 7. **动音频配置前先做零风险测量**：`DIAG: SINE/SILENCE` 分层切除、固件内 `DIAG RATE` 自测采样率，比盲改安全得多。
+8. ★★★ **写 flash 会撕裂画面**：`nvs_commit()` 期间**禁用 instruction cache**，而 LVGL 代码住在 flash
+   ⇒ 任务 stall ⇒ `flush_cb` 等 vsync 200ms 超时后放弃 ⇒ 画面时序错乱。表现是"点保存→屏幕花一下→重启"。
+   ⇒ 所有写 NVS/SPIFFS 都放在**画面静止**时（数据已到、界面未更新）；配网保存前先 `backlight_set(0)`。
+   ★ 注意 S31 的 `SOC_PSRAM_MEMSPI_IS_INDEPENDENT=1`，**不是 PSRAM/DMA 被抢**（旧结论已推翻）。
+9. ★★ **`strlcpy` 不是 `snprintf`/`strncpy`**：`wifi_config_t.sta.ssid` 是 `uint8_t[32]`**不含 NUL**，
+   目标比源小时前两者分别触发 `-Werror=format-truncation` / `stringop-truncation`（一晚上踩 4 次）。
+10. ★★ **新增 .c 必须先 `idf.py reconfigure`**：`SRC_DIRS` 是 CMake glob，不重扫会链接报
+    `undefined reference`——**长得像"函数没写"，实际是"文件没进构建"**。新加组件依赖同理（`REQUIRES` 要补）。
+11. ★★ **中文标签只能用 `ui_font_cn18*`**：`ui_font_14/20/24/28/32` 是 Montserrat/Segoe ASCII 字模，
+    中文渲染成方块（tofu）。★ LVGL 场景子对象坐标相对**内容区**（已扣 padding），算尺寸用 `宽-2*pad`。
+12. ★ **三个 Type-C 分工**：PWR(纯供电) / **COM(CH343P，烧录+日志 COM5)** / USB-A(原生 Host，接电脑会倒灌)。
+    **只插 PWR 时设备能跑但没 COM5**，别以为是串口坏了。
 
 ## 硬件要点（详见 docs/HARDWARE.md）
 
-- 屏：800×480 RGB，PCLK 25MHz，`.pclk_active_neg = false`（消边缘闪的关键）；
-  ★ **PCLK 必须 25MHz（11-20 定案）**：30MHz 时屏幕下方波浪状模糊（PSRAM 被 LCD DMA+PPA 抢，行消隐内取数不及=underflow），降 25 消失。25MHz×16bit=50MB/s 持续，已是 SPI 屏 80MHz(10MB/s 峰值) 的 5 倍带宽。再遇波浪先降 PCLK/加 VBP。
+- 屏：800×480 RGB，**PCLK 40MHz / 总时序 1120×541 / 66.02fps / `.pclk_active_neg = true`**
+  （11-22 定案，四症状全清：闪烁·波浪·抖动·白竖线）。
+  ★ **25MHz 时代已结束**：48.5Hz 低于人眼 CFF ⇒ 矩形边缘 flicker；33/80MHz 非整数分频产生
+  beat 抖动；80MHz 面板采不住（建立窗口仅 7.5ns）。**40MHz 是 160MHz 整数分频（零抖动）且
+  25.0ns 周期对面板 30ns 建立时间仍有余量**，DMA 占用 63.4%、`render` 23ms < 26ms 预算。
+  ★ `pclk_active_neg=true` 不是风格选择：`true` 让面板在上升沿采样，对齐建立/保持窗口；
+  设 false 会出**白竖线**（实测）。
+  ★ 别再用"降 PCLK 治波浪"——那条结论来自 25MHz 之前，已被 40MHz 全清推翻。
 - 音频：ES8389(I2C 0x10) + NS4150B×2；I2S BCLK=IO3 / WS=IO4 / DOUT=IO5 / PA=IO7；
 - 烧录用 **COM 口**（CH343P，COM5）；USB-A 是 Host 口；PWR 口不能传数据；
 - TF 卡 = **SDMMC 4-bit**：CLK=31, CMD=32, D0~D3=27~30，**不占 MSPI**（未来放歌的首选）；
-- 分区：app 1.9MB / **vfs(fat) 10MB**（音乐）/ storage 4MB（空置，可并给 vfs）。
+- 分区（`partitions-16MiB.csv` 实际值）：**app 4MB**(0x10000) / **vfs(fat) 3MB**(0x410000) /
+  **storage(spiffs) 2MB**(0x710000) / **coredump 128KB**(0x910000)。app 现用 2.6MB、余 36%。
 
 ## S31 深层硬件能力索引（写软件前对照 · soc_caps.h 实测 11-20）
 
@@ -52,8 +82,11 @@ LVGL 四页界面（HOME / PC 监控 / 音频播放器 / 系统信息+日志，�
 
 ## 待办（按优先级）
 
-1. ~~SD 卡播放~~（已完成：SDMMC 挂载 + 目录扫曲 + 插拔检测图标）；
-2. **WiFi 按需拉取**：`pc_monitor_set_active()`，监控页不可见时停 HTTP（给蓝牙让射频）；
-3. **蓝牙 A2DP Sink**：芯片支持经典蓝牙（`SOC_BT_CLASSIC_SUPPORTED=1`），但 IDF 6.1 文档说 S31 Bluedroid 仅 BLE ⇒ 必须实测，建议走 ADF/`esp_bt_audio`；
-4. 整首 4 分钟歌：合并 storage(4MB)→vfs(14MB) + 22.05k，或写 ADPCM 解码器（整首 5.5MB）；
-5. **AI 对话接入**：麦克风（REC 16k）常开即数据源，需 WiFi + 流式 ASR/TTS（录音/播放互斥架构已就位）。
+1. **烧录验证屏保时钟**（`scene_clock.c` 已写、编译通过、**没烧过**）——缺 COM 口。
+2. **时钟页加天气**（现在只有时间和日期）+ **无触摸 5 分钟自动进** + **每 4h 偏移防烧屏**；
+   屏保开关写进 `app_cfg`。★ 壁纸比纯黑更伤屏（此屏 VCOM 未校准），必须轮换+偏移。
+3. **WiFi 按需拉取**：`pc_monitor_set_active()`，监控页不可见时停 HTTP（给蓝牙让射频）；
+4. **蓝牙 A2DP Sink**：芯片支持经典蓝牙（`SOC_BT_CLASSIC_SUPPORTED=1`），但 IDF 6.1 文档说 S31 Bluedroid 仅 BLE ⇒ 必须实测，建议走 ADF/`esp_bt_audio`；
+5. **OTA**：分区表只有 factory，且 app 2.6MB/4MB，切双 OTA 后每份 2MB 装不下 ⇒ 要先减肥（字体是刀口）。
+6. 整首 4 分钟歌：合并 storage(4MB)→vfs(14MB) + 22.05k，或写 ADPCM 解码器（整首 5.5MB）；
+7. **AI 对话接入**：麦克风（REC 16k）常开即数据源，需 WiFi + 流式 ASR/TTS。
