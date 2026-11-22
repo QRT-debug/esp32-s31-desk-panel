@@ -175,6 +175,11 @@ static void build_bili(void)
     lv_obj_t *scr = lv_screen_active();
     lv_obj_clean(scr);
 
+    /* ★★★ 11-22：同 scene_hf —— clean 后清空静态指针，防野指针 */
+    memset(s_row, 0, sizeof(s_row));
+    s_upd   = NULL;
+    s_state = NULL;
+
     lv_obj_set_style_bg_color(scr, lv_color_hex(p.bg), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
     lv_obj_set_style_pad_all(scr, 0, 0);
@@ -245,6 +250,11 @@ static void build_bili(void)
 
 static void fill_bili(void)
 {
+    if (s_upd == NULL || s_state == NULL || s_row[0].rk == NULL)
+    {
+        return;                  /* 场景未构建完成/正在重建 */
+    }
+
     bili_data_t d;
     bili_get(&d);
 

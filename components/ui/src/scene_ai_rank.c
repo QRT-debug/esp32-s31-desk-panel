@@ -200,6 +200,15 @@ static void build_ar(void)
     lv_obj_t *scr = lv_screen_active();
     lv_obj_clean(scr);
 
+    /* ★★★ 11-22：clean 删掉所有子对象后必须清空静态指针，
+     *   否则残留的触摸事件会拿野指针去 lv_label_set_text（同 scene_hf 的崩溃）。 */
+    memset(s_web, 0, sizeof(s_web));
+    memset(s_app, 0, sizeof(s_app));
+    s_scroll = NULL;
+    s_month  = NULL;
+    s_state  = NULL;
+    s_upl    = NULL;
+
     lv_obj_set_style_bg_color(scr, lv_color_hex(p.bg), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
     lv_obj_set_style_pad_all(scr, 0, 0);
@@ -303,6 +312,11 @@ static void fill_row(ar_row_t *r, const ai_rank_item_t *it, const char *tag)
 {
     char b[96];
 
+    if (r->rk == NULL)           /* 场景未构建完成/正在重建 */
+    {
+        return;
+    }
+
     snprintf(b, sizeof(b), "#%02d", it->rank);
     lv_label_set_text(r->rk, b);
     lv_label_set_text(r->en, it->name);
@@ -331,6 +345,11 @@ static void fill_row(ar_row_t *r, const ai_rank_item_t *it, const char *tag)
 
 static void fill_ar(void)
 {
+    if (s_scroll == NULL || s_month == NULL || s_state == NULL || s_upl == NULL)
+    {
+        return;                  /* 场景未构建完成，绝不碰野指针 */
+    }
+
     ai_rank_data_t d;
     ai_rank_get(&d);
 

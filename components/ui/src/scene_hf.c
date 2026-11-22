@@ -167,6 +167,11 @@ static void fill_slot(int r, int idx, const hf_item_t *it, const hf_pal_t *p)
     char b[64];
     char nb[16];
 
+    if (s->row == NULL)          /* 场景未构建完成/正在重建 —— 绝不碰野指针 */
+    {
+        return;
+    }
+
     if (it == NULL)
     {
         lv_obj_add_flag(s->row, LV_OBJ_FLAG_HIDDEN);
@@ -291,6 +296,18 @@ static void build_hf(void)
     hf_pal_t p = pal();
     lv_obj_t *scr = lv_screen_active();
     lv_obj_clean(scr);
+
+    /* ★★★ 11-22 崩溃修复（coredump 实锤）：
+     *   lv_obj_clean() 删掉了所有子对象，但下面的静态指针仍指向已释放的内存。
+     *   崩溃栈：release_cb → hf_page_prev → fill_list → fill_slot(idx=0)
+     *           → lv_label_set_text(s->st) → lv_obj_invalidate → lv_obj_get_parent（崩）
+     *   触发条件：滑动翻页的瞬间切场景（残留的 RELEASED 事件携带旧对象指针）。
+     *   修法：clean 之后立刻清空全部指针，配合 fill_list/fill_slot 的空指针保护。 */
+    memset(s_slot, 0, sizeof(s_slot));
+    s_page_lbl  = NULL;
+    s_time_lbl  = NULL;
+    s_state_lbl = NULL;
+    memset(s_blocks, 0, sizeof(s_blocks));
 
     lv_obj_set_style_bg_color(scr, lv_color_hex(p.bg), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
@@ -451,6 +468,14 @@ static void build_hf(void)
 
 static void fill_list(void)
 {
+    /* ★ 场景未构建完成（或正在重建）时直接返回。
+     *   实测崩溃栈的入口就是这里被残留事件调用。 */
+    if (s_slot[0].row == NULL || s_page_lbl == NULL ||
+        s_time_lbl == NULL || s_state_lbl == NULL)
+    {
+        return;
+    }
+
     hf_pal_t p = pal();
     hf_data_t *d = &s_data;
     hf_get(d);
@@ -478,6 +503,10 @@ static void fill_list(void)
 
     for (int i = 0; i < 10; i++)
     {
+        if (s_blocks[i] == NULL)
+        {
+            continue;
+        }
         bool filled = (d->count > 0) && (i >= s_page * HF_ROWS) &&
                       (i < (s_page + 1) * HF_ROWS) && (i < d->count);
         lv_obj_set_style_bg_opa(s_blocks[i], filled ? LV_OPA_COVER : LV_OPA_TRANSP, 0);

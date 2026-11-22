@@ -59,14 +59,16 @@ static void flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
      *   只有最后一块才需要"切帧缓冲 + 等 vsync"；中间的块若也等，
      *   实测 flush 会被拉到 175ms（8 块 × 20ms），界面卡顿、CPU 空转 43%。
      *   中间块直接 flush_ready —— 它们已经画进 buf_act，最后一块切过去时一起显示。 */
-    /* ★★★ 11-22 关键：帧缓冲在 PSRAM 且 cacheable，CPU 画的像素先留在 CPU cache，
-     *   LCD 的 DMA **绕过 cache 直读 PSRAM** ⇒ 读到旧帧数据。
-     *   判据（区别于硬件闪）：出现"局部不该有的内容（如黄色竖线）"，**下次重绘后消失**。
-     *   本 IDF 版本的 esp_lcd_panel_rgb 没有 fb_behind_cache 字段，只能手动同步。
-     *   FULL 模式 area 是整屏，一次 sync 768KB（800×2×480，能被 64 字节整除）。 */
+    /* ★★★ 帧缓冲在 PSRAM 且 cacheable，CPU 画的像素先留在 CPU cache，
+     *   LCD 的 DMA 绕过 cache 直读 PSRAM ⇒ 读到旧帧（局部出现黄色竖线等，重绘后消失）。
+     *   ★ 按**脏区所在行**同步，不要整屏：DIRECT 模式脏区通常只有几 KB
+     *   （整屏 768KB 会白白吃掉 5~8ms/帧，拖慢流畅度）。
+     *   行步长 800*2 = 1600 字节，是 64 字节 cache line 的整数倍。 */
     {
-        size_t bytes = (size_t)LCD_H_RES * LCD_V_RES * 2;
-        esp_err_t cerr = esp_cache_msync((void *)px_map, bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
+        const size_t line_bytes = (size_t)LCD_H_RES * 2;
+        uint8_t     *p          = (uint8_t *)px_map + (size_t)area->y1 * line_bytes;
+        size_t       bytes      = (size_t)(area->y2 - area->y1 + 1) * line_bytes;
+        esp_err_t    cerr       = esp_cache_msync(p, bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
         if (cerr != ESP_OK)
         {
             static int once = 0;
@@ -178,15 +180,17 @@ esp_err_t lvgl_port_init(void)
     lv_display_set_color_format(s_disp, LV_COLOR_FORMAT_RGB565);
     lv_display_set_flush_cb(s_disp, flush_cb);
 
-    /* ★★★ 11-22 回退：DIRECT 是 11-21 深夜为"减少 PSRAM 写入"引入的，
-     *   实测写入量确实从 768KB/帧降到 7.5KB，但**闪没有改善**，
-     *   说明根因不在 CPU 写 PSRAM 的总量。回到原有 FULL 模式（用户最初的状态）。
-     *   注：FULL 模式下每帧整屏渲染，render 约 60ms。 */
+    /* ★★★ 11-22 定案：用 DIRECT（只渲染脏区）。
+     *   昨晚之所以回退到 FULL，是误以为"DIRECT 会导致闪"——实际闪是**热复位**造成的
+     *   （RGB 屏无 RST，esptool 硬复位只复位芯片不复位面板），与渲染模式无关。
+     *   FULL 模式每帧整屏渲染（实测 render 60ms、写 768KB），DIRECT 只写脏区
+     *   （实测 7.5KB/帧），流畅度差一个数量级。
+     *   双缓冲一致性由 LVGL 9.6 的 refr_sync_areas() 自动同步（auto_sync）。 */
     lv_display_set_buffers(s_disp,
                            lcd_buffer[0],
                            lcd_buffer[1],
                            (uint32_t)LCD_H_RES * LCD_V_RES * 2,
-                           LV_DISPLAY_RENDER_MODE_FULL);
+                           LV_DISPLAY_RENDER_MODE_DIRECT);
 
     lv_indev_t *indev = lv_indev_create();
     /* ★★ 11-21 教训：全局调低手势阈值会让"拖动滑条"被误判为手势，
@@ -196,7 +200,7 @@ esp_err_t lvgl_port_init(void)
     lv_indev_set_read_cb(indev, indev_read_cb);
 
     s_ready = true;
-    ESP_LOGI(TAG, "LVGL %d.%d.%d ready  %dx%d  full/double-buffer  %u KB x2",
+    ESP_LOGI(TAG, "LVGL %d.%d.%d ready  %dx%d  DIRECT/double-buffer  %u KB x2",
              LVGL_VERSION_MAJOR, LVGL_VERSION_MINOR, LVGL_VERSION_PATCH,
              LCD_H_RES, LCD_V_RES,
              (unsigned)((uint32_t)LCD_H_RES * LCD_V_RES * 2 / 1024));
