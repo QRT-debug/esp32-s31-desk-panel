@@ -18,6 +18,13 @@ esp_err_t backlight_init(void);
 /** ★ LVGL 首帧 flush 完成后调用：按默认亮度（75%）点亮背光 */
 void backlight_default(void);
 
+/**
+ * 设置"上电默认亮度"（不会立刻点亮，等首帧后 backlight_default() 生效）。
+ * ★ 存在的理由：配网页可以把亮度存进 NVS，但 BSP 不能反向依赖 netapp
+ *   （netapp 已经依赖 BSP，反向会成环），所以由 main 把这值推进来。
+ */
+void backlight_set_boot(int percent);
+
 /** 设置亮度 0~100（%）。0 = 熄灭（注意：全灭后屏幕内容看不见） */
 void backlight_set(int percent);
 

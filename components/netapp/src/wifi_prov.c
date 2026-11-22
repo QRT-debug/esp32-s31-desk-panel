@@ -17,6 +17,7 @@
 #include <string.h>
 
 #include "app_cfg.h"
+#include "backlight.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
 #include "esp_mac.h"
@@ -138,7 +139,11 @@ static char *build_page(void)
     int n = snprintf(p, cap,
         "<!doctype html><meta charset=utf-8>"
         "<meta name=viewport content='width=device-width,initial-scale=1'>"
-        "<title>SmartPanel</title><style>"
+        /* ★ 必须禁缓存：手机浏览器会把 192.168.4.1 的页面缓存下来，
+         *   而 ESP32 的 SoftAP 默认 IP 都是这个 —— 用户打开的可能是一台
+         *   **完全不同的设备**（或别的项目）留下的旧页面。 */
+        "<meta http-equiv=Cache-Control content='no-store,no-cache,must-revalidate'>"
+        "<title>SmartPanel 配置</title><style>"
         ":root{color-scheme:dark}"
         "body{margin:0;padding:18px;background:#0f1420;color:#e6edf7;"
         "font:15px/1.55 -apple-system,system-ui,'Segoe UI',sans-serif}"
@@ -157,8 +162,8 @@ static char *build_page(void)
         "background:#5b7cfa;color:#fff;font-size:16px;font-weight:600}"
         "button:active{background:#4a68d8}"
         "</style>"
-        "<h1>SmartPanel 设置</h1>"
-        "<p class=sub>改完点保存，设备会自动重启连上新的网络。</p>"
+        "<h1>SmartPanel 配置</h1>"
+        "<p class=sub>当前设备：<b>%s</b><br>改完点保存，设备会自动重启连上新的网络。</p>"
         "<form method=post action=/save>"
 
         "<fieldset><legend>WiFi</legend>"
@@ -197,6 +202,7 @@ static char *build_page(void)
         "<button type=submit>保存并重启</button>"
         "</form>",
 
+        s_ssid,
         esc_ssid, c->wifi_pass, esc_city, (double)c->lat, (double)c->lon,
         esc_host, (unsigned)c->pc_port,
         (unsigned)c->backlight, (unsigned)c->backlight, (int)c->tz);
@@ -219,6 +225,8 @@ static esp_err_t h_root(httpd_req_t *req)
     }
 
     httpd_resp_set_type(req, "text/html; charset=utf-8");
+    /* ★ 双保险：meta 之外再发响应头，防止浏览器"启发式缓存"直接给旧页面 */
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store, no-cache, must-revalidate");
     esp_err_t err = httpd_resp_send(req, page, HTTPD_RESP_USE_STRLEN);
     free(page);
     return err;
@@ -297,9 +305,25 @@ static esp_err_t h_save(httpd_req_t *req)
 
     free(body);
 
+    /* ★★★ 写 NVS 前先把背光关掉 —— 不是"礼貌"，是遮一个真实的时序故障：
+     *
+     *   nvs_commit() 写 flash 期间会**禁用 instruction cache**，而 LVGL 的渲染代码住在
+     *   flash 里 ⇒ 任务一被调度就 stall。偏偏 flush_cb 等 vsync 只有 200ms 超时，
+     *   一旦超时就放弃等待继续渲染，画面时序立刻错乱、出现撕裂（"失真"）。
+     *   实测用户看到的就是"点保存 → 屏幕花掉 → 然后重启"。
+     *
+     *   既然紧接着就要重启，先把背光关掉：用户看到的是"黑屏 → 重启"，
+     *   这既符合"保存"的心理预期，也把那段异常藏起来。
+     *   ★ 重启后 backlight_init 的 duty=0 + 首帧后 backlight_default() 会自动恢复 75%。
+     */
+    const int bl_prev = backlight_get();      /* ★ 必须先存旧值：backlight_set(0) 会把 s_percent 也改成 0 */
+    backlight_set(0);
+    vTaskDelay(pdMS_TO_TICKS(80));            /* 让背光先真正灭掉，别在亮着的时候开始写 */
+
     esp_err_t err = app_cfg_save();
     if (err != ESP_OK)
     {
+        backlight_set(bl_prev);               /* 失败就还回去，别留个黑屏给用户 */
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "nvs save failed");
         return ESP_FAIL;
     }

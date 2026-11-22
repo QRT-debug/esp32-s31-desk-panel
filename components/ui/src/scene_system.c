@@ -241,17 +241,22 @@ static void prov_cb(lv_event_t *e)
     snprintf(b, sizeof(b), "1. 连热点  %s\n    密码  %s\n2. 打开  http://%s/",
              wifi_prov_ssid(), PROV_AP_PASS, PROV_AP_IP);
     lv_label_set_text(t2, b);
-    lv_obj_set_pos(t2, 0, 44);
+    lv_obj_set_pos(t2, 0, 36);
 
     lv_obj_t *t3 = lv_label_create(card);
-    lv_obj_set_style_text_font(t3, &ui_font_14, 0);
+    /* ★ 必须是中文字体：ui_font_14 是 Montserrat，不含汉字字形，
+     *   中文会全部渲染成方块（tofu）—— 上一版这里就是一排小矩形。 */
+    lv_obj_set_style_text_font(t3, &ui_font_cn18, 0);
     lv_obj_set_style_text_color(t3, lv_color_hex(0x8A97AD), 0);
     lv_label_set_text(t3, "保存后设备会自动重启并连接新网络");
-    lv_obj_set_pos(t3, 0, 190);
+    lv_obj_set_pos(t3, 0, 124);
 
     lv_obj_t *btn = lv_obj_create(card);
     lv_obj_set_size(btn, 140, 44);
-    lv_obj_set_pos(btn, 436, 226);
+    /* ★ 坐标是相对 card 的**内容区**（已扣掉 pad 24）：内容区只有 552×252。
+     *   x=436+140=576 > 552、y=226+44=270 > 252 ⇒ 右/下被裁，剩一条横矩形。
+     *   改成 x=380（+140=520）、y=176（+44=220），都在内。 */
+    lv_obj_set_pos(btn, 380, 176);
     lv_obj_set_style_bg_color(btn, lv_color_hex(0x5B7CFA), 0);
     lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(btn, 10, 0);

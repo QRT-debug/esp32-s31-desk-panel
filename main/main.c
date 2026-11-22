@@ -137,6 +137,8 @@ void app_main(void)
     /* ★ 背光只配 PWM 不点亮（duty=0）——首帧 flush 完成后 lvgl_port 才点亮，
      *   消灭复位→首帧之间的白屏期。必须在任何 LVGL 渲染之前配置好。 */
     backlight_init();
+    /* 把 NVS 里的亮度作为上电默认值（配网页可改）；没有配置时 init 已置 75 */
+    backlight_set_boot(app_cfg_get()->backlight);
 
     /* ES8389 音频：初始化后停在 REC 态（麦克风常开、PA 关）。
      * ★ 复用触摸那条 I2C0；PA(IO7) 由模式机统一管理 */

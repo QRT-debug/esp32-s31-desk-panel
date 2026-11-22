@@ -74,9 +74,24 @@ esp_err_t backlight_init(void)
  *   ★ 亮度越低 ⇒ CFF 越低 ⇒ 66Hz 的 flicker 余量越大。所以 75% 比 100% 更安全，
  *     不存在"亮度低反而更容易闪"的情况。
  *   ★ 滑条百分比**不是真实亮度百分比**（升压被斩时强非线性），看着舒服即可。 */
+void backlight_set_boot(int percent)
+{
+    if (percent < 10)
+    {
+        percent = 10;
+    }
+    if (percent > 100)
+    {
+        percent = 100;
+    }
+    s_percent = percent;
+}
+
 void backlight_default(void)
 {
-    backlight_set(75);
+    /* ★ 用 s_percent 而不是硬编码 75：配网页存进 NVS 的亮度由 main 通过
+     *   backlight_set_boot() 推进来，否则用户设了 80 也会被这里覆盖回 75。 */
+    backlight_set(s_percent);
 }
 
 void backlight_set(int percent)
