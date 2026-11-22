@@ -26,9 +26,10 @@ static void touch_task(void *arg)
 {
     (void)arg;
 
-    bool     stable = false;
-    int      same   = 0;
+    bool     stable  = false;
+    int      same    = 0;
     uint16_t x = 0, y = 0;
+    int      up_hold = 0;   /* UP 确认计数 */
 
     while (1)
     {
@@ -60,6 +61,21 @@ static void touch_task(void *arg)
             /* 队列满就丢弃：宁可丢一次点击，也不能阻塞扫描 */
             xQueueSend(s_q, &e, 0);
             ESP_LOGD(TAG, "evt %s (%u,%u)", cur ? "DOWN" : "UP", cx, cy);
+        }
+
+        /* ★ 状态路径的 UP 消抖（DOWN 不消抖，灵敏优先）：
+         *   GT1151 对轻点的报点延迟大——手指抬起后"按下帧"才吐出来，
+         *   s_down=true 的窗口只有一两个轮询周期（10~20ms），而 LVGL indev
+         *   30ms 才采样一次 ⇒ 轻点被完美错过（长按灵敏/轻点完全不灵的根源）。
+         *   修法：cur==false 需连续 3 次（30ms）才把 s_down 清掉，
+         *   按下窗口被拉长到 LVGL 必然读到；松开的 30ms 延迟人无感知。 */
+        if (cur)
+        {
+            up_hold = 0;
+        }
+        else if (s_down && ++up_hold < 3)
+        {
+            cur = true;    /* UP 延迟确认：保持按下（坐标沿用旧值） */
         }
 
         if (cur)

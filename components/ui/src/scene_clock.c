@@ -32,6 +32,7 @@
 #include "lvgl.h"
 
 #include "lvgl_port.h"
+#include "touch_service.h"
 #include "ui_fonts.h"
 #include "ui_theme.h"
 
@@ -247,6 +248,9 @@ static void decode_task(void *arg)
 static void clock_tap_cb(lv_event_t *e)
 {
     (void)e;
+    lv_point_t pp;
+    lv_indev_get_point(lv_indev_get_act(), &pp);
+    ESP_LOGI(TAG, "tap fired (%d,%d)", pp.x, pp.y);   /* ★ 诊断：事件与命中坐标 */
     ui_statusbar_show(true);          /* 离开壁纸页恢复状态栏 */
     ui_goto_scene(g_clock_return_scene);
 }
@@ -364,7 +368,7 @@ void scene_clock(uint16_t *fb, int frame)
         lv_obj_set_style_text_font(s_lbl_hint, &ui_font_cn18, 0);
         lv_obj_set_style_text_color(s_lbl_hint, lv_color_hex(0xFFFFFF), 0);
         lv_obj_set_style_text_opa(s_lbl_hint, LV_OPA_50, 0);
-        lv_label_set_text(s_lbl_hint, "轻触屏幕返回");
+        lv_label_set_text(s_lbl_hint, "按住屏幕返回");
         lv_obj_align(s_lbl_hint, LV_ALIGN_BOTTOM_MID, 0, -14);
 
         /* ---- 全屏透明点击层：触摸任意位置返回来源场景 ----
@@ -386,6 +390,19 @@ void scene_clock(uint16_t *fb, int frame)
     }
 
     update_clock(false);
+
+    /* ★ 诊断：每秒打印触摸服务层的实时状态（pressed/坐标），
+     *   分辨"触摸服务读不到按下"还是"LVGL 事件层不发事件" */
+    {
+        uint16_t tx = 0, ty = 0;
+        bool     tp = false;
+        touch_get_last(&tx, &ty, &tp);
+        static int s_tc_cnt = 0;
+        if (++s_tc_cnt % 2 == 0)
+        {
+            ESP_LOGI(TAG, "touch state: pressed=%d (%d,%d)", tp, tx, ty);
+        }
+    }
 
     /* ★★★ 本项目的渲染驱动模式：每个场景在自己的 draw 里调 lvgl_port_task()
      *   （它跑 lv_timer_handler：定时器 + 渲染 + flush）。
