@@ -75,9 +75,12 @@ static esp_err_t rgb_lcd_new_panel(esp_lcd_panel_handle_t *panel_handle)
             .vsync_back_porch  = LCD_VBP,                 /* 垂直后廊 */
             .vsync_front_porch = LCD_VFP,                 /* 垂直前廊 */
             .flags = {
-                /* ★★ 采样沿：true/false 都实测过，视觉都能正常显示、都闪 ⇒ 不是采样沿问题。
-                 *   保持 11-15 的 false（当时结论"明显改善"）。 */
-                .pclk_active_neg = false,
+                /* ★★★ 11-22：40MHz（零抖动档）下右侧出现 1~2px 白色竖线 = 行尾采不住数据，
+                 *   是超规格压缩建立/保持裕量的典型症状。换采样沿把裕量挪到另一边试一次：
+                 *   false = 在 PCLK 上升沿采样（面板侧），40MHz 下裕量不够；
+                 *   true  = 挪到下降沿。
+                 *   ★ 25MHz 时代测过 true/false"都正常显示"，当时与 flicker 无关、不能作参考。 */
+                .pclk_active_neg = true,
             },
         },
         .flags.fb_in_psram = true,                        /* 帧缓冲分配在PSRAM */
@@ -106,6 +109,20 @@ esp_lcd_panel_handle_t rgb_lcd_init(void)
     lcddev.height = LCD_V_RES;                                  /* 高度 */
     lcddev.dir    = 1;                                          /* 1,横屏 */
     ESP_LOGI(rgb_lcd_tag, "rgblcd_id:%#x ", lcddev.id);         /* 打印RGBLCD的ID */
+
+    /* ★★★ 11-22 把这套"反直觉时序"打到日志里，改任何一项都能立刻算出新帧率，
+     *   避免以后有人"为了保险"把 PCLK 调回 25MHz 又把 flicker 弄回来：
+     *     PCLK 40MHz（160÷2÷2 整数分频，零抖动）+ H1120×V576 ⇒ 62.0fps + 采样沿 true。
+     *   总周期 = 1120 × 576 = 645120，40e6 / 645120 = 62.00fps。 */
+    {
+        const int htot = LCD_H_RES + LCD_HSYNC_WIDTH + LCD_HBP + LCD_HFP;
+        const int vtot = LCD_V_RES + LCD_VSYNC_WIDTH + LCD_VBP + LCD_VFP;
+        ESP_LOGI(rgb_lcd_tag,
+                 "PCLK %dMHz | total %dx%d | %.2ffps | pclk_active_neg=%d | 40MHz must keep pclk_neg=1",
+                 (int)LCD_PCLK_MHZ, htot, vtot,
+                 (double)LCD_PIXEL_CLOCK_HZ / ((double)htot * (double)vtot),
+                 (int)1);
+    }
 
     return rgb_lcd_ctrl_panel;
 }

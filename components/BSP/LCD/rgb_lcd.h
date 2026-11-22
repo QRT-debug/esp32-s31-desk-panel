@@ -39,14 +39,26 @@
 #define    LCD_H_RES               800                   /* 水平有效像素 */
 #define    LCD_V_RES               480                   /* 垂直有效行数 */
 #define    LCD_HSYNC_WIDTH         48                    /* 水平同步脉冲宽度(HSW) */
-/* ★★★ 11-21 实验记录（不要再动）：把 HBP/HFP/VBP/VFP 从 88/40/32/13 加大到 104/56/40/20
- *   后，**闪得更明显且出现小区域失真** ⇒ 商家验证值就是最佳值，加大反而破坏 HX8264 的行频/同步。
- *   结论：porch 保持商家值，不要"留余量"。 */
-#define    LCD_HBP                 88                    /* 水平后廊(HBP) */
-#define    LCD_HFP                 40                    /* 水平前廊(HFP) */
-#define    LCD_VSYNC_WIDTH         3                   /* 垂直同步脉冲宽度(VSW) */
-#define    LCD_VBP                 32                    /* 垂直后廊(VBP) */
-#define    LCD_VFP                 13                    /* 垂直前廊(VFP) */
+/* ★★★ 11-22 用"加大 porch"把 40MHz 的帧率压回 62Hz —— 这是解开死结的关键一步。
+ *
+ *   死结：零抖动的 PCLK 只有 160/(2×PCLK) 为整数的档位 ⇒ 40 / 26.67 / 20 MHz，
+ *         对应帧率 77.6 / 51.7 / 38.8Hz，中间没有 60~65Hz 的选项。
+ *   绕法：**帧率 = PCLK / (H_total × V_total)**，帧率不必等于 PCLK 的极限。
+ *         保持 PCLK 40MHz（零抖动），把总周期撑大到 1120×576 ⇒ 40e6/645120 = **62.0Hz**。
+ *   附加收益：有效区只占 59.5%，每帧有 40% 的空闲，DMA 不再连轴转，CPU 的 PSRAM
+ *         访问不会被持续仲裁延迟（40MHz+小porch 时 render 从 24ms 恶化到 49ms 正是这个原因）。
+ *
+ *   ★ 必须满足的约束：**H_total 是 32 的倍数**（行宽字节数 = H_total×2 要能被 DMA
+ *     burst 64 整除）。1120×2 = 2240，2240/64 = 35 ✔
+ *     ⇒ 之前"加大 porch 就失真"的真因就是 H_total 变成 1008，2016/64 = 31.5 不整除，
+ *        DMA 突发跨行错位。不是 porch 本身不能加。
+ *
+ *   62.0Hz 仍高于人眼临界闪烁频率；40MHz 零抖动 ⇒ 波浪与闪烁应同时消失。 */
+#define    LCD_HBP                 160                   /* 水平后廊(HBP) */
+#define    LCD_HFP                 112                   /* 水平前廊(HFP) */
+#define    LCD_VSYNC_WIDTH         3                     /* 垂直同步脉冲宽度(VSW) */
+#define    LCD_VBP                 48                    /* 垂直后廊(VBP) */
+#define    LCD_VFP                 45                    /* 垂直前廊(VFP) */
 
 /* 帧缓冲区数量
  * ★ 保持 2：bounce buffer 模式实测更差（中断搬数跟不上，边缘更闪），已回退。
