@@ -83,7 +83,9 @@ component_compile_options(-ffast-math -O3 -Wno-error=format=-Wno-format)
 #   ★ 若面板采不住 40MHz（竖纹/花屏）⇒ 退回 32 并接受波浪，或走 26.67+缩 porch 路线。
 #
 # ★★★ **已定案（实测通过）**：40MHz 能跑，但必须同时满足两个配套条件，缺一不可 ——
-#   ① porch 撑到 **1120×576**（否则帧率 77.6Hz，有效区占 74.5%，DMA 连轴转 ⇒ render 49ms、画面抖）
+#   ① porch 撑到 **1120×541**（否则帧率 77.6Hz，有效区占 74.5%，DMA 连轴转 ⇒ render 49ms、画面抖）
+#      ★ V_total 的取值决定帧率，而帧率下限由**亮度**决定：CFF 随亮度上升，
+#        100% 背光下 62Hz 会闪、64Hz 勉强、**66Hz（541）才有余量**。
 #   ② `pclk_active_neg = **true**`（false 时右侧出现 1~2px 白竖线，行尾采错）
 #   三者齐了才无闪、无波浪、无竖线。详细因果链见 docs/HARDWARE.md 第 2 节与 PROJECT_LOG 11-22。
 set(LCD_PCLK_MHZ 40 CACHE STRING "RGB LCD pixel clock in MHz" FORCE)

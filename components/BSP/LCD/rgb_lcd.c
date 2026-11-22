@@ -112,8 +112,9 @@ esp_lcd_panel_handle_t rgb_lcd_init(void)
 
     /* ★★★ 11-22 把这套"反直觉时序"打到日志里，改任何一项都能立刻算出新帧率，
      *   避免以后有人"为了保险"把 PCLK 调回 25MHz 又把 flicker 弄回来：
-     *     PCLK 40MHz（160÷2÷2 整数分频，零抖动）+ H1120×V576 ⇒ 62.0fps + 采样沿 true。
-     *   总周期 = 1120 × 576 = 645120，40e6 / 645120 = 62.00fps。 */
+     *     PCLK 40MHz（160÷2÷2 整数分频，零抖动）+ H1120×V541 ⇒ 66.02fps + 采样沿 true。
+     *   总周期 = 1120 × 541 = 605920，40e6 / 605920 = 66.02fps。
+     *   ★ 帧率下限由**亮度**决定（CFF 随亮度上升）：100% 背光下 62Hz 会闪、64Hz 勉强、66Hz 有余量。 */
     {
         const int htot = LCD_H_RES + LCD_HSYNC_WIDTH + LCD_HBP + LCD_HFP;
         const int vtot = LCD_V_RES + LCD_VSYNC_WIDTH + LCD_VBP + LCD_VFP;
