@@ -40,6 +40,7 @@ const ui_scene_t g_scenes[] = {
     { "HF TREND",   scene_hf,      50, -1, false, true },
     { "AI RANK",    scene_ai_rank, 50, -1, false, true },
     { "BILI HOT",   scene_bili,    50, -1, false, true },
+    { "CLOCK",      scene_clock, 1000, -1, false, true },   /* 屏保：1s 一跳，省 CPU */
 };
 const int g_scene_count = (int)(sizeof(g_scenes) / sizeof(g_scenes[0]));
 

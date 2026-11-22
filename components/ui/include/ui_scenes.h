@@ -39,6 +39,7 @@ enum
     UI_SCENE_HF      = 5,   /* HF 模型热榜监视器（终端风） */
     UI_SCENE_AIRANK  = 6,   /* 国内 AI 产品榜（AICPB） */
     UI_SCENE_BILI    = 7,   /* B 站热搜榜 */
+    UI_SCENE_CLOCK   = 8,   /* 屏保：SD 卡壁纸 + 大字时钟 */
 };
 
 /* 每个 scene 只负责画内容，不负责切换（badge 由 manager 画，除非 show_badge = false） */
@@ -59,7 +60,8 @@ void scene_hf(uint16_t *fb, int frame);        /* HF 模型热榜（终端风）
 void scene_ai_rank(uint16_t *fb, int frame);   /* 国内 AI 产品榜（AICPB） */
 void scene_bili(uint16_t *fb, int frame);      /* B 站热搜榜 */
 void scene_audio(uint16_t *fb, int frame);     /* 音频播放器：音量滑块 + 测试音 */
-void scene_system(uint16_t *fb, int frame);    /* 系统信息：芯片/内存/WiFi/日志 + 断连开关 */
+void scene_system(uint16_t *fb, int frame);
+void scene_clock(uint16_t *fb, int frame);   /* 屏保：SD 壁纸 + 96px 时间 */    /* 系统信息：芯片/内存/WiFi/日志 + 断连开关 */
 
 /* 场景跳转（LVGL 按钮里调用；ui_manager 每帧检查） */
 void ui_goto_scene(int idx);

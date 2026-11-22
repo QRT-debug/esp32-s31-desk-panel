@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #include "app_cfg.h"
 #include "backlight.h"
@@ -131,7 +132,7 @@ static char *build_page(void)
     html_esc(c->city, esc_city, sizeof(esc_city));
     html_esc(c->pc_host, esc_host, sizeof(esc_host));
 
-    const size_t cap = 6144;
+    const size_t cap = 8192;
     char        *p   = malloc(cap);
     if (p == NULL)
     {
@@ -201,8 +202,28 @@ static char *build_page(void)
         "<input name=tz type=number min=-12 max=14 value=%d>"
         "</fieldset>"
 
+        "<fieldset><legend>壁纸（屏保用）</legend>"
+        "<input type=file id=wf accept='image/jpeg'>"
+        "<button type=button onclick=up() style='margin-top:10px'>上传到设备</button>"
+        "<small>S31 的硬件解码器只认 JPEG。请先裁成 800×480（5:3），"
+        "否则会变形。最多存 10 张，满了覆盖最旧的一张。</small>"
+        "<div id=ur style='margin-top:8px;color:#8a97ad;font-size:13px'></div>"
+        "</fieldset>"
+
         "<button type=submit>保存并重启</button>"
-        "</form>",
+        "</form>"
+        "<script>"
+        "function up(){"
+        "var f=document.getElementById('wf').files[0];"
+        "var r=document.getElementById('ur');"
+        "if(!f){r.textContent='请先选一张 JPG';return;}"
+        "r.textContent='上传中…（'+Math.round(f.size/1024)+' KB）';"
+        "fetch('/upload',{method:'POST',body:f})"
+        ".then(function(x){return x.text()})"
+        ".then(function(t){r.textContent=t})"
+        ".catch(function(e){r.textContent='失败：'+e});"
+        "}"
+        "</script>",
 
         s_ssid,
         esc_ssid, c->wifi_pass, esc_city, (double)c->lat, (double)c->lon,
@@ -232,6 +253,104 @@ static esp_err_t h_root(httpd_req_t *req)
     esp_err_t err = httpd_resp_send(req, page, HTTPD_RESP_USE_STRLEN);
     free(page);
     return err;
+}
+
+/**
+ * 壁纸上传：POST /upload，body 直接是 JPEG 字节（不走 multipart，省掉解析）。
+ *
+ * ★★ 内存约束是这个函数唯一的设计要点：内部 RAM 只有 ~300KB，
+ *   不能把整张图读进内存。所以用 4KB 缓冲**边收边写** SD 卡，
+ *   内存占用恒定，与文件大小无关。
+ * ★ 写 SD 卡走 SDMMC（不是 SPI flash），**不会禁用 i-cache**，不会造成画面撕裂；
+ *   但它会阻塞当前任务几十毫秒，所以别在用户正在滑动时上传。
+ */
+#define WP_DIR     "/sdcard/wallpaper"
+#define WP_SLOTS   10
+#define WP_MAX_SZ  (512 * 1024)
+
+static esp_err_t h_upload(httpd_req_t *req)
+{
+    if (req->content_len <= 0 || req->content_len > WP_MAX_SZ)
+    {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "size must be 1..512KB");
+        return ESP_FAIL;
+    }
+
+    /* 目录不存在就建（已存在时 mkdir 返回 EEXIST，忽略即可） */
+    mkdir(WP_DIR, 0777);
+
+    /* 找一个空槽；10 个都占满就覆盖 up_0 */
+    char path[64];
+    int  slot = 0;
+    for (; slot < WP_SLOTS; slot++)
+    {
+        snprintf(path, sizeof(path), WP_DIR "/up_%d.jpg", slot);
+        FILE *probe = fopen(path, "rb");
+        if (probe == NULL)
+        {
+            break;                    /* 这个槽空着 */
+        }
+        fclose(probe);
+    }
+    if (slot >= WP_SLOTS)
+    {
+        slot = 0;
+        snprintf(path, sizeof(path), WP_DIR "/up_%d.jpg", slot);
+    }
+
+    FILE *f = fopen(path, "wb");
+    if (f == NULL)
+    {
+        ESP_LOGE(TAG, "open %s failed", path);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "sd write failed");
+        return ESP_FAIL;
+    }
+
+    uint8_t *buf = malloc(4096);
+    if (buf == NULL)
+    {
+        fclose(f);
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    size_t remaining = (size_t)req->content_len;
+    size_t written   = 0;
+    while (remaining > 0)
+    {
+        size_t want = (remaining > 4096) ? 4096 : remaining;
+        int    got  = httpd_req_recv(req, (char *)buf, want);
+        if (got <= 0)
+        {
+            break;                    /* 连接断了 */
+        }
+        if (fwrite(buf, 1, (size_t)got, f) != (size_t)got)
+        {
+            ESP_LOGE(TAG, "short write");
+            break;
+        }
+        written   += (size_t)got;
+        remaining -= (size_t)got;
+    }
+
+    free(buf);
+    fclose(f);
+
+    char msg[96];
+    if (remaining == 0)
+    {
+        ESP_LOGI(TAG, "wallpaper saved: %s (%u KB)", path, (unsigned)(written / 1024));
+        snprintf(msg, sizeof(msg), "OK  up_%d.jpg  %u KB", slot, (unsigned)(written / 1024));
+    }
+    else
+    {
+        snprintf(msg, sizeof(msg), "FAIL  only %u/%u bytes",
+                 (unsigned)written, (unsigned)req->content_len);
+    }
+
+    httpd_resp_set_type(req, "text/plain; charset=utf-8");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_send(req, msg, HTTPD_RESP_USE_STRLEN);
 }
 
 static esp_err_t h_save(httpd_req_t *req)
@@ -410,7 +529,7 @@ esp_err_t wifi_prov_start(void)
     ESP_ERROR_CHECK(esp_wifi_start());
 
     httpd_config_t hc = HTTPD_DEFAULT_CONFIG();
-    hc.max_uri_handlers = 4;
+    hc.max_uri_handlers = 6;
     hc.stack_size       = 6144;
     hc.lru_purge_enable = true;
 
@@ -427,8 +546,12 @@ esp_err_t wifi_prov_start(void)
     static const httpd_uri_t uri_save = {
         .uri = "/save", .method = HTTP_POST, .handler = h_save, .user_ctx = NULL,
     };
+    static const httpd_uri_t uri_upload = {
+        .uri = "/upload", .method = HTTP_POST, .handler = h_upload, .user_ctx = NULL,
+    };
     httpd_register_uri_handler(s_srv, &uri_root);
     httpd_register_uri_handler(s_srv, &uri_save);
+    httpd_register_uri_handler(s_srv, &uri_upload);
 
     ESP_LOGI(TAG, "AP \"%s\" up, open http://%s/", s_ssid, PROV_AP_IP);
     return ESP_OK;

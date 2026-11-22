@@ -22,6 +22,13 @@ extern const lv_font_t ui_font_24;
 extern const lv_font_t ui_font_28;
 extern const lv_font_t ui_font_32;
 
+/* 屏保大钟：96px 等宽数字（Consolas，只含 0-9 和 ':'，约 84KB flash）。
+ * ★ 必须等宽：比例字体在秒数变化时整串宽度会跳，居中位置跟着抖。
+ *   生成：npx lv_font_conv --font C:/Windows/Fonts/consola.ttf --size 96 --bpp 4 \
+ *         --format lvgl --range 0x30-0x3A --no-compress \
+ *         --lv-include lvgl.h --lv-font-name ui_font_digit_96 -o ui_font_digit_96.c */
+extern const lv_font_t ui_font_digit_96;
+
 /* FontAwesome 图标字体（24px，只含 7 个硬件图标字形，16KB）：
  *   f2db 芯片(CPU)  f538 内存条  f108 显示器(GPU)  f0a0 硬盘
  *   f6ff 网线       f1eb WiFi    f2c9 温度计
