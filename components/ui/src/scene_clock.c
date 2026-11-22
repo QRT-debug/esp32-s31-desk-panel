@@ -32,7 +32,6 @@
 #include "lvgl.h"
 
 #include "lvgl_port.h"
-#include "touch_service.h"
 #include "ui_fonts.h"
 #include "ui_theme.h"
 
@@ -45,7 +44,6 @@ static const char *TAG = "clock";
 
 static lv_obj_t       *s_lbl_time;
 static lv_obj_t       *s_lbl_date;
-static lv_obj_t       *s_lbl_hint;
 static uint8_t        *s_pix;                 /* PSRAM: 800*480*2 */
 static lv_image_dsc_t  s_dsc;
 static jpeg_decoder_handle_t s_dec;
@@ -248,9 +246,6 @@ static void decode_task(void *arg)
 static void clock_tap_cb(lv_event_t *e)
 {
     (void)e;
-    lv_point_t pp;
-    lv_indev_get_point(lv_indev_get_act(), &pp);
-    ESP_LOGI(TAG, "tap fired (%d,%d)", pp.x, pp.y);   /* ★ 诊断：事件与命中坐标 */
     ui_statusbar_show(true);          /* 离开壁纸页恢复状态栏 */
     ui_goto_scene(g_clock_return_scene);
 }
@@ -364,15 +359,12 @@ void scene_clock(uint16_t *fb, int frame)
          *   必然被某字号的时间行盖住（实测 48px 盖住日期）。align_to 永远贴对。 */
         lv_obj_align_to(s_lbl_date, s_lbl_time, LV_ALIGN_OUT_BOTTOM_LEFT, 4, 2);
 
-        s_lbl_hint = lv_label_create(lv_scr_act());
-        lv_obj_set_style_text_font(s_lbl_hint, &ui_font_cn18, 0);
-        lv_obj_set_style_text_color(s_lbl_hint, lv_color_hex(0xFFFFFF), 0);
-        lv_obj_set_style_text_opa(s_lbl_hint, LV_OPA_50, 0);
-        lv_label_set_text(s_lbl_hint, "按住屏幕返回");
-        lv_obj_align(s_lbl_hint, LV_ALIGN_BOTTOM_MID, 0, -14);
+
 
         /* ---- 全屏透明点击层：触摸任意位置返回来源场景 ----
-         * ★ 必须最后创建（LVGL 后创建的在上层），否则会被时间/胶囊挡住点击。 */
+         * ★ 必须最后创建（LVGL 后创建的在上层），否则会被时间/胶囊挡住点击。
+         * ★ 事件用 PRESSED（按下即触发）。之前"轻点经常不灵"的真根因是本场景
+         *   hold_ms=1000（触摸处理 1s 一跳），已改 20ms——与 hold 无关，见 ui_manager.c。 */
         lv_obj_t *tap = lv_obj_create(lv_scr_act());
         lv_obj_set_size(tap, WP_W, WP_H);
         lv_obj_set_pos(tap, 0, 0);
@@ -380,9 +372,6 @@ void scene_clock(uint16_t *fb, int frame)
         lv_obj_set_style_border_width(tap, 0, 0);
         lv_obj_add_flag(tap, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_clear_flag(tap, LV_OBJ_FLAG_SCROLLABLE);
-        /* ★ 用 PRESSED 不用 CLICKED：CLICKED 要求"按下+释放都在本对象内"，
-         *   手指轻触常带 1~2px 滑动，释放点出界就不算点击 ⇒ 实测"轻触返回不灵敏"。
-         *   PRESSED 按下即触发，与释放位置无关。 */
         lv_obj_add_event_cb(tap, clock_tap_cb, LV_EVENT_PRESSED, NULL);
 
         s_last_min = -1;
@@ -390,19 +379,6 @@ void scene_clock(uint16_t *fb, int frame)
     }
 
     update_clock(false);
-
-    /* ★ 诊断：每秒打印触摸服务层的实时状态（pressed/坐标），
-     *   分辨"触摸服务读不到按下"还是"LVGL 事件层不发事件" */
-    {
-        uint16_t tx = 0, ty = 0;
-        bool     tp = false;
-        touch_get_last(&tx, &ty, &tp);
-        static int s_tc_cnt = 0;
-        if (++s_tc_cnt % 2 == 0)
-        {
-            ESP_LOGI(TAG, "touch state: pressed=%d (%d,%d)", tp, tx, ty);
-        }
-    }
 
     /* ★★★ 本项目的渲染驱动模式：每个场景在自己的 draw 里调 lvgl_port_task()
      *   （它跑 lv_timer_handler：定时器 + 渲染 + flush）。
