@@ -333,8 +333,15 @@ static void build_hf(void)
         lv_obj_center(bl);
     }
 
-    /* 滑动翻页（自算位移；scr 需可点击才能接收空白处的按下事件） */
+    /* 滑动翻页（自算位移；scr 需可点击才能接收空白处的按下事件）
+     * ★★★ 11-22 崩溃真因：scr 是常驻对象，lv_obj_clean(scr) **只删子对象、
+     *   不删 scr 自身的事件回调**。原来每次进 HF 页都 add 一次 ⇒ 回调累积：
+     *   进 N 次就有 N 对，一次滑动触发 N 次 hf_page_next ⇒ 连续 fill_list，
+     *   中间对象已被重建 ⇒ 拿到已释放的 label（free() 越界 panic）。
+     *   ⇒ 必须先解绑再注册，保证永远只有一对。 */
     lv_obj_add_flag(scr, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_event_cb(scr, press_cb);
+    lv_obj_remove_event_cb(scr, release_cb);
     lv_obj_add_event_cb(scr, press_cb,   LV_EVENT_PRESSED,  NULL);
     lv_obj_add_event_cb(scr, release_cb, LV_EVENT_RELEASED, NULL);
 
