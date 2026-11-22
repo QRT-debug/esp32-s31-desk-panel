@@ -23,64 +23,123 @@ static const char *TAG = "lvgl_port";
 /* lcd.c 提供的双帧缓冲与 vsync 标志 */
 extern void    *lcd_buffer[2];
 extern uint8_t  buffer_sw;
-extern uint8_t  refresh_done_flag;
+extern volatile uint8_t refresh_done_flag;   /* ISR 写、任务读，必须 volatile */
 
 static bool          s_ready = false;
 static lv_display_t *s_disp  = NULL;
 
 /* ---------------- 显示 ---------------- */
 
+/* ================= 脏区记账（cache 同步用） =================
+ *
+ * ★★★ 2026-11-22 找到"四周随机区域频闪"的真凶：**LVGL 自己的双缓冲同步拷贝没做 cache 写回**。
+ *
+ *   DIRECT + 双缓冲时，LVGL 每帧先调 refr_sync_areas()，用 **纯 CPU memcpy**
+ *   (lv_draw_buf_copy) 把"上一帧的脏区"从正在扫描的那块 fb 拷到即将渲染的那块 fb
+ *   （见 lv_refr.c: refr_sync_areas → lv_draw_buf_copy）。
+ *   这个 memcpy 写的是 PSRAM（帧缓冲在 PSRAM 且 cacheable），而 LCD 的 DMA **绕过 cache**
+ *   直读 PSRAM ⇒ 那块被拷过的区域，DMA 读到的是**两帧以前的旧内容**，
+ *   下一帧再被覆盖 —— 肉眼看到的就是"某片区域闪一下"，位置随脏区跑。
+ *
+ *   而 flush_cb 原来只 sync 本帧的 area，**拷过来的区域根本不经过 flush 回调**，
+ *   所以永远 sync 不到。⇒ 必须把"上一帧的脏区"也一起 sync。
+ *
+ *   为什么只在刷新时看得见：界面静止时 LVGL 不刷新，src_sync 不执行也不会切 fb。 */
+#define MAX_DIRTY 16
+
+static lv_area_t s_dir_cur[MAX_DIRTY];
+static int       s_dir_cur_n   = 0;
+static bool      s_dir_cur_ovf = false;     /* 超出 16 块 ⇒ 退化整屏 sync */
+static lv_area_t s_dir_prev[MAX_DIRTY];
+static int       s_dir_prev_n  = 0;
+static bool      s_dir_prev_ovf = false;
+
+/** 把一块区域的**整行**从 CPU cache 写回 PSRAM（行步长 1600B 是 64B cache line 的整数倍） */
+static void cache_sync_rows(const uint8_t *base, int32_t y1, int32_t y2)
+{
+    const size_t line_bytes = (size_t)LCD_H_RES * 2;
+
+    if (y1 < 0)
+    {
+        y1 = 0;
+    }
+    if (y2 > LCD_V_RES - 1)
+    {
+        y2 = LCD_V_RES - 1;
+    }
+    if (y2 < y1)
+    {
+        return;
+    }
+
+    uint8_t *p     = (uint8_t *)base + (size_t)y1 * line_bytes;
+    size_t   bytes = (size_t)(y2 - y1 + 1) * line_bytes;
+
+    esp_err_t err = esp_cache_msync(p, bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
+    if (err != ESP_OK)
+    {
+        static int once = 0;
+        if (once++ == 0)
+        {
+            ESP_LOGW(TAG, "cache msync: %s", esp_err_to_name(err));
+        }
+    }
+}
+
 /**
  * flush 回调（双缓冲 + vsync 切换）
  *
  * ★ 之前试过"单缓冲直写"（什么都不做，让 LVGL 直接写面板正在扫描的那块），
  *   结果就是边缘频闪 —— 写 20 KB 虽然只要 0.1 ms，但面板刚好扫到就吃到半更新的数据。
- *   纯黑 8 秒时边缘完全静止，证明闪是"写入"引起的，不是面板本身。
  *
  * 现在的做法：双缓冲轮换，LVGL 永远写"当前没在显示"的那块，
- * 画完把 panel 切过去。代价是每帧等一次 vsync（~20 ms），
- * 对每秒只变几个数字的监控界面完全够用。
+ * 画完把 panel 切过去。代价是每帧等一次 vsync（~20 ms）。
  */
 static void flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
 {
-    static uint32_t cnt = 0;
-    cnt++;
-
-    long w = (long)(area->x2 - area->x1 + 1);
-    long h = (long)(area->y2 - area->y1 + 1);
-    if (cnt <= 8 || (cnt % 30) == 0)
+    /* 记账本帧脏区（is_last 时统一 sync） */
+    if (s_dir_cur_n < MAX_DIRTY)
     {
-        ESP_LOGI(TAG, "frame #%lu  %ldx%ld  fb=%s",
-                 (unsigned long)cnt, w, h,
-                 (px_map == (uint8_t *)lcd_buffer[0]) ? "0" : "1");
+        s_dir_cur[s_dir_cur_n++] = *area;
+    }
+    else
+    {
+        s_dir_cur_ovf = true;
     }
 
     /* ★★ DIRECT 模式下 LVGL 会把一次刷新拆成**多个脏区**，每块调一次本回调。
      *   只有最后一块才需要"切帧缓冲 + 等 vsync"；中间的块若也等，
      *   实测 flush 会被拉到 175ms（8 块 × 20ms），界面卡顿、CPU 空转 43%。
      *   中间块直接 flush_ready —— 它们已经画进 buf_act，最后一块切过去时一起显示。 */
-    /* ★★★ 帧缓冲在 PSRAM 且 cacheable，CPU 画的像素先留在 CPU cache，
-     *   LCD 的 DMA 绕过 cache 直读 PSRAM ⇒ 读到旧帧（局部出现黄色竖线等，重绘后消失）。
-     *   ★ 按**脏区所在行**同步，不要整屏：DIRECT 模式脏区通常只有几 KB
-     *   （整屏 768KB 会白白吃掉 5~8ms/帧，拖慢流畅度）。
-     *   行步长 800*2 = 1600 字节，是 64 字节 cache line 的整数倍。 */
-    {
-        const size_t line_bytes = (size_t)LCD_H_RES * 2;
-        uint8_t     *p          = (uint8_t *)px_map + (size_t)area->y1 * line_bytes;
-        size_t       bytes      = (size_t)(area->y2 - area->y1 + 1) * line_bytes;
-        esp_err_t    cerr       = esp_cache_msync(p, bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
-        if (cerr != ESP_OK)
-        {
-            static int once = 0;
-            if (once++ == 0)
-            {
-                ESP_LOGW(TAG, "cache msync: %s", esp_err_to_name(cerr));
-            }
-        }
-    }
-
     if (lv_display_flush_is_last(disp))
     {
+        /* ★★★ 见文件开头 MAX_DIRTY 处的说明：必须同时 sync
+         *   ① 本帧新画的脏区  ② **上一帧的脏区**（被 refr_sync_areas 用 CPU memcpy 拷过、
+         *   不经过本回调，不 sync 就会让 DMA 读到旧像素 = 局部闪）。
+         *   多 sync 几个区域没有副作用（只多写回几条 cache line），少 sync 一定花屏。 */
+        if (s_dir_cur_ovf || s_dir_prev_ovf)
+        {
+            cache_sync_rows(px_map, 0, LCD_V_RES - 1);
+        }
+        else
+        {
+            for (int i = 0; i < s_dir_cur_n; i++)
+            {
+                cache_sync_rows(px_map, s_dir_cur[i].y1, s_dir_cur[i].y2);
+            }
+            for (int i = 0; i < s_dir_prev_n; i++)
+            {
+                cache_sync_rows(px_map, s_dir_prev[i].y1, s_dir_prev[i].y2);
+            }
+        }
+
+        /* 本帧 → 上帧，为下一次刷新记账 */
+        memcpy(s_dir_prev, s_dir_cur, sizeof(lv_area_t) * (size_t)s_dir_cur_n);
+        s_dir_prev_n   = s_dir_cur_n;
+        s_dir_prev_ovf = s_dir_cur_ovf;
+        s_dir_cur_n    = 0;
+        s_dir_cur_ovf  = false;
+
         /* 先清标志再提交：提交后到来的 vsync 才不会被误清 */
         refresh_done_flag = 0;
         esp_lcd_panel_draw_bitmap(lcddev.lcd_panel_handle, 0, 0, LCD_H_RES, LCD_V_RES, px_map);

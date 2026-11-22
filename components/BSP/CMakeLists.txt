@@ -29,6 +29,7 @@ set(requires
             sdmmc
             vfs
             esp_timer
+            esp_mm          # esp_cache_msync：首屏清黑后把帧缓冲写回 PSRAM
             )
 
 idf_component_register(SRC_DIRS ${src_dirs} INCLUDE_DIRS ${include_dirs} REQUIRES ${requires})

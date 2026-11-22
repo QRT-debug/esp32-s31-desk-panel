@@ -219,3 +219,57 @@ esp_cache_msync((void *)px_map, LCD_H_RES * LCD_V_RES * 2, ESP_CACHE_MSYNC_FLAG_
 本次连续 1.5 小时、烧了 10 多版，全部在"热复位后"的异常状态上做观测，
 把"复位不彻底"误判成"PCB 信号完整性"，代价是整晚白费。
 **正确的第一问**：断电重上电后还在吗？
+
+---
+
+## 11-22 二次更正：频闪真因是 **LVGL 双缓冲同步拷贝没做 cache 写回**（软件 bug，不是复位/硬件）
+
+**用户新线索（推翻上一条的"热复位"定性）**：
+> "其实断电以后连上也闪，好像一定要**闪着运行一段时间**或者**很长时间断电一段时间**才能不频闪"
+
+⇒ 上一条"冷启动从不闪"的说法不成立。但也不用再找硬件了 —— **代码里有一个必然发生的 bug**。
+
+### 证据链（代码级，可复现）
+
+1. LVGL 在 **DIRECT + 双缓冲**下，每帧渲染前调 `refr_sync_areas()`（`src/core/lv_refr.c:675`），
+   用**纯 CPU `lv_draw_buf_copy()`**（`lv_draw_buf.c:402` → `buf_copy_cb` memcpy）
+   把**上一帧的脏区**从"正在扫描的那块 fb"拷到"即将渲染的那块 fb"。
+2. 帧缓冲在 PSRAM 且 cacheable（`fb_in_psram = true`）。CPU 的写入先落在 **CPU cache**；
+   LCD 的 DMA **绕过 cache** 直读 PSRAM。
+3. 而 `flush_cb` 原来只对**本帧 `area`** 做 `esp_cache_msync`。
+   **被 `refr_sync_areas` memcpy 过的区域根本不经过 flush 回调** ⇒ 永远 sync 不到。
+4. 结果：那块区域 DMA 读到的是**两帧以前的旧像素**，下一帧再被覆盖
+   ⇒ 肉眼看到"**某片区域闪一下**"，位置随脏区跑。
+
+### 为什么能解释全部既有观察
+
+| 观察 | 解释 |
+|---|---|
+| "四周指不定什么区域频闪" | 脏区在哪、就哪块闪；位置随机 |
+| 烧录后 / 刚上电最明显 | 重绘量最大，sync 拷贝最多 |
+| "闪一阵就好" | 界面静止后 LVGL 不再刷新、不切 fb，`refr_sync_areas` 不执行 |
+| "断电很久再插就不闪" | 离开一阵回来，界面早已静止 —— **不是断电的功劳** |
+| 进 System 关 WiFi 仍闪 | System 页自己在刷 CPU/内存数字 |
+| 之前"降 PSRAM 200M 无效" | **假结论**：`sdkconfig.defaults` 里 `SPIRAM_SPEED_250M` 与 `200M` 同时 `=y`，IDF 以已有 `sdkconfig` 为准 ⇒ 那次实验**从未生效**，一直跑 250M |
+
+### 修复
+
+- `components/ui/src/lvgl_port.c`：flush_cb 记账本帧脏区；`flush_is_last` 时**同时 sync
+  本帧脏区 + 上一帧脏区**（后者才是被 memcpy 过的）。超出 16 块则退化整屏 sync。
+- `components/BSP/LCD/lcd.c`：首屏清黑后补 `esp_cache_msync` —— 原来清的黑留在 cache 里，
+  开机头几百毫秒**面板收到的是 PSRAM 随机内容**（背光未开看不见，但等于给面板灌随机 RGB =
+  直流偏压，液晶极化后会局部闪）。
+- `refresh_done_flag` 加 `volatile`（ISR 写、任务读）。
+- 删掉 flush 路径上"每 30 帧一条 ESP_LOG"（UART 输出会阻塞刷新，实测 flush 6ms → 1ms）。
+- `sdkconfig.defaults`：删掉冲突的 `CONFIG_SPIRAM_SPEED_200M=y`，保持 250M。
+
+### 验证
+
+- 编译 45 s，烧录 `Hash of data verified`；
+- **回读 0x10000 起 0x281270 字节，SHA256 `6cba8585…475e` 与本地 bin 完全一致**（这是唯一可靠的"跑的是新版"判据）；
+  ★ `esp_app_desc` 里的 `__TIME__` **不可信** —— ccache 会复用该 .c，时间戳停留在旧构建（本次读到 12:34，实际是 13:56 构建）。
+- 稳态：`45~46 FPS, refr 1ms, render 24~25ms, flush 5~12ms, CPU 6~7%` —— 与修复前同级，无退化。
+
+**教训**：★★★ **别在"现象只在某时刻可见"的假设上收工。**
+上一条把"只有刷新时才闪"误解释成"只有热复位后才闪"，因为用户当时正好在烧录。
+真正的判据是**画面静止时还闪不闪** —— 静止不闪、一动就闪 ⇒ 一定在刷新路径上找，不在硬件。

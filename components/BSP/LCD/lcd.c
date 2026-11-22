@@ -12,10 +12,12 @@
 
 #include "lcd.h"
 #include "lcdfont.h"
+#include "esp_cache.h"                      /* esp_cache_msync：帧缓冲 cache 写回 */
 
 DRAM_ATTR void *lcd_buffer[2];              /* 指向屏幕双缓存 */
 DRAM_ATTR uint8_t buffer_sw = 0;            /* 当前使用的缓冲区索引 */
-DRAM_ATTR uint8_t refresh_done_flag = 0;    /* 缓存切换索引 */
+/* ★ volatile：ISR（vsync 回调）写、任务读，不加会被优化成死循环 */
+DRAM_ATTR volatile uint8_t refresh_done_flag = 0;    /* 缓存切换索引 */
 DRAM_ATTR _lcd_dev lcddev;                  /* 管理LCD重要参数 */
 uint32_t g_back_color  = 0xFFFF;            /* 背景色 */
 
@@ -65,7 +67,11 @@ void lcd_init(void)
     /* ★ 11-20：清黑（原 WHITE）——复位后到 LVGL 首帧之间不再白屏刺眼。
      *   两块 fb 都要清（LVGL 双缓冲会交替扫描）。
      *   背光不在这里开：推迟到 LVGL 首帧 flush 完成再亮（lvgl_port.c），
-     *   audio init + WiFi 连接期间屏保持全黑。 */
+     *   audio init + WiFi 连接期间屏保持全黑。
+     * ★★★ 11-22：清完**必须写回 cache**。帧缓冲在 PSRAM 且 cacheable，CPU 写的黑还留在
+     *   cache 里，LCD 的 DMA 绕过 cache ⇒ 上电后头几百毫秒面板收到的是 PSRAM 里的**随机内容**
+     *   （随机 RGB 值 = 面板被灌直流偏压，液晶极化后表现为局部频闪，掉电一段时间才消退）。
+     *   背光没开用户看不见，但面板确实在吃垃圾数据。 */
     for (int k = 0; k < 2; k++)
     {
         uint16_t *fb = (uint16_t *)lcd_buffer[k];
@@ -73,6 +79,7 @@ void lcd_init(void)
         {
             fb[i] = BLACK;
         }
+        esp_cache_msync(fb, (size_t)lcddev.width * lcddev.height * 2, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
     }
     esp_lcd_panel_draw_bitmap(lcddev.lcd_panel_handle, 0, 0, lcddev.width, lcddev.height, lcd_buffer[0]);
 }

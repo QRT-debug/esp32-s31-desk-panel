@@ -62,6 +62,8 @@ CONFIG_LV_FONT_MONTSERRAT_24=y
 CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
 CONFIG_MBEDTLS_SSL_IN_CONTENT_LEN=16384
 
-# ---- 11-21 屏幕边缘随机闪排查：PSRAM 250MHz -> 200MHz（AP Memory 八线，250M 属高性能档）
-#      若 200M 仍闪，说明与 PSRAM 时序无关，可改回 250M（性能更好）
-CONFIG_SPIRAM_SPEED_200M=y
+# ★★★ 11-22 删掉 11-21 留下的 CONFIG_SPIRAM_SPEED_200M=y —— 它和上面的 250M 同时 =y，
+#    是**非法配置**，而 IDF 以已存在的 sdkconfig 为准 ⇒ 那次"降到 200M"的对照实验
+#    **从未生效**（build 时一直是 250M），所以"PSRAM 200M 仍闪 ⇒ 与 PSRAM 无关"这个结论是假的。
+#    真正的闪因已定位：LVGL 双缓冲 refr_sync_areas 的 memcpy 没做 cache 写回（见 lvgl_port.c）。
+#    PSRAM 保持 250M（性能最好）。若将来要重做 200M 对照，必须同时改 sdkconfig 而不是只改这里。
