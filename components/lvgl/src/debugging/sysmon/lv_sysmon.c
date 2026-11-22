@@ -142,7 +142,11 @@ void lv_sysmon_show_performance(lv_display_t * disp)
         lv_subject_set_pointer(disp->perf_sysmon_backend.subject, &disp->perf_sysmon_info);
         lv_obj_align(disp->perf_label, LV_USE_PERF_MONITOR_POS, 0, 0);
         lv_subject_add_observer_obj(disp->perf_sysmon_backend.subject, perf_observer_cb, disp->perf_label, NULL);
-        disp->perf_sysmon_backend.timer = lv_timer_create(perf_update_timer_cb, LV_SYSMON_REFR_PERIOD_DEF, disp);
+        /* ★★ 11-22 性能：打印周期 1000 -> 5000ms。
+         *   原因：LV_LOG 走串口 115200bps，一条 sysmon 日志 ~100 字节 = **约 8.7ms 阻塞**，
+         *   而且它跑在 LVGL 自己的 timer 里 ⇒ 打印期间渲染完全停摆，每秒都卡一下。
+         *   改 5 秒一次后，这种周期性停顿减少 80%（需要时仍能看到统计数据）。 */
+        disp->perf_sysmon_backend.timer = lv_timer_create(perf_update_timer_cb, 5000, disp);
         lv_display_add_event_cb(disp, perf_monitor_disp_event_cb, LV_EVENT_ALL, NULL);
     }
 
