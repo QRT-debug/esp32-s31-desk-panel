@@ -376,7 +376,10 @@ void scene_clock(uint16_t *fb, int frame)
         lv_obj_set_style_border_width(tap, 0, 0);
         lv_obj_add_flag(tap, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_clear_flag(tap, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_add_event_cb(tap, clock_tap_cb, LV_EVENT_CLICKED, NULL);
+        /* ★ 用 PRESSED 不用 CLICKED：CLICKED 要求"按下+释放都在本对象内"，
+         *   手指轻触常带 1~2px 滑动，释放点出界就不算点击 ⇒ 实测"轻触返回不灵敏"。
+         *   PRESSED 按下即触发，与释放位置无关。 */
+        lv_obj_add_event_cb(tap, clock_tap_cb, LV_EVENT_PRESSED, NULL);
 
         s_last_min = -1;
         update_clock(true);
