@@ -8,6 +8,7 @@
  * 解析：以 "keyword":" 为锚点逐条取；每条范围内再找 "heat_score":
  *      （show_name 常与 keyword 相同，不另取）
  */
+#include "data_cache.h"
 #include "bili_hot.h"
 
 #include <stdio.h>
@@ -218,6 +219,11 @@ static void bili_task(void *arg)
         xSemaphoreGive(s_lock);
 
         int wait_ms = ok ? BILI_PERIOD_MS : BILI_FAIL_MS;
+        /* ★ 锁外、界面更新前写缓存 */
+        if (ok)
+        {
+            data_cache_save("bili", &tmp, sizeof(tmp));
+        }
         s_force = false;
         for (int w = 0; w < wait_ms; w += 1000)
         {
@@ -244,6 +250,12 @@ void bili_start(void)
     configASSERT(s_lock != NULL);
     memset(&s_snap, 0, sizeof(s_snap));
     s_snap.state = BILI_INIT;
+    /* ★ 先读上次缓存 */
+    if (data_cache_load("bili", &s_snap, sizeof(s_snap)) == ESP_OK)
+    {
+        s_snap.state = BILI_OK;
+        ESP_LOGI(TAG, "cache hit: %d items (updated %s)", s_snap.count, s_snap.updated);
+    }
 
     esp_log_level_set("esp-tls", ESP_LOG_VERBOSE);   /* 临时：定位 bilibili TLS 失败 */
     esp_log_level_set("HTTP_CLIENT", ESP_LOG_VERBOSE);

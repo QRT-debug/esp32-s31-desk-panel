@@ -7,6 +7,7 @@
  *   在范围内分别取 pipeline_tag / likes / downloads / createdAt。
  *   这样与字段顺序无关，且不受 tags 数组里的 {} 影响。
  */
+#include "data_cache.h"
 #include "hf_trend.h"
 
 #include <stdio.h>
@@ -291,6 +292,11 @@ static void hf_task(void *arg)
         xSemaphoreGive(s_lock);
 
         int wait_ms = ok ? HF_OK_PERIOD_MS : HF_FAIL_PERIOD_MS;
+        /* ★ 锁外、界面更新前写缓存（写 flash 会禁 i-cache，此刻画面静止） */
+        if (ok)
+        {
+            data_cache_save("hf", &tmp, sizeof(tmp));
+        }
         s_force = false;
         for (int waited = 0; waited < wait_ms; waited += 1000)
         {
@@ -319,6 +325,12 @@ void hf_start(void)
     configASSERT(s_lock != NULL);
     memset(&s_snap, 0, sizeof(s_snap));
     s_snap.state = HF_STATE_INIT;
+    /* ★ 先读上次缓存：断网/刚开机也能立刻显示榜单 */
+    if (data_cache_load("hf", &s_snap, sizeof(s_snap)) == ESP_OK)
+    {
+        s_snap.state = HF_STATE_OK;
+        ESP_LOGI(TAG, "cache hit: %d items (updated %s)", s_snap.count, s_snap.updated);
+    }
 
     if (xTaskCreate(hf_task, "hf_trend", 10240, NULL, 3, NULL) == pdPASS)
     {

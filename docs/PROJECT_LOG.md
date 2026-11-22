@@ -492,3 +492,34 @@ main: wifi up after 2s, no provisioning needed   ← 看门狗正常退出，没
 
 **还没做**：串口 `cfg` 兜底命令（WiFi 配错导致连不上时，网页也进不去，
 只能靠串口救；目前只能靠"自动回配网模式"这条闭环）。
+
+### 11-22 数据缓存：断网也有画面、开机瞬间就有内容
+
+新增 `components/netapp/{include,src}/data_cache.{h,c}`：NVS namespace `cache`，
+**一个结构体一个 key**（`wx` / `hf` / `ai` / `bili`），长度不符即视为失效（结构体改过就回落默认值）。
+
+**四个数据源全部接入**，各两处改动：
+- 启动初始化后：先 `data_cache_load()` 填进快照，**state 强制置为 OK**
+  （缓存里的 state 可能是 FAIL/LOADING，否则 UI 会显示"加载中"而不是上次的数据）
+- 拉取成功后：`data_cache_save()`
+
+**★★ 写缓存的时机是这个功能唯一的坑**：
+`nvs_commit()` 期间 **instruction cache 被禁用**，LVGL 代码在 flash 里 ⇒ 任务 stall ⇒
+`flush_cb` 等 vsync 200ms 超时 ⇒ 画面撕裂。
+⇒ 所有 save 都放在 **①锁外 ②"数据已到、界面还没更新"的间隙**——此刻画面是静止的，看不出来。
+⇒ 绝不能边滚动边写。
+
+**实测（第二次启动，四个全部命中）**：
+```
+I (5468) cache: loaded "wx" (212 B)    → cache hit: 1C Smoke (updated 14:50)
+I (5500) cache: loaded "hf" (1228 B)   → cache hit: 10 items (updated 23:48)
+I (5521) cache: loaded "bili" (1076 B) → cache hit: 10 items (updated 11-22 23:48)
+I (5517) ai_rank: cache hit: 2026-07-08 (updated 11-22 23:49)
+```
+★ 关键：**这些加载都在 5.5s 左右完成，而 `wifi: got ip` 要 7s 之后**
+⇒ 界面在没网的时候就已有内容，不用空等 HTTPS。
+
+**容量**：wx 212B + hf 1228B + bili 1076B + ai ~2.7KB ≈ **5.2KB**，NVS 分区 24KB，余量充足。
+
+**未验证**：真正断网（关路由器）后的显示效果。逻辑上成立（缓存加载不依赖 WiFi），
+但没实测过"离线开机"整条路径。

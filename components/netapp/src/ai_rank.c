@@ -18,6 +18,7 @@
  * gzip：用 esp_rom 自带的 miniz（tinfl_decompress_mem_to_mem），自己跳 gzip 头。
  *        解压失败则回退为不压缩的普通请求再试一次。
  */
+#include "data_cache.h"
 #include "ai_rank.h"
 
 #include <stdio.h>
@@ -355,6 +356,11 @@ static void ar_task(void *arg)
         xSemaphoreGive(s_lock);
 
         int wait_ms = ok ? AR_PERIOD_MS : AR_FAIL_MS;
+        /* ★ 锁外写缓存：此处画面还是旧数据（静止），写 flash 的 stall 看不出来 */
+        if (ok)
+        {
+            data_cache_save("ai", &s_snap, sizeof(s_snap));
+        }
         s_force = false;
         for (int w = 0; w < wait_ms; w += 1000)
         {
@@ -375,6 +381,12 @@ void ai_rank_start(void)
     memset(&s_snap, 0, sizeof(s_snap));
     s_snap.state = AI_RANK_INIT;
     snprintf(s_snap.month, sizeof(s_snap.month), "%s", "");
+    /* ★ 先读上次缓存：站点是季度更新的，缓存比实时更有用 */
+    if (data_cache_load("ai", &s_snap, sizeof(s_snap)) == ESP_OK)
+    {
+        s_snap.state = AI_RANK_OK;
+        ESP_LOGI(TAG, "cache hit: %s (updated %s)", s_snap.month, s_snap.updated);
+    }
 
     if (xTaskCreate(ar_task, "ai_rank", 12288, NULL, 3, NULL) == pdPASS)
     {

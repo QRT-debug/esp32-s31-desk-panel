@@ -13,6 +13,7 @@
  *   nearest_area[0]:      areaName[0].value / region[0].value
  *   weather[0]/[1]:       maxtempC / mintempC（今天/明天）
  */
+#include "data_cache.h"
 #include "weather.h"
 
 #include <stdio.h>
@@ -425,6 +426,14 @@ static void weather_task(void *arg)
         }
         xSemaphoreGive(s_lock);
 
+        /* ★★ 写缓存必须在锁外、且在"界面更新之前"这个间隙：
+         *   写 flash 会禁 i-cache ⇒ LVGL 任务 stall ⇒ flush 等 vsync 超时 ⇒ 撕裂。
+         *   此刻界面显示的还是上一份数据（静止的），写它看不出来。 */
+        if (ok)
+        {
+            data_cache_save("wx", &tmp, sizeof(tmp));
+        }
+
         int wait_ms = ok ? WX_OK_PERIOD_MS : WX_FAIL_PERIOD_MS;
         /* 切成 1 秒一片地等，便于手动刷新插队 */
         s_force = false;
@@ -457,6 +466,16 @@ void weather_start(void)
     memset(&s_snap, 0, sizeof(s_snap));
     s_snap.state = WX_STATE_INIT;
     snprintf(s_snap.city, sizeof(s_snap.city), "定位中...");
+
+    /* ★★ 先读上次缓存：断网、或刚开机 WiFi 还没连上时，界面立刻就有内容，
+     *   不用空等第一次 HTTPS。拉到新数据后自然覆盖。 */
+    if (data_cache_load("wx", &s_snap, sizeof(s_snap)) == ESP_OK)
+    {
+        /* 缓存里的 state 可能是 FAIL/LOADING，强制当"有数据"用，
+         * 否则 UI 会显示"加载中"而不是上次的温度。 */
+        s_snap.state = WX_STATE_OK;
+        ESP_LOGI(TAG, "cache hit: %dC %s (updated %s)", s_snap.temp_c, s_snap.desc, s_snap.updated);
+    }
 
     BaseType_t ok = xTaskCreate(weather_task, "weather", 10240, NULL, 4, NULL);
     if (ok == pdPASS)
