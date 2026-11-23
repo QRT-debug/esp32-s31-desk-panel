@@ -155,14 +155,16 @@ static void icon_update(const char *desc)
         draw_cloud(false);
         return;
     }
-    if (strstr(desc, "Sunny") != NULL || strstr(desc, "Clear") != NULL)
+    /* ★ 和风（中文）+ wttr（英文）双源匹配：中文按 UTF-8 字节 strstr 即可 */
+    if (strstr(desc, "\u6674") != NULL || strstr(desc, "Clear") != NULL ||
+        strstr(desc, "Sunny") != NULL)
     {
         draw_sun();
     }
-    else if (strstr(desc, "rain") != NULL || strstr(desc, "Rain") != NULL ||
-             strstr(desc, "snow") != NULL || strstr(desc, "Snow") != NULL ||
-             strstr(desc, "thunder") != NULL || strstr(desc, "Thunder") != NULL ||
-             strstr(desc, "Sleet") != NULL || strstr(desc, "shower") != NULL)
+    else if (strstr(desc, "\u96e8") != NULL || strstr(desc, "\u96ea") != NULL ||
+             strstr(desc, "\u96f7") != NULL || strstr(desc, "shower") != NULL ||
+             strstr(desc, "Rain") != NULL || strstr(desc, "Snow") != NULL ||
+             strstr(desc, "Thunder") != NULL || strstr(desc, "Sleet") != NULL)
     {
         draw_cloud(true);
     }
@@ -190,11 +192,13 @@ static void bg_apply(const char *desc)
     uint32_t top, bot;
 
     bool sunny = desc != NULL &&
-                 (strstr(desc, "Sunny") != NULL || strstr(desc, "Clear") != NULL);
+                 (strstr(desc, "\u6674") != NULL || strstr(desc, "Clear") != NULL ||
+                  strstr(desc, "Sunny") != NULL);
     bool wet = desc != NULL &&
-               (strstr(desc, "rain") != NULL || strstr(desc, "Rain") != NULL ||
-                strstr(desc, "snow") != NULL || strstr(desc, "Snow") != NULL ||
-                strstr(desc, "thunder") != NULL || strstr(desc, "Thunder") != NULL ||
+               (strstr(desc, "\u96e8") != NULL || strstr(desc, "\u96ea") != NULL ||
+                strstr(desc, "\u96f7") != NULL || strstr(desc, "shower") != NULL ||
+                strstr(desc, "Rain") != NULL || strstr(desc, "Snow") != NULL ||
+                strstr(desc, "Thunder") != NULL || strstr(desc, "Sleet") != NULL ||
                 strstr(desc, "Sleet") != NULL || strstr(desc, "shower") != NULL);
 
     /* ★ 渐变区间刻意压窄（色阶差 15~30 级）：480px 高度上每级色阶对应 15+ 行，
@@ -304,7 +308,8 @@ static void build_weather(void)
 
     /* ---- 左块：城市 + 大温度 + 描述 + 更新时间 ---- */
     s_city = lv_label_create(scr);
-    lv_obj_set_style_text_font(s_city, &ui_font_24, 0);
+    /* ★ 城市名是中文：用 24px 专用中文小字库（含常见城市名字，体积 ~80KB） */
+    lv_obj_set_style_text_font(s_city, &ui_font_city24, 0);
     lv_obj_set_style_text_color(s_city, lv_color_hex(C_SUB), 0);
     lv_label_set_text(s_city, "Locating...");
     lv_obj_set_pos(s_city, 40, 48);
@@ -316,7 +321,8 @@ static void build_weather(void)
     lv_obj_set_pos(s_temp, 40, 80);   /* 与城市名左对齐（原来 32 偏左） */
 
     s_desc = lv_label_create(scr);
-    lv_obj_set_style_text_font(s_desc, &ui_font_28, 0);
+    /* ★ 描述来自和风是中文：用 28px 专用中文小字库（含天气描述用字） */
+    lv_obj_set_style_text_font(s_desc, &ui_font_wx28, 0);
     lv_obj_set_style_text_color(s_desc, lv_color_hex(C_TITLE), 0);
     lv_label_set_text(s_desc, "");
     lv_obj_set_pos(s_desc, 40, 152);
@@ -506,7 +512,6 @@ static void refresh_ui(void)
     if (strcmp(s_last_desc, w.desc) != 0)
     {
         snprintf(s_last_desc, sizeof(s_last_desc), "%s", w.desc);
-        ESP_LOGI("wx_icon", "icon update: '%s'", w.desc);
         icon_update(w.desc);
         bg_apply(w.desc);
     }

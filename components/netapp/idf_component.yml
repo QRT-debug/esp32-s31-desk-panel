@@ -1,0 +1,4 @@
+## IDF Component Manager 依赖
+dependencies:
+  idf: '>=6.0'
+  espressif/zlib: '*'

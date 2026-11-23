@@ -674,3 +674,31 @@ open 时电平不变化 ⇒ 无复位脉冲。修复后实测：日志开头无 
 **同类坑排查**：全项目函数内 static 做"状态记忆"的地方（scene_clock 的 s_last_min 等）
 要确认所在场景是"常驻每帧跑"（无残留风险）还是"退出即停"（有残留风险）——后者必须
 在 frame==0 重置。
+
+### 11-23 15:05 天气换源到和风（四道坎）+ 中文字库专用化
+
+**换源**：wttr.in（数据滞后 1.5h、UTC 不转时区）→ 和风天气免费档（1000 次/天，
+30min 一刷只用 5%；obsTime 自带本地时区；描述直接中文）。四道坎：
+1. **旧域名对新账号返回空体**（Content-Length: 0）——2025+ 注册必须用控制台分配的
+   **专属 API Host**（`xxx.re.qweatherapi.com`），地理接口路径变 `/geo/v2/city/lookup`。
+2. **CDN 强制 gzip 且无视 Accept-Encoding**（`identity`、`gzip;q=0` 全部无效，
+   实测响应头始终 Content-Encoding: gzip）⇒ 必须固件内解压：`espressif/zlib` 组件 +
+   `inflateInit2(&d, 15+16)`（gzip 模式）。识别 magic `1F 8B` 后解压回 s_rx。
+3. **城市 → LocationID**：GeoAPI 按城市名查（中文需 UTF-8 percent-encode），结果存
+   NVS（ns=cache key=qloc）永久复用；GeoAPI 用量只在首次/换城市时发生。
+4. **obsTime 解析**：`strchr(ot,'T')` 会命中 "obsTime" 里 Time 的 T ⇒ 解析出 `ime":` 垃圾
+   （实测 Updated 行显示 "Updated ime":""）。必须 `strchr(ot + 11, 'T')`。
+
+**中文字库专用化**（全字库 24px 会撑爆 Flash：现有 cn18 四块各 ~1MB，固件已 2.7MB）：
+- 生成 `ui_font_city24`（168 字：常见城市名）与 `ui_font_wx28`（168 字：和风天气描述用字），
+  各 ~80/110KB；
+- 城市名/天气描述换用专用字库（此前用 ASCII 字库 → 中文全变矩形）；
+- ~~箭头改斜杠~~ 已撤销：↑↓ 一直正常，是压缩截图看不清导致的误判（教训：缺字形判定
+  必须过"字库 cmap + 字符串字节 + 模拟器截图"三条客观证据，不凭压缩图像观感改功能）。
+
+**模拟器正式纳入 UI 流程**（pc_sim/，`--shot <bmp>` 自动截图 + ViewImage 看图）：
+桩补齐 `ui_current_scene`/`wifi_prov_start`/`wifi_prov_ssid`，假数据改中文（北京/晴）。
+**UI 改动一律先模拟器截图确认，再烧板子。**
+
+**待办**：字库放 SD 卡（`LV_USE_FS_FATFS` + `lv_font_load` + 内置降级）——现在 200KB 不值得，
+等音乐播放器要显示中文歌名时一起做（那时全字库 1MB+，SD 是唯一解）。

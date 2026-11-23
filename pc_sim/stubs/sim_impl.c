@@ -272,8 +272,8 @@ void weather_start(void)
     s_wx_fake.humidity  = 68;
     s_wx_fake.wind_kmph = 14;
     snprintf(s_wx_fake.wind_dir, sizeof(s_wx_fake.wind_dir), "%s", "SE");
-    snprintf(s_wx_fake.desc, sizeof(s_wx_fake.desc), "%s", "Cloudy");
-    snprintf(s_wx_fake.city, sizeof(s_wx_fake.city), "%s", "Beijing");
+    snprintf(s_wx_fake.desc, sizeof(s_wx_fake.desc), "%s", "晴");   /* 晴 */
+    snprintf(s_wx_fake.city, sizeof(s_wx_fake.city), "%s", "北京");   /* 北京 */
     snprintf(s_wx_fake.region, sizeof(s_wx_fake.region), "%s", "China");
     {   /* 今日逐 3 小时假曲线（00..21 时） */
         static const int fake_h[8] = { -2, -1, 1, 4, 8, 6, 3, 1 };
@@ -457,4 +457,20 @@ void bili_get(bili_data_t *out)
     snprintf(out->updated, sizeof(out->updated), "%s", "21:15");
     out->gen = 1;
     out->http_code = 200;
+}
+
+/* ---------------- 时钟场景/配网 相关的最小桩（UI 代码演进后补上） ---------------- */
+int ui_current_scene(void)
+{
+    return 0;   /* 模拟器无真实场景状态机 */
+}
+
+esp_err_t wifi_prov_start(void)
+{
+    return ESP_OK;
+}
+
+const char *wifi_prov_ssid(void)
+{
+    return "ESP32-S31-SETUP";
 }

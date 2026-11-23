@@ -6,10 +6,11 @@
  *   Montserrat 的 G 是开口设计（没有中间那道横），用户反馈看着别扭。
  *   Segoe UI 的 G 带横杠，更接近日常所见。
  *
- * 字模只含 ASCII 0x20~0x7E，4bpp 抗锯齿，四个字号合计约 246 KB Flash。
+ * 字模含 ASCII 0x20~0x7E + °(0xB0) ↑(0x2191) ↓(0x2193)（20/28/32 三个字号带符号，
+ * 天气页的温度度和今明高低温行需要），4bpp 抗锯齿。
  * 重新生成：
  *   npx lv_font_conv --font C:/Windows/Fonts/segoeui.ttf --size <N> --bpp 4 \
- *       --format lvgl --range 0x20-0x7E --no-compress \
+ *       --format lvgl --range 0x20-0x7E,0xB0,0x2191,0x2193 --no-compress \
  *       --lv-include lvgl.h --lv-font-name ui_font_<N> -o ui_font_<N>.c
  */
 #pragma once
@@ -39,4 +40,7 @@ extern const lv_font_t ui_font_hw;
 extern const lv_font_t ui_font_cn18;   /* 黑体 18 + ASCII，fallback 链 head */
 extern const lv_font_t ui_font_cn18b;  /* GB2312 一级字库 2/4 块（~939 字） */
 extern const lv_font_t ui_font_cn18c;  /* 3/4 块 */
-extern const lv_font_t ui_font_cn18d;  /* 4/4 块 —— 合计覆盖 3755 常用汉字，榜单换名也不会缺字 */
+extern const lv_font_t ui_font_cn18d;
+/* 天气页专用小字库（168 字：常见城市名 + 和风天气描述用字）——全字库 24px 会撑爆 Flash */
+extern const lv_font_t ui_font_city24;   /* 24px 城市名 */
+extern const lv_font_t ui_font_wx28;     /* 28px 天气描述 */  /* 4/4 块 —— 合计覆盖 3755 常用汉字，榜单换名也不会缺字 */

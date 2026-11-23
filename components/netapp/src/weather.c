@@ -13,7 +13,10 @@
  *   nearest_area[0]:      areaName[0].value / region[0].value
  *   weather[0]/[1]:       maxtempC / mintempC（今天/明天）
  */
+#include "app_cfg.h"
 #include "data_cache.h"
+#include "nvs_flash.h"
+#include "nvs.h"
 #include "weather.h"
 
 #include <stdio.h>
@@ -22,6 +25,7 @@
 #include <time.h>
 
 #include "esp_crt_bundle.h"
+#include "zlib.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -33,7 +37,6 @@
 
 static const char *TAG = "weather";
 
-#define WX_URL          "https://wttr.in/?format=j1"
 #define WX_RX_MAX       (48 * 1024)     /* j1 响应上限（实测 28KB+，留足余量） */
 #define WX_OK_PERIOD_MS (30 * 60 * 1000)
 #define WX_FAIL_PERIOD_MS (5 * 60 * 1000)
@@ -252,6 +255,142 @@ static void fetch_aqi(wx_data_t *out)
              out->pm25_x10 / 10, out->pm25_x10 % 10, (double)lat, (double)lon);
 }
 
+/* ---------------- 和风天气（QWeather）----------------
+ * ★ 换源原因：wttr.in 免费接口观测数据滞后 ~1.5h（服务端缓存），且 observation_time
+ *   是 UTC 不转时区。和风免费档 1000 次/天（30min 一刷只用 5%），obsTime 自带本地时区，
+ *   描述直接中文（"晴"）。API KEY 硬编码（家庭设备个人 key），挪 app_cfg 再议。 */
+#define QW_KEY       "800f00f999c047a8b94036a1562b30d5"
+/* ★ 2025+ 注册的账号必须用控制台分配的专属 API Host（旧 devapi 域名返回空体）；
+ *   地理接口路径也改为 /geo/v2/... */
+#define QW_HOST      "https://pj2yw3mtxf.re.qweatherapi.com"
+#define QW_NOW_FMT   QW_HOST "/v7/weather/now?location=%s&key=" QW_KEY "&lang=zh"
+#define QW_3D_FMT    QW_HOST "/v7/weather/3d?location=%s&key=" QW_KEY "&lang=zh"
+#define QW_24H_FMT   QW_HOST "/v7/weather/24h?location=%s&key=" QW_KEY "&lang=zh"
+#define QW_GEO_FMT   QW_HOST "/geo/v2/city/lookup?location=%s&key=" QW_KEY "&lang=zh"
+
+static void url_encode(const char *in, char *out, size_t n)
+{
+    size_t o = 0;
+    for (; *in && o + 4 < n; in++)
+    {
+        unsigned char c = (unsigned char)*in;
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+            (c >= '0' && c <= '9') || c == '-' || c == '.' || c == '_' || c == '~')
+        {
+            out[o++] = (char)c;
+        }
+        else
+        {
+            snprintf(out + o, n - o, "%%%02X", c);
+            o += 3;
+        }
+    }
+    out[o] = 0;
+}
+
+/* 城市 LocationID 缓存（NVS ns=cache key=qloc）——GeoAPI 查一次永久复用 */
+static bool qw_loc_cached(char *id, size_t n)
+{
+    nvs_handle_t h;
+    if (nvs_open("cache", NVS_READONLY, &h) != ESP_OK)
+    {
+        return false;
+    }
+    size_t len = n;
+    esp_err_t e = nvs_get_str(h, "qloc", id, &len);
+    nvs_close(h);
+    return (e == ESP_OK && id[0] != 0);
+}
+
+static void qw_loc_save(const char *id)
+{
+    nvs_handle_t h;
+    if (nvs_open("cache", NVS_READWRITE, &h) != ESP_OK)
+    {
+        return;
+    }
+    nvs_set_str(h, "qloc", id);
+    nvs_commit(h);
+    nvs_close(h);
+    ESP_LOGI(TAG, "location id cached: %s", id);
+}
+
+/* 通用 GET：复用 s_rx 缓冲与 on_http 事件回调；和风成功响应必含 "code":"200" */
+static bool http_get(const char *url)
+{
+    ESP_LOGI(TAG, "GET %s", url);
+    s_rx_len = 0;
+    s_rx[0]  = 0;
+
+    esp_http_client_config_t cfg = {
+        .url               = url,
+        .event_handler     = on_http,
+        .timeout_ms        = WX_TIMEOUT_MS,
+        .crt_bundle_attach = esp_crt_bundle_attach,
+        .user_agent        = "s31-weather/1.0",
+        .keep_alive_enable = false,
+    };
+    esp_http_client_handle_t cli = esp_http_client_init(&cfg);
+    if (cli == NULL)
+    {
+        return false;
+    }
+    /* ★★ 和风服务器无条件返回 gzip 压缩响应，esp_http_client 不自动解压 ⇒
+     *   s_rx 里是二进制，JSON 解析全失败。声明不压缩： */
+    esp_http_client_set_header(cli, "Accept-Encoding", "gzip;q=0, identity;q=1");
+
+    esp_err_t err  = esp_http_client_perform(cli);
+    int       code = esp_http_client_get_status_code(cli);
+    esp_http_client_cleanup(cli);
+
+    /* ★★ 和风 CDN 无视 Accept-Encoding 强制 gzip（实测 identity 也被压缩）⇒
+     *   s_rx 里是 gzip 二进制，JSON 解析全失败。识别 gzip magic (1f 8b) 后用
+     *   zlib 的 gzip 模式（inflateInit2 windowBits=15+16）解压回 s_rx。 */
+    if (s_rx_len > 16 && (unsigned char)s_rx[0] == 0x1F && (unsigned char)s_rx[1] == 0x8B)
+    {
+        uint8_t *outbuf = heap_caps_malloc(WX_RX_MAX, MALLOC_CAP_SPIRAM);
+        if (outbuf == NULL)
+        {
+            ESP_LOGE(TAG, "no mem for gzip inflate");
+            return false;
+        }
+        z_stream d = { 0 };
+        int zr = inflateInit2(&d, 15 + 16);      /* 15=window, +16=识别 gzip 头 */
+        if (zr == Z_OK)
+        {
+            d.next_in  = (Bytef *)s_rx;
+            d.avail_in = (uInt)s_rx_len;
+            d.next_out = outbuf;
+            d.avail_out = WX_RX_MAX;
+            zr = inflate(&d, Z_FINISH);
+            inflateEnd(&d);
+            if (zr == Z_STREAM_END && d.total_out > 0)
+            {
+                ESP_LOGI(TAG, "gzip inflated: %d -> %d bytes", s_rx_len, (int)d.total_out);
+                memcpy(s_rx, outbuf, d.total_out);
+                s_rx[d.total_out] = 0;
+                s_rx_len = (int)d.total_out;
+            }
+            else
+            {
+                ESP_LOGW(TAG, "inflate failed zr=%d", zr);
+                s_rx_len = 0;
+            }
+        }
+        else
+        {
+            inflateEnd(&d);
+        }
+        heap_caps_free(outbuf);
+    }
+
+    bool ok = (err == ESP_OK && code == 200 && s_rx_len > 50 &&
+               strstr(s_rx, "\"code\":\"200\"") != NULL);
+    /* ★ 诊断：HTTP 状态与响应开头——和风失败时常见 401(key 无效)/403(未配权限)/空体 */
+    ESP_LOGI(TAG, "http %d rx %d head: %.120s", code, s_rx_len, s_rx);
+    return ok;
+}
+
 static bool fetch_once(wx_data_t *out)
 {
     if (s_rx == NULL)
@@ -268,127 +407,99 @@ static bool fetch_once(wx_data_t *out)
         return false;
     }
 
-    ESP_LOGI(TAG, "fetching %s ...", WX_URL);
-    s_rx_len = 0;
-    s_rx[0]  = 0;
+    char url[256];
+    char loc[16];
 
-    esp_http_client_config_t cfg = {
-        .url               = WX_URL,
-        .event_handler     = on_http,
-        .timeout_ms        = WX_TIMEOUT_MS,
-        .crt_bundle_attach = esp_crt_bundle_attach,
-        .user_agent        = "s31-weather/1.0",
-        .keep_alive_enable = false,
-    };
-    esp_http_client_handle_t cli = esp_http_client_init(&cfg);
-    if (cli == NULL)
+    /* ① 城市 LocationID：NVS 缓存优先，没有则 GeoAPI 按城市名查一次 */
+    if (!qw_loc_cached(loc, sizeof(loc)))
     {
-        return false;
+        char enc[96];
+        url_encode(app_cfg_get()->city, enc, sizeof(enc));
+        snprintf(url, sizeof(url), QW_GEO_FMT, enc);
+        if (!http_get(url))
+        {
+            ESP_LOGW(TAG, "geo lookup failed");
+            return false;
+        }
+        if (jfind_nth(s_rx, "\"id\"", 1, loc, sizeof(loc)))
+        {
+            qw_loc_save(loc);
+        }
+        else
+        {
+            ESP_LOGW(TAG, "geo: no id in response");
+            return false;
+        }
     }
 
-    esp_err_t err  = esp_http_client_perform(cli);
-    int       code = esp_http_client_get_status_code(cli);
-    esp_http_client_cleanup(cli);
-
-    out->http_code = code;
-    if (err != ESP_OK || code != 200 || s_rx_len < 100)
-    {
-        ESP_LOGW(TAG, "fetch failed: %s http %d (rx %d)",
-                 esp_err_to_name(err), code, s_rx_len);
-        return false;
-    }
-
-    ESP_LOGI(TAG, "rx %d bytes, head: %.180s", s_rx_len, s_rx);
-
-    /* ---- 手写字段提取（顺序：current → nearest_area → weather[0]/[1]） ---- */
     bool ok = false;
+
+    /* ② 实况 now：temp/text/feelsLike/humidity/windSpeed/windDir/obsTime */
+    snprintf(url, sizeof(url), QW_NOW_FMT, loc);
+    if (http_get(url))
     {
+        out->temp_c    = jfind_int(s_rx, "\"temp\"", 1, -99);
+        out->feels_c   = jfind_int(s_rx, "\"feelsLike\"", 1, -99);
+        out->humidity  = jfind_int(s_rx, "\"humidity\"", 1, -1);
+        out->wind_kmph = jfind_int(s_rx, "\"windSpeed\"", 1, -1);
+
         char b[48];
-
-        if (jfind_int(s_rx, "\"temp_C\"", 1, -99) != -99)
+        if (jfind_nth(s_rx, "\"text\"", 1, b, sizeof(b)))
         {
-            out->temp_c   = jfind_int(s_rx, "\"temp_C\"", 1, -99);
-            out->feels_c  = jfind_int(s_rx, "\"FeelsLikeC\"", 1, -99);
-            out->humidity = jfind_int(s_rx, "\"humidity\"", 1, -1);
-            out->wind_kmph = jfind_int(s_rx, "\"windspeedKmph\"", 1, -1);
-
-            if (jfind_nth(s_rx, "\"winddir16Point\"", 1, b, sizeof(b)))
-            {
-                snprintf(out->wind_dir, sizeof(out->wind_dir), "%.*s", (int)(sizeof(out->wind_dir) - 1), b);
-            }
-            /* 中文描述：weatherDesc 后第一个 value */
-            if (jafter(s_rx, "\"weatherDesc\"", "\"value\"", b, sizeof(b)))
-            {
-                snprintf(out->desc, sizeof(out->desc), "%.*s", (int)(sizeof(out->desc) - 1), b);
-            }
-
-            /* observation_time "04:21 AM"（UTC）→ 转用户时区（UTC+8）显示。
-             *   ★ 必须 +8：wttr.in 是英国服务，观测时间给 UTC——不转换用户会把它
-             *   读成本地时间，"凌晨 04:21"与当前差 9 小时的困惑即源于此。 */
-            if (jfind_nth(s_rx, "\"observation_time\"", 1, b, sizeof(b)))
-            {
-                int hh = 0, mm = 0;
-                char ap[4] = {0};
-                if (sscanf(b, "%d:%d %2s", &hh, &mm, ap) == 3)
-                {
-                    if ((ap[0] == 'P' || ap[0] == 'p') && hh < 12) { hh += 12; }
-                    if ((ap[0] == 'A' || ap[0] == 'a') && hh == 12) { hh = 0; }
-                    hh += 8;                      /* UTC → CST-8 */
-                    if (hh >= 24) { hh -= 24; }
-                    char tmp[24];   /* GCC 的 format-truncation 只看 int 理论宽度；
-                                     * hh/mm 已是 %02d 语义（0-23/0-59），24B 装得下任何 int 对 */
-                    snprintf(tmp, sizeof(tmp), "%02d:%02d", hh, mm);
-                    strlcpy(out->updated, tmp, sizeof(out->updated));
-                }
-            }
-
-            /* 城市/省份：nearest_area 后第一个 areaName / region 的 value */
-            if (jafter(s_rx, "\"nearest_area\"", "\"areaName\"", b, sizeof(b)) ||
-                jfind_nth(s_rx, "\"areaName\"", 1, b, sizeof(b)))
-            {
-                /* areaName 是对象数组，需再取一层 value */
-                const char *an = strstr(s_rx, "\"areaName\"");
-                if (an != NULL && jfind_nth(an, "\"value\"", 1, b, sizeof(b)))
-                {
-                    snprintf(out->city, sizeof(out->city), "%.*s", (int)(sizeof(out->city) - 1), b);
-                }
-            }
-            /* region 同理 */
-            {
-                const char *rg = strstr(s_rx, "\"region\"");
-                if (rg != NULL && jfind_nth(rg, "\"value\"", 1, b, sizeof(b)))
-                {
-                    snprintf(out->region, sizeof(out->region), "%.*s", (int)(sizeof(out->region) - 1), b);
-                }
-            }
-
-            /* 今天 / 明天高低温：maxtempC 第 1、2 次出现；mintempC 同理 */
-            out->today_max = jfind_int(s_rx, "\"maxtempC\"", 1, -99);
-            out->today_min = jfind_int(s_rx, "\"mintempC\"", 1, -99);
-            out->tmrw_max  = jfind_int(s_rx, "\"maxtempC\"", 2, -99);
-            out->tmrw_min  = jfind_int(s_rx, "\"mintempC\"", 2, -99);
-
-            /* 今天逐 3 小时温度：hourly[].tempC 的前 8 个
-             * ★ 注意搜 "tempC"（带前引号）——current 的 key 是 temp_C（下划线），
-             *   "maxtempC" 前引号位置不同也不会误匹配。 */
-            for (int hi = 0; hi < 8; hi++)
-            {
-                out->hourly_t[hi] = jfind_int(s_rx, "\"tempC\"", hi + 1, -99);
-            }
-
-            ok = true;
+            snprintf(out->desc, sizeof(out->desc), "%.*s",
+                     (int)(sizeof(out->desc) - 1), b);
         }
-        if (!ok)
+        if (jfind_nth(s_rx, "\"windDir\"", 1, b, sizeof(b)))
         {
-            ESP_LOGW(TAG, "parse: temp_C not found");
+            snprintf(out->wind_dir, sizeof(out->wind_dir), "%.*s",
+                     (int)(sizeof(out->wind_dir) - 1), b);
         }
+        /* obsTime "2026-11-23T14:00+08:00" → "14:00"（和风 obsTime 自带本地时区） */
+        {
+            const char *ot = strstr(s_rx, "\"obsTime\":\"");
+            if (ot != NULL)
+            {
+                /* ★ 必须从 ot+11（跳过 "obsTime":" 这 11 个字节）开始找 T，
+                 *   否则会命中 "obsTime" 里 Time 的那个 T ⇒ 解析出 'ime":' 垃圾
+                 *   （实测：Updated 行显示 "Updated ime":"）。 */
+                const char *t = strchr(ot + 11, 'T');
+                if (t != NULL)
+                {
+                    snprintf(out->updated, sizeof(out->updated), "%.5s", t + 1);
+                }
+            }
+        }
+        snprintf(out->city, sizeof(out->city), "%s", app_cfg_get()->city);
+        ok = (out->temp_c != -99);
     }
-
-    if (ok)
+    if (!ok)
     {
-        fetch_aqi(out);       /* 失败不影响天气主数据 */
+        ESP_LOGW(TAG, "now parse failed");
+        return false;
     }
-    return ok;
+
+    /* ③ 今明高低温（3d：tempMax/tempMin 第 1、2 次出现 = 今天/明天） */
+    snprintf(url, sizeof(url), QW_3D_FMT, loc);
+    if (http_get(url))
+    {
+        out->today_max = jfind_int(s_rx, "\"tempMax\"", 1, -99);
+        out->today_min = jfind_int(s_rx, "\"tempMin\"", 1, -99);
+        out->tmrw_max  = jfind_int(s_rx, "\"tempMax\"", 2, -99);
+        out->tmrw_min  = jfind_int(s_rx, "\"tempMin\"", 2, -99);
+    }
+
+    /* ④ 逐小时温度（24h：hourly[].temp 前 8 个） */
+    snprintf(url, sizeof(url), QW_24H_FMT, loc);
+    if (http_get(url))
+    {
+        for (int hi = 0; hi < 8; hi++)
+        {
+            out->hourly_t[hi] = jfind_int(s_rx, "\"temp\"", hi + 1, -99);
+        }
+    }
+
+    fetch_aqi(out);       /* 失败不影响天气主数据 */
+    return true;
 }
 
 /* ---------------- 刷新任务 ---------------- */
