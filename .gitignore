@@ -88,3 +88,12 @@ disabled_components/
 
 # 语音模型（1GB，本地下载，不进仓库）
 models/
+
+# ---- 2026-11-23 公开仓库前清理 ----
+# 本地 WiFi 凭据（真实 SSID/密码，绝不进仓库；模板见 wifi_config.h）
+components/netapp/include/wifi_config_private.h
+# 音频测试素材：体积大，且部分是商业录音（有版权风险），不进公开仓库
+tools/music_src/
+tools/fat_root/*.WAV
+tools/fat_root/*.wav
+tools/fat_root/*.mp3
