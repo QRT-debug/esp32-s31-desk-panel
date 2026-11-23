@@ -66,7 +66,7 @@ static void mic_cb(lv_event_t *e)
 static void back_cb(lv_event_t *e)
 {
     (void)e;
-    ui_goto_scene(UI_SCENE_SYSTEM);
+    ui_goto_scene(UI_SCENE_APPS);   /* 本页从应用页进入，返回也回应用页（原为 SYSTEM） */
 }
 
 void scene_voice(uint16_t *fb, int frame)

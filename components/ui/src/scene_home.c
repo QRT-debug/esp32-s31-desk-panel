@@ -64,10 +64,57 @@ static void to_clock_cb(lv_event_t *e)
     ui_goto_scene(UI_SCENE_CLOCK);
 }
 static void to_voice_cb(lv_event_t *e) { (void)e; ui_goto_scene(UI_SCENE_VOICE); }
+static lv_obj_t *s_cfg_overlay;
+
+static void config_overlay_close(lv_event_t *e)
+{
+    (void)e;
+    if (s_cfg_overlay != NULL)
+    {
+        lv_obj_delete(s_cfg_overlay);
+        s_cfg_overlay = NULL;
+    }
+}
+
+/* ★ 点 CONFIG 原本只调 wifi_prov_start()，界面毫无变化（用户实测"没反应"）。
+ *   配网页在 STA 上已经常驻，用户真正需要的是「访问地址」——这里弹层告诉他。 */
 static void to_config_cb(lv_event_t *e)
 {
     (void)e;
-    wifi_prov_start();      /* 开配网热点（AP 模式），手机连上配置 */
+    wifi_prov_start();      /* 兜底：开热点，路由器不给 DHCP 时也能连 */
+
+    if (s_cfg_overlay != NULL)
+    {
+        return;
+    }
+
+    char ip[24] = { 0 };
+    wifi_sta_get_ip(ip, sizeof(ip));
+
+    s_cfg_overlay = lv_obj_create(lv_screen_active());
+    lv_obj_set_size(s_cfg_overlay, 540, 250);
+    lv_obj_center(s_cfg_overlay);
+    lv_obj_set_style_bg_color(s_cfg_overlay, lv_color_hex(C_CARD), 0);
+    lv_obj_set_style_bg_opa(s_cfg_overlay, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(s_cfg_overlay, 20, 0);
+    lv_obj_set_style_border_width(s_cfg_overlay, 2, 0);
+    lv_obj_set_style_border_color(s_cfg_overlay, lv_color_hex(C_BLUE), 0);
+    lv_obj_set_style_pad_all(s_cfg_overlay, 0, 0);
+    lv_obj_clear_flag(s_cfg_overlay, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(s_cfg_overlay, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(s_cfg_overlay, config_overlay_close, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *lt = lv_label_create(s_cfg_overlay);
+    lv_obj_set_style_text_font(lt, &ui_font_cn18, 0);
+    lv_obj_set_style_text_color(lt, lv_color_hex(C_TITLE), 0);
+    lv_label_set_text_fmt(lt,
+        "配置页面\n\n"
+        "电脑或手机打开网页：\n"
+        "http://%s/\n\n"
+        "连不上时连热点 ESP32-S31-SETUP，\n"
+        "再访问 http://192.168.4.1/\n\n"
+        "轻触本框关闭", ip);
+    lv_obj_set_pos(lt, 26, 20);
 }
 
 /* 一张卡片：图标圆 + 标题 + 大数值 + 说明 */

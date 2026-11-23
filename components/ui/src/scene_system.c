@@ -49,13 +49,9 @@ static lv_obj_t *s_lbl_btn;      /* WiFi 按钮文字 */
 static lv_obj_t *s_btn_wifi;
 static lv_obj_t *s_lbl_bl;      /* 背光百分比 */
 static lv_obj_t *s_bar_mic;
-static lv_obj_t *s_lbl_asr;
 
 /* ★ 语音识别结果桥：voice 回调在 voice_task 上下文，绝不能直接碰 LVGL
  *   （lv_async_call 也死锁过）——只写标志，由本场景 draw 里轮询消费。 */
-static char          s_asr_buf[256];
-static volatile bool s_asr_ready;
-static bool          s_asr_subscribed;     /* 麦克风电平条 */
 static lv_obj_t *s_lbl_mic;     /* 麦克风电平数值 */
 static lv_obj_t *s_slider_hue;  /* RGB 灯色相滑块 */
 static lv_obj_t *s_slider_val;  /* RGB 灯亮度滑块 */
@@ -201,110 +197,6 @@ static lv_obj_t *panel(lv_obj_t *scr, int x, int y, int w, int h, uint32_t borde
 /** 记住从哪进的时钟，触摸返回时回这个场景（全局变量，scene_clock.c 里用） */
 int g_clock_return_scene = UI_SCENE_HOME;
 
-static void clock_cb(lv_event_t *e)
-{
-    (void)e;
-    g_clock_return_scene = ui_current_scene();
-    ui_goto_scene(UI_SCENE_CLOCK);
-}
-
-static void prov_close_cb(lv_event_t *e)
-{
-    lv_obj_t *mask = lv_event_get_user_data(e);
-    if (mask != NULL)
-    {
-        lv_obj_del(mask);
-    }
-}
-
-static void on_voice_evt(const voice_evt_t *e)
-{
-    if (e->type == VOICE_EV_TEXT || e->type == VOICE_EV_ERROR)
-    {
-        snprintf(s_asr_buf, sizeof(s_asr_buf), "%s",
-                 e->text ? e->text : "(empty)");
-        s_asr_ready = true;
-    }
-}
-
-static void voice_cb(lv_event_t *e)
-{
-    (void)e;
-    ui_goto_scene(UI_SCENE_VOICE);   /* 独立语音页（本页只做入口） */
-}
-
-static void prov_cb(lv_event_t *e)
-{
-    lv_obj_t *scr = lv_obj_get_screen(lv_event_get_target(e));
-
-    esp_err_t err = wifi_prov_start();
-    if (err != ESP_OK)
-    {
-        return;
-    }
-
-    lv_obj_t *mask = lv_obj_create(scr);
-    lv_obj_set_size(mask, 800, 480);
-    lv_obj_set_pos(mask, 0, 0);
-    lv_obj_set_style_bg_color(mask, lv_color_hex(0x000000), 0);
-    lv_obj_set_style_bg_opa(mask, LV_OPA_70, 0);
-    lv_obj_set_style_border_width(mask, 0, 0);
-    lv_obj_set_style_pad_all(mask, 0, 0);
-    lv_obj_clear_flag(mask, LV_OBJ_FLAG_SCROLLABLE);
-
-    lv_obj_t *card = lv_obj_create(mask);
-    lv_obj_set_size(card, 600, 300);
-    lv_obj_center(card);
-    lv_obj_set_style_bg_color(card, lv_color_hex(0x1A2233), 0);
-    lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(card, 18, 0);
-    lv_obj_set_style_border_width(card, 0, 0);
-    lv_obj_set_style_pad_all(card, 24, 0);
-    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
-
-    lv_obj_t *t1 = lv_label_create(card);
-    lv_obj_set_style_text_font(t1, &ui_font_cn18, 0);
-    lv_obj_set_style_text_color(t1, lv_color_hex(0x5B7CFA), 0);
-    lv_label_set_text(t1, "手机配网");
-    lv_obj_set_pos(t1, 0, 0);
-
-    char b[128];
-    lv_obj_t *t2 = lv_label_create(card);
-    lv_obj_set_style_text_font(t2, &ui_font_cn18, 0);
-    lv_obj_set_style_text_color(t2, lv_color_hex(0xE6EDF7), 0);
-    snprintf(b, sizeof(b), "1. 连热点  %s\n    密码  %s\n2. 打开  http://%s/",
-             wifi_prov_ssid(), PROV_AP_PASS, PROV_AP_IP);
-    lv_label_set_text(t2, b);
-    lv_obj_set_pos(t2, 0, 36);
-
-    lv_obj_t *t3 = lv_label_create(card);
-    /* ★ 必须是中文字体：ui_font_14 是 Montserrat，不含汉字字形，
-     *   中文会全部渲染成方块（tofu）—— 上一版这里就是一排小矩形。 */
-    lv_obj_set_style_text_font(t3, &ui_font_cn18, 0);
-    lv_obj_set_style_text_color(t3, lv_color_hex(0x8A97AD), 0);
-    lv_label_set_text(t3, "保存后设备会自动重启并连接新网络");
-    lv_obj_set_pos(t3, 0, 124);
-
-    lv_obj_t *btn = lv_obj_create(card);
-    lv_obj_set_size(btn, 140, 44);
-    /* ★ 坐标是相对 card 的**内容区**（已扣掉 pad 24）：内容区只有 552×252。
-     *   x=436+140=576 > 552、y=226+44=270 > 252 ⇒ 右/下被裁，剩一条横矩形。
-     *   改成 x=380（+140=520）、y=176（+44=220），都在内。 */
-    lv_obj_set_pos(btn, 380, 176);
-    lv_obj_set_style_bg_color(btn, lv_color_hex(0x5B7CFA), 0);
-    lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(btn, 10, 0);
-    lv_obj_set_style_border_width(btn, 0, 0);
-    lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(btn, prov_close_cb, LV_EVENT_CLICKED, mask);
-
-    lv_obj_t *bl = lv_label_create(btn);
-    lv_obj_set_style_text_font(bl, &ui_font_cn18, 0);
-    lv_obj_set_style_text_color(bl, lv_color_hex(0xFFFFFF), 0);
-    lv_label_set_text(bl, "关闭");
-    lv_obj_center(bl);
-}
-
 static void bl_cb(lv_event_t *e)
 {
     int v = (int)lv_slider_get_value(lv_event_get_target(e));
@@ -437,7 +329,7 @@ static void build_system(void)
         lv_obj_set_pos(bl, 0, 6);
 
         lv_obj_t *sl = lv_slider_create(p3);
-        lv_obj_set_size(sl, 320, 12);
+        lv_obj_set_size(sl, 440, 12);   /* 删掉右侧按钮后加宽（留出 DARK MODE 位置） */
         lv_obj_set_pos(sl, 96, 8);
         lv_slider_set_range(sl, 10, 100);
         lv_slider_set_value(sl, backlight_get(), LV_ANIM_OFF);
@@ -461,18 +353,18 @@ static void build_system(void)
         char b[8];
         snprintf(b, sizeof(b), "%d%%", backlight_get());
         lv_label_set_text(s_lbl_bl, b);
-        lv_obj_set_pos(s_lbl_bl, 430, 4);
+        lv_obj_set_pos(s_lbl_bl, 548, 4);
 
         /* ---- 深色模式开关（背光行右侧） ---- */
         lv_obj_t *dk = lv_label_create(p3);
         lv_obj_set_style_text_font(dk, &ui_font_14, 0);
         lv_obj_set_style_text_color(dk, lv_color_hex(COL_DIM), 0);
         lv_label_set_text(dk, "DARK MODE");
-        lv_obj_set_pos(dk, 520, 8);
+        lv_obj_set_pos(dk, 596, 8);
 
         lv_obj_t *sw = lv_switch_create(p3);
         lv_obj_set_size(sw, 52, 26);
-        lv_obj_set_pos(sw, 610, 2);
+        lv_obj_set_pos(sw, 688, 2);
         if (ui_theme_is_dark())
         {
             lv_obj_add_state(sw, LV_STATE_CHECKED);
@@ -481,68 +373,7 @@ static void build_system(void)
         lv_obj_set_style_bg_color(sw, lv_color_hex(ui_theme()->accent), LV_PART_INDICATOR | LV_STATE_CHECKED);
         lv_obj_add_event_cb(sw, theme_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
-        /* ---- 配网按钮（DARK MODE 右侧空位） ---- */
-        lv_obj_t *pv = lv_obj_create(p3);
-        lv_obj_set_size(pv, 96, 26);
-        /* ★ 放 MIC 行右侧（x 640）：DARK MODE 开关占到 662，那行右侧已被挤满，
-         *   硬塞会超出卡片内边距（756）被裁掉。MIC 数值标签只到 ~470，右边空着。 */
-        lv_obj_set_pos(pv, 640, 36);
-        lv_obj_set_style_bg_color(pv, lv_color_hex(0x5B7CFA), 0);
-        lv_obj_set_style_bg_opa(pv, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(pv, 8, 0);
-        lv_obj_set_style_border_width(pv, 0, 0);
-        lv_obj_set_style_pad_all(pv, 0, 0);
-        lv_obj_add_flag(pv, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_clear_flag(pv, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_add_event_cb(pv, prov_cb, LV_EVENT_CLICKED, NULL);
 
-        lv_obj_t *pvl = lv_label_create(pv);
-        lv_obj_set_style_text_font(pvl, &ui_font_14, 0);
-        lv_obj_set_style_text_color(pvl, lv_color_hex(0xFFFFFF), 0);
-        lv_label_set_text(pvl, "WIFI");
-        lv_obj_center(pvl);
-
-        /* ---- 时钟/屏保按钮（WIFI 右边，DARK MODE 行的剩余空位） ----
-         * ★ 宽 88 不是 96：x=664 起，664+88=752 < 内边距 756，刚好放下；
-         *   96 宽会超出 4px 被裁。 */
-        lv_obj_t *ck = lv_obj_create(p3);
-        lv_obj_set_size(ck, 88, 26);
-        lv_obj_set_pos(ck, 664, 2);
-        lv_obj_set_style_bg_color(ck, lv_color_hex(0x35D07F), 0);
-        lv_obj_set_style_bg_opa(ck, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(ck, 8, 0);
-        lv_obj_set_style_border_width(ck, 0, 0);
-        lv_obj_set_style_pad_all(ck, 0, 0);
-        lv_obj_add_flag(ck, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_clear_flag(ck, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_add_event_cb(ck, clock_cb, LV_EVENT_CLICKED, NULL);
-
-        lv_obj_t *ckl = lv_label_create(ck);
-        lv_obj_set_style_text_font(ckl, &ui_font_14, 0);
-        lv_obj_set_style_text_color(ckl, lv_color_hex(0xFFFFFF), 0);
-        lv_label_set_text(ckl, "CLOCK");
-        lv_obj_center(ckl);
-    }
-
-    /* ---- 语音按钮（MIC 行右侧空位）+ 识别结果行 ---- */
-    {
-        lv_obj_t *vb = lv_obj_create(p3);
-        lv_obj_set_size(vb, 100, 26);
-        lv_obj_set_pos(vb, 520, 36);
-        lv_obj_set_style_bg_color(vb, lv_color_hex(0xFF9A3D), 0);
-        lv_obj_set_style_bg_opa(vb, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(vb, 8, 0);
-        lv_obj_set_style_border_width(vb, 0, 0);
-        lv_obj_set_style_pad_all(vb, 0, 0);
-        lv_obj_add_flag(vb, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_clear_flag(vb, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_add_event_cb(vb, voice_cb, LV_EVENT_CLICKED, NULL);
-
-        lv_obj_t *vbl = lv_label_create(vb);
-        lv_obj_set_style_text_font(vbl, &ui_font_14, 0);
-        lv_obj_set_style_text_color(vbl, lv_color_hex(0xFFFFFF), 0);
-        lv_label_set_text(vbl, "VOICE");
-        lv_obj_center(vbl);
     }
 
     /* ---- 麦克风电平（日志卡第二行）：说话时条会跳 ---- */
@@ -554,17 +385,10 @@ static void build_system(void)
         lv_obj_set_pos(mi, 0, 40);
 
         s_bar_mic = lv_bar_create(p3);
-        lv_obj_set_size(s_bar_mic, 320, 12);
+        lv_obj_set_size(s_bar_mic, 440, 12);
         lv_obj_set_pos(s_bar_mic, 96, 42);
 
         /* 语音识别结果（VOICE 按钮触发后显示） */
-        s_lbl_asr = lv_label_create(p3);
-        lv_obj_set_style_text_font(s_lbl_asr, &ui_font_cn18, 0);
-        lv_obj_set_style_text_color(s_lbl_asr, lv_color_hex(ui_theme()->title), 0);
-        lv_label_set_text(s_lbl_asr, "");
-        lv_obj_set_pos(s_lbl_asr, 0, 66);
-        lv_obj_set_width(s_lbl_asr, 740);
-        lv_label_set_long_mode(s_lbl_asr, LV_LABEL_LONG_WRAP);
         lv_bar_set_range(s_bar_mic, 0, 100);
         lv_bar_set_value(s_bar_mic, 0, LV_ANIM_OFF);
         lv_obj_set_style_bg_color(s_bar_mic, lv_color_hex(ui_theme()->card_line), LV_PART_MAIN);
@@ -577,7 +401,7 @@ static void build_system(void)
         lv_obj_set_style_text_font(s_lbl_mic, &ui_font_20, 0);
         lv_obj_set_style_text_color(s_lbl_mic, lv_color_hex(COL_TEXT), 0);
         lv_label_set_text(s_lbl_mic, "0");
-        lv_obj_set_pos(s_lbl_mic, 430, 38);
+        lv_obj_set_pos(s_lbl_mic, 548, 38);
     }
 
     /* ---- 板载 RGB 灯调色（日志卡第三行）：HUE 滑块 + 亮度滑块 + 色块预览 ---- */
@@ -589,7 +413,7 @@ static void build_system(void)
         lv_obj_set_pos(li, 0, 76);
 
         s_slider_hue = lv_slider_create(p3);
-        lv_obj_set_size(s_slider_hue, 200, 12);
+        lv_obj_set_size(s_slider_hue, 300, 12);
         lv_obj_set_pos(s_slider_hue, 96, 78);
         lv_slider_set_range(s_slider_hue, 0, 359);
         lv_slider_set_value(s_slider_hue, s_led_hue, LV_ANIM_OFF);   /* ★ 恢复上次状态 */
@@ -605,11 +429,11 @@ static void build_system(void)
         lv_obj_set_style_text_font(vb, &ui_font_14, 0);
         lv_obj_set_style_text_color(vb, lv_color_hex(COL_DIM), 0);
         lv_label_set_text(vb, "VAL");
-        lv_obj_set_pos(vb, 312, 76);
+        lv_obj_set_pos(vb, 410, 76);
 
         s_slider_val = lv_slider_create(p3);
         lv_obj_set_size(s_slider_val, 150, 12);
-        lv_obj_set_pos(s_slider_val, 356, 78);
+        lv_obj_set_pos(s_slider_val, 450, 78);
         lv_slider_set_range(s_slider_val, 0, 255);
         lv_slider_set_value(s_slider_val, s_led_val, LV_ANIM_OFF);   /* ★ 恢复上次状态 */
         lv_obj_set_style_bg_color(s_slider_val, lv_color_hex(ui_theme()->card_line), LV_PART_MAIN);
@@ -622,7 +446,7 @@ static void build_system(void)
 
         s_led_swatch = lv_obj_create(p3);   /* 色块预览 */
         lv_obj_set_size(s_led_swatch, 44, 20);
-        lv_obj_set_pos(s_led_swatch, 530, 74);
+        lv_obj_set_pos(s_led_swatch, 620, 74);
         lv_obj_set_style_radius(s_led_swatch, 6, 0);
         lv_obj_set_style_border_width(s_led_swatch, 0, 0);
         lv_obj_clear_flag(s_led_swatch, LV_OBJ_FLAG_SCROLLABLE);
@@ -632,8 +456,8 @@ static void build_system(void)
 
     /* 日志放进可滚动容器：内容超出可上下滑动，不会被裁掉半行 */
     lv_obj_t *logwrap = lv_obj_create(p3);
-    lv_obj_set_pos(logwrap, 0, 124);
-    lv_obj_set_size(logwrap, 744, 88);
+    lv_obj_set_pos(logwrap, 0, 136);
+    lv_obj_set_size(logwrap, 744, 72);
     lv_obj_set_style_bg_opa(logwrap, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(logwrap, 0, 0);
     lv_obj_set_style_pad_all(logwrap, 0, 0);
@@ -643,7 +467,7 @@ static void build_system(void)
     lv_obj_set_style_text_font(cap, &ui_font_14, 0);
     lv_obj_set_style_text_color(cap, lv_color_hex(COL_DIM), 0);
     lv_label_set_text(cap, "RECENT LOG  (latest at bottom)");
-    lv_obj_set_pos(cap, 0, 106);
+    lv_obj_set_pos(cap, 0, 120);
 
     s_lbl_log = lv_label_create(logwrap);
     lv_obj_set_style_text_font(s_lbl_log, &ui_font_14, 0);
@@ -695,12 +519,6 @@ void scene_system(uint16_t *fb, int frame)
             lv_label_set_text(s_lbl_mic, b);
         }
 
-        /* 语音识别结果：voice 回调只置标志，这里（LVGL 上下文）消费 */
-        if (s_asr_ready && s_lbl_asr != NULL)
-        {
-            s_asr_ready = false;
-            lv_label_set_text(s_lbl_asr, s_asr_buf);
-        }
     }
 
     lvgl_port_task();
