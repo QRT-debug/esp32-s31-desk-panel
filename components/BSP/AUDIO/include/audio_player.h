@@ -78,20 +78,4 @@ uint32_t audio_player_position_ms(void);
 /** 当前曲目总时长（毫秒）；未知返回 0 */
 uint32_t audio_player_duration_ms(void);
 
-/**
- * 读一次麦克风电平（阻塞约 20ms）。
- * @return 0~100 的峰值电平（0 = 静音）
- *
- * ★ 通道交叉：MIC1 走 codec 的 MIC2 通道（左/右需实测确认）。
- *   本函数取两声道较大值，避免选错声道读不到声音。
- */
-int audio_player_mic_level(void);
-/** 录音：读一段 PCM 转单声道 16kHz int16（自动选能量大的声道、去掉直流偏置）
- *  返回样本数；<0 失败（播放态/未初始化） */
-int audio_rec_read_mono(int16_t *out, int max_samples, int timeout_ms);
-
-/** 每次开始录音前调用：重置通道判定，让本次重新锁定（防跨次残留） */
-void audio_rec_begin(void);
-
-/** ★ 麦克风诊断：读一帧打印每通道 DC/min/max（排查数据质量用） */
-void audio_player_mic_debug_log(void);
+/* ★ 麦克风采集已拆到 audio_rec.h（录音与播放器是两件事） */

@@ -143,7 +143,7 @@ esp_err_t audio_player_stop(void)
 uint32_t audio_player_duration_ms(void) { return 233000u; }
 
 /* 模拟麦克风电平：正弦慢摆（便于在模拟器里看条动） */
-int audio_player_mic_level(void)
+int audio_rec_level(void)
 {
     double t = (double)xTaskGetTickCount() / 1000.0;
     int v = (int)(35 + 30 * sin(t * 2.2));
@@ -325,7 +325,7 @@ static int s_bl = 80;
 esp_err_t backlight_init(void) { return ESP_OK; }
 void backlight_set(int pct) { s_bl = (pct < 0) ? 0 : (pct > 100 ? 100 : pct); }
 int  backlight_get(void) { return s_bl; }
-void audio_player_mic_debug_log(void) {}
+void audio_rec_debug_log(void) {}
 
 /* ---- HF 热榜（PC 模拟：固定假榜单） ---- */
 #include "hf_trend.h"

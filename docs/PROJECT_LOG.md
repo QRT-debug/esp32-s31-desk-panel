@@ -1191,3 +1191,24 @@ UI 只是调用方之一，不该成为能力的唯一入口。下次做蜂鸣�
 （可用码值太少）。感知域调亮度要按幂律换算：`val = 255 × PWM^(1/2.8)`。
 
 **对照表（写进代码注释）**：60≈3% · **100≈7%** · 140≈19% · 180≈38%。
+
+### 11-23 19:26 麦克风从 audio_player.h 拆出（audio_rec）
+
+**动机**：`audio_player.h` 里挂着 `audio_rec_read_mono()` / `audio_player_mic_level()` /
+`mic_debug_log()` —— 录音和"播放器"是两件事，挂在播放器名下会让调用方
+误以为要动播放状态。这也是 BSP 里唯一一个"驱动 + 采集 + 播放器 + 诊断"全塞一个文件的地方
+（TOUCH / LED 都是"驱动 + 服务"两层）。
+
+**改动（纯搬迁，逻辑一字未改）**：
+| 新增 | 内容 |
+|---|---|
+| `AUDIO/include/audio_rec.h` | 对外接口：`audio_rec_read_mono` / `audio_rec_begin` / `audio_rec_level` / `audio_rec_debug_log` |
+| `AUDIO/src/audio_rec.c` | 实现（含通道锁定 `s_rec_use_r` 的全部注释与行为） |
+| `AUDIO/include/audio_internal.h` | **组件内部**：`audio_priv_rx()` / `audio_priv_rec_open()` |
+
+改名：`audio_player_mic_level` → `audio_rec_level`，`audio_player_mic_debug_log` → `audio_rec_debug_log`。
+`audio_player.c` 只剩播放器 + 两个内部 getter（I2S 句柄由播放器统一创建，播放/录音共用一路控制器 + 时钟重配）。
+
+**★ 踩到的坑：新增源文件后必须先 `idf.py reconfigure`**
+`SRC_DIRS` 是**配置期**展开的，新加的 `.c` 不会自动进构建 ⇒ 链接期一堆
+`undefined reference to audio_rec_*`。跑一次 reconfigure 即解决。

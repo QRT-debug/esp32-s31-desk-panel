@@ -21,6 +21,7 @@
 #include "freertos/idf_additions.h"
 #include "freertos/task.h"
 #include "audio_player.h"
+#include "audio_rec.h"
 #include "app_cfg.h"
 #include "backlight.h"
 #include "bsp_led.h"
@@ -194,10 +195,10 @@ void app_main(void)
         vTaskDelay(pdMS_TO_TICKS(1500));
         for (int i = 0; i < 5; i++)
         {
-            ESP_LOGI(TAG, "mic check #%d = %d", i, audio_player_mic_level());
+            ESP_LOGI(TAG, "mic check #%d = %d", i, audio_rec_level());
             vTaskDelay(pdMS_TO_TICKS(400));
         }
-        audio_player_mic_debug_log();
+        audio_rec_debug_log();
     }
     else
     {

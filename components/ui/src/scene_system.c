@@ -19,6 +19,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "audio_player.h"
+#include "audio_rec.h"
 #include "backlight.h"
 #include "lvgl.h"
 #include "lvgl_port.h"
@@ -437,7 +438,7 @@ void scene_system(uint16_t *fb, int frame)
     /* 麦克风电平单独快刷（100ms）：说话时条要跟得上，慢了像卡住 */
     if (frame > 0 && (frame % 5) == 0 && s_bar_mic != NULL)
     {
-        int lv = audio_player_mic_level();
+        int lv = audio_rec_level();
         lv_bar_set_value(s_bar_mic, lv, LV_ANIM_OFF);
         if (s_lbl_mic != NULL)
         {

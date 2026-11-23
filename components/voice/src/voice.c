@@ -23,6 +23,7 @@
 
 #include "app_cfg.h"
 #include "audio_player.h"
+#include "audio_rec.h"
 #include "led_service.h"
 #include "voice.h"
 
