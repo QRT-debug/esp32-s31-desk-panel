@@ -504,3 +504,12 @@ bool voice_listen(void)
 }
 
 bool voice_is_listening(void) { return s_sim_listening; }
+
+/* ---------------- 屏保时钟桩 ----------------
+ * scene_clock.c 依赖硬件 JPEG 解码（esp_jpeg/esp_mm），模拟器不编它；
+ * 这里只给个空实现满足 main_sim.c 的场景分发，不渲染内容。 */
+void scene_clock(uint16_t *fb, int frame)
+{
+    (void)fb;
+    (void)frame;
+}

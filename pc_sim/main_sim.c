@@ -203,6 +203,8 @@ int main(int argc, char **argv)
     int  last_scene = -1;
     int  frame = 0;
     bool running = true;
+    /* ★ --shot 保险：超时强制出图退出，任何场景逻辑再卡也不会让调用方干等 */
+    Uint32 shot_t0 = SDL_GetTicks();
 
     if (demo_music)
     {
@@ -287,11 +289,22 @@ int main(int argc, char **argv)
         case UI_SCENE_HF:      scene_hf(NULL, frame++);      break;
         case UI_SCENE_AIRANK:  scene_ai_rank(NULL, frame++);  break;
         case UI_SCENE_BILI:    scene_bili(NULL, frame++);     break;
-        default: break;
+        /* ★★ 新增场景必须在这里补 case：漏了会走 default → 不渲染、frame 不增
+         *   ⇒ --shot 永远等不到第 90 帧 ⇒ 黑屏窗口 + 死循环（实测踩到）。 */
+        case UI_SCENE_CLOCK:   scene_clock(NULL, frame++);    break;
+        case UI_SCENE_VOICE:   scene_voice(NULL, frame++);   break;
+        default:
+            frame++;    /* 未注册场景也要推帧，避免 --shot 死等 */
+            break;
         }
 
-        if (shot_path != NULL && frame >= shot_after)
+        if (shot_path != NULL && (frame >= shot_after ||
+                                  SDL_GetTicks() - shot_t0 > 8000))
         {
+            if (frame < shot_after)
+            {
+                printf("shot timeout: only %d frames in 8s, forcing capture\n", frame);
+            }
             SDL_RenderPresent(s_ren);   /* 确保最后一帧已呈现 */
             save_shot(shot_path);
             running = false;

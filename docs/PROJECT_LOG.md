@@ -835,3 +835,25 @@ faster-whisper 直接识别：**`测试一下`** ✔（修复前是"呵呵,遇�
 
 **★ 通用教训**：生成中文字库时 **`--symbols`/`--range` 必须把标点符号一起带上**，
 否则"汉字都有、标点全方框"。GB2312 一级汉字 ≠ GB2312 全集。
+
+### 11-23 17:47 模拟器"黑屏 + 卡死不响应"：主循环 switch 漏了新场景
+
+**症状**：`pc_sim.exe --scene 9`（语音页）窗口全黑、进程不退出、CPU 空转，
+必须超时杀掉；`--shot` 不生成截图。
+
+**根因（两个叠加）**：
+1. **主循环 switch 没有 CLOCK(8) / VOICE(9) 的 case** ⇒ 走 `default: break;`
+   ⇒ **不渲染任何东西**（黑屏）+ **`frame++` 不执行**（frame 写在各个 case 里）
+   ⇒ 永远到不了 `--shot` 的 90 帧 ⇒ 死循环。
+2. `default` 分支不推帧，任何未来新增场景都会复现同样的死循环。
+
+**修复**：
+- 补 `case UI_SCENE_CLOCK` / `case UI_SCENE_VOICE`；
+- `default` 也 `frame++`（未注册场景也不会让 --shot 死等）；
+- **`--shot` 加 8 秒保险**：超时强制出图并退出，打印 `shot timeout: only N frames in 8s`。
+- 补 `scene_clock` 桩（模拟器不编它，依赖硬件 JPEG）。
+
+**实测**：`--scene 9 --shot` **2 秒完成**并出图；语音页 BACK/VOICE/TALK/中文提示全部正常。
+
+**★ 教训**：给"按枚举分发"的框架加新枚举值，**必须同步所有 switch**。
+更稳的做法是让 `default` 具备兜底行为（推帧/渲染占位），而不是静默跳过。
