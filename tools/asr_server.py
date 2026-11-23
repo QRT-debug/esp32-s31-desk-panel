@@ -137,6 +137,9 @@ def asr_sensevoice(wav_path: str, lang: str = "zh") -> str:
             model=model,
             tokens=os.path.join(d, "tokens.txt"),
             use_itn=True,          # 数字/标点规范化
+            # ★ 强制中文：language="" 是自动检测，短词（"应用"只有 0.8s）常被判成英文，
+            #   输出成 "应ing用"/"应ingyong" 这种中英混杂（实测踩到）。
+            language="zh",
             num_threads=4,
             debug=False,
         )

@@ -901,3 +901,21 @@ pip install sherpa-onnx
 
 **★ 教训**：`curl` 返回 0 / HTTP 200 **不代表文件完整**。大文件下载必须
 ①查远端 Content-Length ②`-C -` 续传 ③比对本地字节数 ④解压时留意 `Truncated` 警告。
+
+### 11-23 18:16 语音本地意图（A 层）+ 两个识别坑
+
+**本地意图**（`components/ui/src/ui_voice_intent.c`）：
+文本 → 关键词匹配 → 动作（切场景 / 背光 ±10%）。**零延迟、零成本、断网可用**。
+分层：voice 组件只管「声音→文本」（不依赖 UI）；意图解析在 UI 层（可引用
+ui_scenes.h / backlight.h），避免 voice ↔ ui 循环依赖。
+线程：解析是纯函数（回调里调），**执行在场景 draw（LVGL 上下文）**，用 volatile 标志传
+——沿用本项目铁律（回调里碰 LVGL 会死锁）。
+背光下限卡 10%（不压到 0，全灭会让用户以为死机），改完写回 app_cfg 持久化
+（★ 必须用 `app_cfg_mut()`，`app_cfg_get()` 返回 const，直改报 -Werror=discarded-qualifiers）。
+
+**坑 1：短词被识别成拼音**（"应用" → `应ing用` / `应ingyong`）
+SenseVoice 多语言模型 `language` 默认自动检测，**0.8 秒的短词容易被判成英文片段**。
+修法：`from_sense_voice(..., language="zh")` 强制中文。实测三次全部输出"应用。"。
+
+**坑 2：词表漏词**（"进入壁纸"没命中）——补 "壁纸"/"程序"。
+**教训**：关键词表要按**用户实际说法**迭代，不能只按设计者想的词写。

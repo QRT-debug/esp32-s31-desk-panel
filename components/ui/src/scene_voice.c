@@ -16,6 +16,7 @@
 #include "ui_theme.h"
 #include "lvgl_port.h"
 #include "voice.h"
+#include "ui_voice_intent.h"
 
 static lv_obj_t *s_btn_mic;
 static lv_obj_t *s_lbl_btn;
@@ -26,12 +27,29 @@ static char          s_buf[256];
 static volatile bool s_ready;
 static bool          s_subscribed;
 
+/* ★ 意图动作桥：回调（voice_task）只写，draw（LVGL 上下文）执行。
+ *   绝不能在回调里调 ui_goto_scene/backlight_set —— 那会跨线程碰 UI。 */
+static volatile ui_vact_t s_act     = UI_VACT_NONE;
+static volatile int       s_act_arg = 0;
+
 static void on_voice_evt(const voice_evt_t *e)
 {
     if (e->type == VOICE_EV_TEXT || e->type == VOICE_EV_ERROR)
     {
         snprintf(s_buf, sizeof(s_buf), "%s", e->text ? e->text : "(空)");
         s_ready = true;
+
+        /* 意图解析是纯函数，这里做；执行留给 draw（LVGL 上下文） */
+        if (e->type == VOICE_EV_TEXT)
+        {
+            ui_vact_t act;
+            int       arg;
+            if (ui_voice_intent(e->text, &act, &arg))
+            {
+                s_act_arg = arg;
+                s_act     = act;      /* 最后写：保证 arg 先就绪 */
+            }
+        }
     }
 }
 
@@ -138,6 +156,16 @@ void scene_voice(uint16_t *fb, int frame)
     {
         s_ready = false;
         lv_label_set_text(s_lbl_result, s_buf);
+    }
+
+    /* 执行语音命令（LVGL 上下文）：切场景后本页随即被新场景 clean 掉 */
+    if (s_act != UI_VACT_NONE)
+    {
+        ui_vact_t act = s_act;
+        int       arg = s_act_arg;
+        s_act = UI_VACT_NONE;
+        ui_voice_intent_apply(act, arg);
+        return;      /* 场景可能已切换/重建，本帧不再动控件 */
     }
     if (s_lbl_state != NULL)
     {
