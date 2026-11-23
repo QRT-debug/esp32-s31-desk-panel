@@ -408,6 +408,87 @@ static esp_err_t h_clear(httpd_req_t *req)
     return httpd_resp_send(req, msg, HTTPD_RESP_USE_STRLEN);
 }
 
+/** 列出壁纸：GET /wplist → 每行 "up_2.jpg  124 KB"，末尾 "-- N file(s)" */
+static esp_err_t h_list(httpd_req_t *req)
+{
+    httpd_resp_set_type(req, "text/plain; charset=utf-8");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+
+    DIR *d = opendir(WP_DIR);
+    if (d == NULL)
+    {
+        return httpd_resp_sendstr(req, "no wallpaper dir");
+    }
+
+    struct dirent *e;
+    char           line[80];
+    char           path[96];
+    int            n = 0;
+    while ((e = readdir(d)) != NULL)
+    {
+        size_t l = strlen(e->d_name);
+        if (l > 4 && strcasecmp(e->d_name + l - 4, ".jpg") == 0)
+        {
+            snprintf(path, sizeof(path), WP_DIR "/%s", e->d_name);
+            struct stat st;
+            long        kb = (stat(path, &st) == 0) ? (long)(st.st_size / 1024) : -1;
+            snprintf(line, sizeof(line), "%s  %ld KB\n", e->d_name, kb);
+            httpd_resp_sendstr_chunk(req, line);
+            n++;
+        }
+    }
+    closedir(d);
+
+    if (n == 0)
+    {
+        httpd_resp_sendstr_chunk(req, "(empty)\n");
+    }
+    snprintf(line, sizeof(line), "-- %d file(s)\n", n);
+    httpd_resp_sendstr_chunk(req, line);
+    return httpd_resp_sendstr_chunk(req, NULL);   /* NULL = 结束 chunked 响应 */
+}
+
+/** 删除指定的一张壁纸：GET /wpdel?f=up_2.jpg
+ *  ★ 只允许删 WP_DIR 下的纯文件名：禁 "/" 与 ".."，
+ *    否则 ?f=../../xxx 就能删到别的目录去。 */
+static esp_err_t h_del(httpd_req_t *req)
+{
+    char query[80];
+    char fname[48] = {0};
+
+    httpd_resp_set_type(req, "text/plain; charset=utf-8");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+
+    if (httpd_req_get_url_query_len(req) <= 0 ||
+        httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||
+        httpd_query_key_value(query, "f", fname, sizeof(fname)) != ESP_OK)
+    {
+        return httpd_resp_sendstr(req, "ERR usage: /wpdel?f=up_2.jpg");
+    }
+
+    if (strstr(fname, "..") || strchr(fname, '/') || strchr(fname, '\\'))
+    {
+        return httpd_resp_sendstr(req, "ERR bad name");
+    }
+    size_t l = strlen(fname);
+    if (l < 5 || strcasecmp(fname + l - 4, ".jpg") != 0)
+    {
+        return httpd_resp_sendstr(req, "ERR not a .jpg");
+    }
+
+    char path[96];
+    snprintf(path, sizeof(path), WP_DIR "/%s", fname);
+    if (unlink(path) != 0)
+    {
+        return httpd_resp_sendstr(req, "ERR unlink failed (not found?)");
+    }
+
+    char msg[72];
+    snprintf(msg, sizeof(msg), "OK  deleted %s", fname);
+    ESP_LOGI(TAG, "wallpaper deleted: %s", fname);
+    return httpd_resp_sendstr(req, msg);
+}
+
 /** 下载最近一次录音（调试用）：GET /voicedbg → /sdcard/voice_last.wav
  *  用来把真实录到的音频拷到 PC 分析（波形/频谱/过零率），
  *  区分"麦克风/采样率问题"和"模型识别问题"。 */
@@ -685,6 +766,12 @@ esp_err_t wifi_prov_httpd_start(void)
     static const httpd_uri_t uri_clear = {
         .uri = "/wpclear", .method = HTTP_GET, .handler = h_clear, .user_ctx = NULL,
     };
+    static const httpd_uri_t uri_list = {
+        .uri = "/wplist", .method = HTTP_GET, .handler = h_list, .user_ctx = NULL,
+    };
+    static const httpd_uri_t uri_del = {
+        .uri = "/wpdel", .method = HTTP_GET, .handler = h_del, .user_ctx = NULL,
+    };
     static const httpd_uri_t uri_vdbg = {
         .uri = "/voicedbg", .method = HTTP_GET, .handler = h_voicedbg, .user_ctx = NULL,
     };
@@ -692,6 +779,8 @@ esp_err_t wifi_prov_httpd_start(void)
     httpd_register_uri_handler(s_srv, &uri_save);
     httpd_register_uri_handler(s_srv, &uri_upload);
     httpd_register_uri_handler(s_srv, &uri_clear);
+    httpd_register_uri_handler(s_srv, &uri_list);
+    httpd_register_uri_handler(s_srv, &uri_del);
     httpd_register_uri_handler(s_srv, &uri_vdbg);
 
     ESP_LOGI(TAG, "config page ready (STA 也可访问)");
