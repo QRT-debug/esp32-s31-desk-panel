@@ -1129,6 +1129,7 @@ static void sd_task(void *arg)
     {
         ESP_LOGW(TAG, "sd: no wav to play");
         s_playing = false;
+        s_state   = AUD_STATE_IDLE;   /* ★ 必须复位：漏了会让 UI 永远认为"正在播放" */
         s_task    = NULL;
         vTaskDelete(NULL);
         return;
@@ -1142,6 +1143,7 @@ static void sd_task(void *arg)
     {
         ESP_LOGE(TAG, "sd: open %s failed", path);
         s_playing = false;
+        s_state   = AUD_STATE_IDLE;   /* ★ 必须复位，见上 */
         s_task    = NULL;
         vTaskDelete(NULL);
         return;
@@ -1154,6 +1156,7 @@ static void sd_task(void *arg)
         ESP_LOGE(TAG, "sd: bad wav header (%s)", path);
         fclose(f);
         s_playing = false;
+        s_state   = AUD_STATE_IDLE;   /* ★ 必须复位：voice_last.wav 录音未写完时就会走到这 */
         s_task    = NULL;
         vTaskDelete(NULL);
         return;

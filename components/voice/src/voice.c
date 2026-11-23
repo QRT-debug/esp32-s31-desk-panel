@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sys/stat.h>     /* mkdir：调试录音子目录 */
 #include <math.h>
 
 #include "freertos/FreeRTOS.h"
@@ -293,14 +294,20 @@ static void voice_task(void *arg)
         ESP_LOGI(TAG, "uploading %d bytes (%.1fs speech, peak rms %d)",
                  data_bytes + 44, voiced_ms / 1000.0f, s_peak_rms);
         /* ★ 调试取证：把真实录音存到 SD 卡，可拷到 PC 直接听/分析波形——
-         *   区分"麦克风信号差"和"模型识别差"的唯一硬办法。 */
+         *   区分"麦克风信号差"和"模型识别差"的唯一硬办法。
+         * ★★ 必须放 debug/ 子目录，不能放 /sdcard 根目录：
+         *   根目录是 AUDIO 页的曲目扫描范围（sd_card_scan_wav），而这个文件是
+         *   16kHz 单声道、且录音时会被持续重写 —— 被当成曲目点播放时会解析失败，
+         *   把播放器卡在 LOADING 态（2026-11-23 用户实测踩到）。
+         *   扫描侧也加了同名排除，双保险。 */
         {
-            FILE *dbg = fopen("/sdcard/voice_last.wav", "wb");
+            mkdir("/sdcard/debug", 0777);          /* 已存在返回 EEXIST，无害 */
+            FILE *dbg = fopen("/sdcard/debug/voice_last.wav", "wb");
             if (dbg != NULL)
             {
                 fwrite(wav, 1, (size_t)(data_bytes + 44), dbg);
                 fclose(dbg);
-                ESP_LOGI(TAG, "dump /sdcard/voice_last.wav (%d B)", data_bytes + 44);
+                ESP_LOGI(TAG, "dump /sdcard/debug/voice_last.wav (%d B)", data_bytes + 44);
             }
         }
 

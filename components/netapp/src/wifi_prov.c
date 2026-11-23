@@ -494,7 +494,13 @@ static esp_err_t h_del(httpd_req_t *req)
  *  区分"麦克风/采样率问题"和"模型识别问题"。 */
 static esp_err_t h_voicedbg(httpd_req_t *req)
 {
-    FILE *f = fopen("/sdcard/voice_last.wav", "rb");
+    /* ★ 2026-11-23 起录音改放 debug/ 子目录（根目录会被 AUDIO 页当曲目扫描）。
+     *   先读新路径，再退回旧路径 —— 兼容设备上已存在的旧文件。 */
+    FILE *f = fopen("/sdcard/debug/voice_last.wav", "rb");
+    if (f == NULL)
+    {
+        f = fopen("/sdcard/voice_last.wav", "rb");
+    }
     if (f == NULL)
     {
         httpd_resp_sendstr(req, "no dump");

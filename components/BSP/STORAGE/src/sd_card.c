@@ -202,6 +202,7 @@ bool sd_card_find_first_wav(char *name, size_t len)
     {
         size_t n = strlen(e->d_name);
         if (n > 4 && n < len &&
+            strcmp(e->d_name, "voice_last.wav") != 0 &&   /* ★ 语音调试录音，不是曲目 */
             (e->d_name[n - 4] == '.') &&
             (e->d_name[n - 3] == 'w' || e->d_name[n - 3] == 'W') &&
             (e->d_name[n - 2] == 'a' || e->d_name[n - 2] == 'A') &&
@@ -249,6 +250,7 @@ int sd_card_scan_wav(char names[][64], int max)
     {
         size_t len = strlen(e->d_name);
         if (len > 4 && len < 64 &&
+            strcmp(e->d_name, "voice_last.wav") != 0 &&   /* ★ 同上：语音调试文件必须排除 */
             e->d_name[len - 4] == '.' &&
             (e->d_name[len - 3] == 'w' || e->d_name[len - 3] == 'W') &&
             (e->d_name[len - 2] == 'a' || e->d_name[len - 2] == 'A') &&
