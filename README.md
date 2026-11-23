@@ -3,6 +3,10 @@
 基于 **ESP32-S31**（RISC-V 双核 320 MHz + Wi-Fi 6）的 4.3 寸桌面信息终端。
 LVGL 9.6 驱动 **800×480 RGB 屏**（66 fps），集成天气、榜单、音乐播放、语音助手与时钟壁纸。
 
+<p align="center">
+  <img src="docs/images/03-apps.jpg" width="640" alt="应用首页：九宫格入口">
+</p>
+
 > ⚠️ ESP32-S31 的官方规格书目前是 **预发布 v0.5（PRELIMINARY）**，生态资料极少。
 > 本仓库里的时序参数、音频配置、性能数据都是在这块板子上**实测**得出的，
 > 对后续使用这颗芯片的人应该能省不少时间。
@@ -55,6 +59,27 @@ LVGL 9.6 驱动 **800×480 RGB 屏**（66 fps），集成天气、榜单、音�
 - **配网**：首次上电开 SoftAP（`SmartPanel-XXXX`），浏览器访问 `192.168.4.1` 填 WiFi / PC 地址 / 语音服务参数，全部存 NVS
 - **PC 模拟器** `pc_sim/`：把 LVGL UI 编到 Windows 上跑，改界面不用每次烧板
 - **LED 服务** `led_service`：底色 + 闪烁 + 呼吸 + 彩虹渐变，效果结束自动回底色，任何上层可调
+
+---
+
+## 界面一览
+
+<table>
+  <tr>
+    <td align="center" width="50%"><img src="docs/images/02-weather.jpg" alt="天气页"><br><sub>天气 · 多源 + 本地缓存</sub></td>
+    <td align="center" width="50%"><img src="docs/images/01-clock.jpg" alt="时钟壁纸页"><br><sub>时钟壁纸 · JPEG 硬件解码</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/04-monitor.jpg" alt="PC 监控页"><br><sub>PC 主机监控 · CPU/内存/GPU/磁盘/网络</sub></td>
+    <td align="center"><img src="docs/images/07-audio.jpg" alt="音乐播放页"><br><sub>音乐播放 · TF 卡 / Flash 分区</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/05-hf.jpg" alt="HuggingFace 趋势页"><br><sub>HuggingFace 趋势榜</sub></td>
+    <td align="center"><img src="docs/images/06-bili.jpg" alt="B站热榜页"><br><sub>B 站热榜</sub></td>
+  </tr>
+</table>
+
+> 壁纸由使用者自行上传（设备不含内置图库），支持通过配网页上传 JPEG。
 
 ---
 
@@ -173,4 +198,4 @@ ASR 走本地 SenseVoice-Small（中文 CER 约 7.8%，CPU 上非自回归推理
 
 ## License
 
-暂未指定。如需使用请先联系作者。
+[MIT](LICENSE) © 2026 Quanrutie
