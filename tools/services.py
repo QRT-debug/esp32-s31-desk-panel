@@ -56,7 +56,10 @@ SERVICES = {
 }
 
 PYTHON = sys.executable          # 用当前解释器，避免路径写死
-C_OK, C_BAD, C_DIM, C_END = "\033[32m", "\033[31m", "\033[90m", "\033[0m"
+
+# ★ 不用 ANSI 颜色：cmd.exe 默认不启用 VT 处理，\033[32m 会原样显示成 ←[32m 乱码。
+#   保持空字符串，下面所有格式化语句不用改，输出自动变成纯文本。
+C_OK, C_BAD, C_DIM, C_END = "", "", "", ""
 
 
 # ---------------------------------------------------------------- 基础工具
@@ -213,25 +216,34 @@ def tail(path, n=10):
         return []
 
 
+def dwidth(s):
+    """显示宽度：中日韩字符占 2 列，str.ljust 按字符数算会导致表格错位"""
+    return sum(2 if ord(c) > 0x2E80 else 1 for c in s)
+
+
+def pad(s, width):
+    return s + " " * max(0, width - dwidth(s))
+
+
 def status():
-    print(f"\n{'服务':<10}{'状态':<10}{'端口':<8}{'PID':<8}说明")
-    print("-" * 72)
+    print("\n" + pad("服务", 10) + pad("状态", 10) + pad("端口", 8) + pad("PID", 8) + "说明")
+    print("-" * 74)
     alive = 0
     for name, svc in SERVICES.items():
         up = port_open(svc["port"])
         pid = load_pids().get(name)
         # PID 只在"端口活着且进程还在"时才显示：PID 文件会残留，不能当证据
-        shown_pid = pid if (up and pid and pid_alive(pid)) else "-"
+        shown_pid = str(pid) if (up and pid and pid_alive(pid)) else "-"
         if up:
             alive += 1
-            state = f"{C_OK}运行中{C_END}"
+            state = "运行中"
         else:
-            state = f"{C_BAD}已停止{C_END}"
-        print(f"{name:<10}{state:<19}{svc['port']:<8}{str(shown_pid):<8}{svc['desc']}")
-    print("-" * 72)
+            state = "已停止"
+        print(pad(name, 10) + pad(state, 10) + pad(str(svc["port"]), 8) + pad(shown_pid, 8) + svc["desc"])
+    print("-" * 74)
     print(f"  {alive}/{len(SERVICES)} 个服务在运行    日志目录：logs/")
     if alive < len(SERVICES):
-        print(f"  启动：{C_DIM}python tools/services.py start{C_END}")
+        print(f"  启动：python tools/services.py start")
     print()
 
 

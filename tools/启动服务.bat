@@ -1,20 +1,18 @@
 @echo off
 chcp 65001 >nul
-title S31 服务管理器
+title S31 Services
 cd /d "%~dp0.."
 
-rem 优先用 PATH 里的 python；没有就用已知的 3.13 绝对路径
+rem Keep this file pure ASCII: CMD parses .bat as GBK, Chinese here breaks command parsing
 set "PY=python"
 where python >nul 2>nul
 if errorlevel 1 set "PY=C:\Users\Admin\AppData\Local\Programs\Python\Python313\python.exe"
 
 echo ============================================================
-echo   ESP32-S31 面板 · PC 侧服务
+echo   ESP32-S31 panel  -  PC side services
 echo ------------------------------------------------------------
-echo   monitor  8080  PC 主机监控 + B站热搜中转
-echo   asr      8081  语音识别（SenseVoice）
-echo ------------------------------------------------------------
-echo   设置语音服务（需先启动它，设备才能识别）
+echo   monitor  8080   PC stats + Bilibili hot search relay
+echo   asr      8081   Voice recognition (SenseVoice)
 echo ============================================================
 echo.
 
@@ -22,10 +20,11 @@ echo.
 
 echo.
 echo ------------------------------------------------------------
-echo   服务已在后台运行，关闭本窗口不影响它们。
-echo   停止全部 : "%PY%" tools\services.py stop
-echo   重启某个 : "%PY%" tools\services.py restart asr
-echo   看日志   : "%PY%" tools\services.py log asr
+echo   Services keep running after this window closes.
+echo.
+echo   Stop all :  "%PY%" tools\services.py stop
+echo   Restart  :  "%PY%" tools\services.py restart asr
+echo   Log      :  "%PY%" tools\services.py log asr
 echo ------------------------------------------------------------
 echo.
 pause
