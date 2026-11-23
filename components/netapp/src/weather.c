@@ -322,16 +322,24 @@ static bool fetch_once(wx_data_t *out)
                 snprintf(out->desc, sizeof(out->desc), "%.*s", (int)(sizeof(out->desc) - 1), b);
             }
 
-            /* Updated 改显示【拉取时刻】（设备本地时间）：
-             *   原 display 的是 wttr.in 的 observation_time（UTC、未转时区，且服务端
-             *   缓存滞后 ~1.5h），用户看到"凌晨 04:21"以为没更新。
-             *   拉取时刻 = 数据真正到手的时间，语义最诚实。 */
+            /* observation_time "04:21 AM"（UTC）→ 转用户时区（UTC+8）显示。
+             *   ★ 必须 +8：wttr.in 是英国服务，观测时间给 UTC——不转换用户会把它
+             *   读成本地时间，"凌晨 04:21"与当前差 9 小时的困惑即源于此。 */
+            if (jfind_nth(s_rx, "\"observation_time\"", 1, b, sizeof(b)))
             {
-                time_t now_t = time(NULL);
-                struct tm tm_now;
-                localtime_r(&now_t, &tm_now);
-                snprintf(out->updated, sizeof(out->updated), "%02d:%02d",
-                         tm_now.tm_hour, tm_now.tm_min);
+                int hh = 0, mm = 0;
+                char ap[4] = {0};
+                if (sscanf(b, "%d:%d %2s", &hh, &mm, ap) == 3)
+                {
+                    if ((ap[0] == 'P' || ap[0] == 'p') && hh < 12) { hh += 12; }
+                    if ((ap[0] == 'A' || ap[0] == 'a') && hh == 12) { hh = 0; }
+                    hh += 8;                      /* UTC → CST-8 */
+                    if (hh >= 24) { hh -= 24; }
+                    char tmp[24];   /* GCC 的 format-truncation 只看 int 理论宽度；
+                                     * hh/mm 已是 %02d 语义（0-23/0-59），24B 装得下任何 int 对 */
+                    snprintf(tmp, sizeof(tmp), "%02d:%02d", hh, mm);
+                    strlcpy(out->updated, tmp, sizeof(out->updated));
+                }
             }
 
             /* 城市/省份：nearest_area 后第一个 areaName / region 的 value */
