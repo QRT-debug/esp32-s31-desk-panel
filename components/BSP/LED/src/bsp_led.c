@@ -17,6 +17,7 @@
 #include "led_strip.h"
 
 #include <math.h>
+#include <stdbool.h>
 
 static const char *TAG = "bsp_led";
 
@@ -25,7 +26,17 @@ static const char *TAG = "bsp_led";
 #define GAMMA      2.8f        /* 亮度感知校正（2.2=sRGB，WS2812 经验 2.8） */
 
 static led_strip_handle_t s_strip = NULL;
-static uint8_t s_gamma_lut[256];       /* 感知线性 → PWM 占空 */
+
+/* gamma 表用 Q8（值 = 0~255 的 PWM 放大 256 倍），保留小数供抖动使用。
+ * 若只存 uint8_t，gamma 那一步的四舍五入就先把精度丢掉了。 */
+static uint16_t s_gamma_q8[256];
+
+/* 通道抖动累加器：不足一个 PWM 步的余数留到下一帧 */
+static int s_acc_r, s_acc_g, s_acc_b;
+
+/* 上次真正写进灯珠的 PWM 值（去重：没变化就不刷 RMT） */
+static uint8_t s_last_r = 0xFF, s_last_g = 0xFF, s_last_b = 0xFF;
+static bool    s_last_valid;
 
 void bsp_led_init(void)
 {
@@ -37,7 +48,7 @@ void bsp_led_init(void)
     for (int i = 0; i < 256; i++)
     {
         float v = powf((float)i / 255.0f, GAMMA);
-        s_gamma_lut[i] = (uint8_t)(v * 255.0f + 0.5f);
+        s_gamma_q8[i] = (uint16_t)(v * 255.0f * 256.0f + 0.5f);
     }
 
     led_strip_config_t cfg = {
@@ -63,7 +74,24 @@ void bsp_led_init(void)
     ESP_LOGI(TAG, "WS2812 ready: GPIO%d x%d (gamma %.1f)", LED_GPIO, LED_NUM, (double)GAMMA);
 }
 
-void bsp_led_set_hsv(uint16_t hue, uint8_t sat, uint8_t val)
+/* gamma + 时间抖动：感知值 -> PWM 码值
+ * ★ 抖动必须放在 gamma **之后**——那才是真正的量化点。
+ *   在 gamma 之前抖，量化误差会在 gamma 里被放大/压缩，反而更糟。 */
+static uint8_t gamma_dither(uint8_t percept, int *acc)
+{
+    int q8 = s_gamma_q8[percept];
+    int v  = q8 + *acc;
+    int out = v >> 8;
+    *acc = v - (out << 8);
+    if (out > 255)
+    {
+        out  = 255;
+        *acc = 0;
+    }
+    return (uint8_t)out;
+}
+
+void bsp_led_set_rgb(uint8_t r, uint8_t g, uint8_t b)
 {
     if (s_strip == NULL)
     {
@@ -74,7 +102,29 @@ void bsp_led_set_hsv(uint16_t hue, uint8_t sat, uint8_t val)
         }
     }
 
-    /* HSV → RGB（复刻组件公式，为的是在这里插 gamma 校正） */
+    uint8_t pr = gamma_dither(r, &s_acc_r);
+    uint8_t pg = gamma_dither(g, &s_acc_g);
+    uint8_t pb = gamma_dither(b, &s_acc_b);
+
+    if (s_last_valid && pr == s_last_r && pg == s_last_g && pb == s_last_b)
+    {
+        return;         /* 去重放在抖动之后：抖动引起的逐帧微变要真的发出去 */
+    }
+    s_last_r     = pr;
+    s_last_g     = pg;
+    s_last_b     = pb;
+    s_last_valid = true;
+
+    for (int k = 0; k < LED_NUM; k++)
+    {
+        led_strip_set_pixel(s_strip, (uint32_t)k, pr, pg, pb);
+    }
+    led_strip_refresh(s_strip);
+}
+
+void bsp_led_set_hsv(uint16_t hue, uint8_t sat, uint8_t val)
+{
+    /* HSV -> 感知线性 RGB（与组件公式一致），再交给 set_rgb 做 gamma + 抖动 */
     uint32_t rgb_max = val;
     uint32_t rgb_min = rgb_max * (255 - sat) / 255;
     uint32_t i    = hue / 60;
@@ -91,17 +141,7 @@ void bsp_led_set_hsv(uint16_t hue, uint8_t sat, uint8_t val)
     case 4: r = rgb_min + adj; g = rgb_min; b = rgb_max; break;
     default: r = rgb_max; g = rgb_min; b = rgb_max - adj; break;
     }
-
-    /* ★ gamma 校正：滑块感知线性 → PWM 实际占空 */
-    r = s_gamma_lut[r];
-    g = s_gamma_lut[g];
-    b = s_gamma_lut[b];
-
-    for (int k = 0; k < LED_NUM; k++)
-    {
-        led_strip_set_pixel(s_strip, (uint32_t)k, r, g, b);
-    }
-    led_strip_refresh(s_strip);
+    bsp_led_set_rgb((uint8_t)r, (uint8_t)g, (uint8_t)b);
 }
 
 void bsp_led_off(void)
@@ -110,4 +150,7 @@ void bsp_led_off(void)
     {
         led_strip_clear(s_strip);
     }
+    s_acc_r = s_acc_g = s_acc_b = 0;
+    s_last_r = s_last_g = s_last_b = 0;
+    s_last_valid = true;        /* 灭是确定状态，去重时可以直接命中 */
 }

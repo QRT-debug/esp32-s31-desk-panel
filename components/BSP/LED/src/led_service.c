@@ -30,11 +30,13 @@ static const char *TAG = "ledsvc";
  *   每帧亮度要跨 4 个灰阶，抖动也来不及积分，看起来就是"一格一格"。 */
 #define TICK_MS     5
 
-/* ★ 全局亮度上限（0~255）：WS2812 近距离直视很刺眼，统一在这里压一档。
- *   放在 write_hsv_q8 这个**唯一出口**上，底色/闪烁/呼吸/彩虹全部自动受约束，
- *   不必逐个调用点去改颜色值。
- *   WS2812 亮度近似与 PWM 占空比线性 ⇒ 48/255 ≈ 满亮的 19%。 */
-#define LED_MASTER_SCALE   48
+/* ★ 全局亮度上限（0~255，**感知线性**，不是 PWM 占空）。
+ *   ⚠ 这里踩过坑：bsp_led 内部有 gamma 2.8 校正，val 到 PWM 是幂律映射。
+ *   之前设 48 以为"19%"，实际 PWM = (48/255)^2.8×255 ≈ 2 级 ⇒ 几乎全黑，
+ *   色相过渡只剩两三个码值可表达，怎么调动画都"不丝滑"。
+ *   现在 140 ⇒ PWM = (140/255)^2.8×255 ≈ 19%（约 48 级，配合抖动足够细腻）。
+ *   想更亮/更暗改这一个数即可：180≈38%，110≈12%。 */
+#define LED_MASTER_SCALE   140
 
 /* 定点 Q8：把 0~255 的量放大 256 倍，让亮度有亚整数精度（抖动需要） */
 #define Q8_ONE     256
@@ -63,12 +65,6 @@ static uint8_t   s_fx_s, s_fx_v;
 static int       s_on_ms, s_off_ms, s_times;
 static int       s_period_ms;
 static int64_t   s_t_start;
-
-/* 输出层状态 */
-static int      s_dither;                    /* 亮度抖动的余数累加器（0~255） */
-static bool     s_last_valid;
-static uint16_t s_last_h;
-static uint8_t  s_last_s, s_last_v;
 
 /* ---------------- 颜色转换 ---------------- */
 
@@ -143,15 +139,19 @@ static led_rgb_t hsv_to_rgb(uint16_t hue, uint8_t sat, uint8_t val)
 
 /**
  * 按 HSV 输出，亮度用 Q8（0~Q8_MAX）。
- * 所有效果都走这里，这样"压亮度"和"抖动"只写一次，新增效果不会漏掉。
+ * 所有效果都走这里，这样"压亮度"只写一次，新增效果不会漏掉。
+ *
+ * ★ 这里**不做**抖动/去重：真正的量化点在 bsp_led 的 gamma 之后，
+ *   抖动必须放在那儿才有效（见 bsp_led_set_rgb）。
  */
 static void write_hsv_q8(uint16_t h, uint8_t s, int v_q8)
 {
     if (v_q8 <= 0)
     {
-        v_q8 = 0;
+        bsp_led_off();
+        return;
     }
-    else if (v_q8 > Q8_MAX)
+    if (v_q8 > Q8_MAX)
     {
         v_q8 = Q8_MAX;
     }
@@ -159,38 +159,19 @@ static void write_hsv_q8(uint16_t h, uint8_t s, int v_q8)
     /* 全局亮度上限：在 Q8 域做乘法，不丢小数 */
     v_q8 = v_q8 * LED_MASTER_SCALE / 255;
 
-    /* ★ 时间抖动：把不足一个灰阶的余数累计到下一帧。
-     *   200Hz 下抖动频率远高于人眼融合阈值 ⇒ 看到的是中间亮度，不是闪烁。
-     *   这是把"8bit 硬件的 48 级可用亮度"变成"等效 1/256 级"的关键。 */
-    int acc  = v_q8 + s_dither;
-    int v    = acc >> 8;
-    s_dither = acc - (v << 8);
-    if (v > 255)
-    {
-        v = 255;
-        s_dither = 0;
-    }
-    if (v < 0)
-    {
-        v = 0;
-        s_dither = 0;
-    }
-
-    if (s_last_valid && h == s_last_h && s == s_last_s && (uint8_t)v == s_last_v)
-    {
-        return;     /* 去重：颜色没变就不碰 RMT，省总线时间 */
-    }
-    s_last_h     = h;
-    s_last_s     = s;
-    s_last_v     = (uint8_t)v;
-    s_last_valid = true;
-
-    if (v == 0)
+    int v8 = (v_q8 + 128) / 256;        /* Q8 -> 感知线性 8bit（四舍五入） */
+    if (v8 <= 0)
     {
         bsp_led_off();
         return;
     }
-    bsp_led_set_hsv(h, s, (uint8_t)v);
+    if (v8 > 255)
+    {
+        v8 = 255;
+    }
+
+    led_rgb_t c = hsv_to_rgb(h, s, (uint8_t)v8);
+    bsp_led_set_rgb((uint8_t)(c >> 16), (uint8_t)(c >> 8), (uint8_t)c);
 }
 
 /* 效果输出：effect 色按 scale（Q8）缩放亮度 */
@@ -239,7 +220,6 @@ static int triangle_q8(int64_t el, int period_ms)
 static void fx_end_locked(void)
 {
     s_fx = FX_NONE;
-    s_dither = 0;
     write_hsv_q8(s_base_h, s_base_s, (int)s_base_v * Q8_ONE);
 }
 
@@ -297,32 +277,28 @@ static void led_task(void *arg)
             }
 
             /* 色相：一个周期走完 360°，视觉上颜色连续流转。
-             * 360 级色相在 3.6s/圈下约每 10ms 变 1°，人眼已分辨不出。 */
+             * 360 级色相在 3.6s/圈下每 10ms 变 1°，人眼已分辨不出。 */
             int p = (int)(el % s_period_ms);
             uint16_t hue = (uint16_t)((int64_t)p * 360 / s_period_ms);
 
-            /* 亮度：同周期呼吸两次（明暗起伏让渐变更"活"），抛物线平滑 */
-            int lb   = s_period_ms / 2;
-            if (lb < 16)
-            {
-                lb = 16;
-            }
-            int brightness_q8 = ease_q8(triangle_q8(el, lb));
+            /* ★ 亮度恒定，不做呼吸。
+             *   之前每圈呼吸两次，谷底亮度经 gamma 后只剩 1~2 级 PWM
+             *   ⇒ 用户看到的是"渐变中间灭了好几次"。颜色渐变本身已经
+             *   足够有动感，不需要再叠一层明暗。 */
+            int v_q8 = Q8_MAX;
 
-            /* 留 40 的底亮度（12% 附近）：全灭那一下看起来像灯坏了 */
-            int v_q8 = 40 * Q8_ONE + (int)((int64_t)brightness_q8 * 215 * Q8_ONE / Q8_MAX);
-
-            /* ★ 感知亮度补偿：全饱和色相环上，黄的视觉亮度是蓝的近 8 倍
-             *   （luma 226 vs 29）。不补偿的话转一圈会明显"忽明忽暗"，
-             *   看起来像灯在抽。这里按 luma 反向压一半幅度，把波动收到 1.5 倍以内。 */
-            led_rgb_t probe = hsv_to_rgb(hue, 255, 255);
+            /* 轻度感知亮度补偿：纯色相环上黄(226)/绿(149) 比蓝(29) 亮得多，
+             * 只压不抬（抬高蓝紫会超出亮度上限，物理上也做不到等亮度）。 */
+            led_rgb_t probe = hsv_to_rgb(hue, 220, 255);
             int luma = (299 * (int)((probe >> 16) & 0xFF) +
                         587 * (int)((probe >> 8) & 0xFF) +
                         114 * (int)(probe & 0xFF)) / 1000;
-            int comp = 255 + (128 - luma) / 2;
-            v_q8 = v_q8 * comp / 255;
+            if (luma > 128)
+            {
+                v_q8 = v_q8 * (255 - (luma - 128) / 2) / 255;
+            }
 
-            write_hsv_q8(hue, 255, v_q8);
+            write_hsv_q8(hue, 220, v_q8);
             break;
         }
 
@@ -386,7 +362,6 @@ static void set_base_hsv(uint16_t h, uint8_t s, uint8_t v)
     s_base_v = v;
     if (s_fx == FX_NONE)
     {
-        s_dither = 0;       /* 丢掉上一个效果残留的抖动余数，避免第一帧偏亮/偏暗 */
         write_hsv_q8(h, s, (int)v * Q8_ONE);
     }
     xSemaphoreGive(s_mtx);
@@ -443,7 +418,6 @@ void led_flash(uint8_t r, uint8_t g, uint8_t b, int on_ms, int off_ms, int times
     s_off_ms   = off_ms;
     s_times    = times;
     s_t_start  = esp_timer_get_time() / 1000;
-    s_dither   = 0;
     s_fx       = FX_FLASH;
     xSemaphoreGive(s_mtx);
 }
@@ -471,7 +445,6 @@ void led_breath(uint8_t r, uint8_t g, uint8_t b, int period_ms)
     s_fx_v      = v;
     s_period_ms = period_ms;
     s_t_start   = esp_timer_get_time() / 1000;
-    s_dither    = 0;
     s_fx        = FX_BREATH;
     xSemaphoreGive(s_mtx);
 }
@@ -491,7 +464,6 @@ void led_rainbow(int period_ms)
     xSemaphoreTake(s_mtx, portMAX_DELAY);
     s_period_ms = period_ms;
     s_t_start   = esp_timer_get_time() / 1000;
-    s_dither    = 0;
     s_fx        = FX_RAINBOW;
     xSemaphoreGive(s_mtx);
 }
