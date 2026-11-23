@@ -85,3 +85,6 @@ Temp/
 live*.log
 boot_capture.log
 disabled_components/
+
+# 语音模型（1GB，本地下载，不进仓库）
+models/

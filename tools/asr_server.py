@@ -15,7 +15,13 @@
      set WHISPER_SIZE=base            （tiny/base/small/medium，越大越准越慢）
      python tools/asr_server.py
 
-  3) 本地 whisper.cpp（免费离线，需要先下载模型）
+  3) 本地 SenseVoice-Small（★ 中文首选：CER 约为 whisper 一半，CPU 极快）
+     set ASR_BACKEND=sensevoice
+     python tools/asr_server.py
+     （模型目录默认 models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17，
+       可用 SV_DIR 覆盖；用 sherpa-onnx 推理，无需 PyTorch）
+
+  4) 本地 whisper.cpp（免费离线，需要先下载模型）
      set ASR_BACKEND=whisper_cpp
      set WHISPER_EXE=C:\\whisper\\whisper-cli.exe
      set WHISPER_MODEL=C:\\whisper\\ggml-base.bin
@@ -32,7 +38,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("ASR_PORT", "8081"))
-BACKEND = os.environ.get("ASR_BACKEND", "openai").lower()
+BACKEND = os.environ.get("ASR_BACKEND", "sensevoice").lower()   # 默认中文专用：CER 约为 whisper 一半，CPU 30x 实时
 
 
 def asr_openai(wav_path: str, lang: str = "zh") -> str:
@@ -105,6 +111,52 @@ def asr_local(wav_path: str, lang: str = "zh") -> str:
     return "".join(s.text for s in segs).strip()
 
 
+_sv_rec = None
+
+SV_DIR_DEFAULT = "models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"
+
+
+def asr_sensevoice(wav_path: str, lang: str = "zh") -> str:
+    """本地 SenseVoice-Small（sherpa-onnx 推理，非自回归，中文 CER ~7.8%）。
+
+    ★ 为什么不用 whisper：whisper 中文训练数据占比低，同等规模 CER 约两倍；
+      SenseVoice 是中文专用、非自回归（一次前向出整句），CPU 上就有 17x 实时速度。
+    """
+    global _sv_rec
+    if _sv_rec is None:
+        import sherpa_onnx
+        d = os.environ.get("SV_DIR", SV_DIR_DEFAULT)
+        if not os.path.isdir(d):
+            raise RuntimeError(f"模型目录不存在: {d}")
+        # int8 量化版优先（体积小、速度更快，精度损失可忽略）
+        model = os.path.join(d, "model.int8.onnx")
+        if not os.path.exists(model):
+            model = os.path.join(d, "model.onnx")
+        print(f"[asr] loading SenseVoice: {os.path.basename(model)}", flush=True)
+        _sv_rec = sherpa_onnx.OfflineRecognizer.from_sense_voice(
+            model=model,
+            tokens=os.path.join(d, "tokens.txt"),
+            use_itn=True,          # 数字/标点规范化
+            num_threads=4,
+            debug=False,
+        )
+        print("[asr] SenseVoice ready", flush=True)
+
+    import wave
+    import numpy as np
+    with wave.open(wav_path, "rb") as w:
+        sr = w.getframerate()
+        a = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32) / 32768.0
+    if sr != 16000:
+        n = int(len(a) * 16000 / sr)
+        a = np.interp(np.linspace(0, len(a) - 1, n), np.arange(len(a)), a).astype(np.float32)
+
+    st = _sv_rec.create_stream()
+    st.accept_waveform(16000, a)
+    _sv_rec.decode_stream(st)
+    return st.result.text.strip()
+
+
 def asr_whisper_cpp(wav_path: str, lang: str = "zh") -> str:
     exe = os.environ.get("WHISPER_EXE", "")
     model = os.environ.get("WHISPER_MODEL", "")
@@ -140,6 +192,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if BACKEND == "openai":
                 text = asr_openai(path)
+            elif BACKEND == "sensevoice":
+                text = asr_sensevoice(path)
             elif BACKEND == "local":
                 text = asr_local(path)
             else:
@@ -167,6 +221,8 @@ def main():
         print("警告：OPENAI_API_KEY 未设置，请求会失败", flush=True)
     if BACKEND == "whisper_cpp" and not os.environ.get("WHISPER_EXE"):
         print("警告：WHISPER_EXE 未设置，请求会失败", flush=True)
+    if BACKEND == "sensevoice":
+        print(f"模型目录: {os.environ.get('SV_DIR', SV_DIR_DEFAULT)}", flush=True)
     if BACKEND == "local":
         print(f"本地模型: {os.environ.get('WHISPER_SIZE', 'base')} "
               f"(HF_ENDPOINT={os.environ.get('HF_ENDPOINT', 'https://hf-mirror.com')})", flush=True)

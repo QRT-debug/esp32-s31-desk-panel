@@ -857,3 +857,47 @@ faster-whisper 直接识别：**`测试一下`** ✔（修复前是"呵呵,遇�
 
 **★ 教训**：给"按枚举分发"的框架加新枚举值，**必须同步所有 switch**。
 更稳的做法是让 `default` 具备兜底行为（推帧/渲染占位），而不是静默跳过。
+
+### 11-23 18:06 语音识别换 SenseVoice-Small（中文 CER 约为 whisper 一半，CPU 快 5 倍）
+
+**动机**：whisper 中文训练数据占比低，同等规模 CER 约是中文专用模型的两倍
+（官方 benchmark：SenseVoice 7.81% / Paraformer 10.18% / whisper-large-v3 20.02%）。
+
+**选型过程（踩了两个坑）**：
+1. **funasr-onnx 装不上**：它依赖的 numpy 在 Python 3.13 上要现场编译，`package metadata`
+   生成失败 ⇒ 放弃该路线。
+2. **改用 sherpa-onnx**：有预编译 wheel，**10 秒装好**（2.0.3），兼容 Python 3.13。
+3. **模型包下载被截断**：`sherpa-onnx-sense-voice-...-2024-07-17.tar.bz2` 完整 **999MB**，
+   curl 第一次只拿到 480MB 却返回成功 ⇒ tar 报 `Truncated tar archive`
+   ⇒ ONNX 加载报 `Protobuf parsing failed`。
+   **修法**：先 `curl -sIL` 查远端 Content-Length，再 `curl -C -` 断点续传补齐，比对字节数一致后才解压。
+
+**实测对比（同一段 2.37s 录音，i5-14600K）**：
+
+| 模型 | 加载 | 识别耗时 | 结果 |
+|---|---|---|---|
+| faster-whisper base | 1.2s | 0.45s | 测试一下。 |
+| faster-whisper small | 19.0s | 1.24s | 测试一下。 |
+| **SenseVoice-Small (int8)** | **1.38s** | **0.08s** | 测试一下。 |
+
+⇒ 干净录音上三者都对，但 **SenseVoice 快 5.6 倍**，且中文抗噪/口音能力按公开 benchmark
+显著更强（短句干净环境下 base 也够用，差距在嘈杂/长句/口音时体现）。
+
+**落地**：
+- `tools/asr_server.py` 新增 `sensevoice` 后端，**并设为默认**（`ASR_BACKEND` 可覆盖）；
+- 模型走 `sherpa_onnx.OfflineRecognizer.from_sense_voice()`，优先 `model.int8.onnx`（198MB），
+  回退 `model.onnx`（894MB）；
+- **设备端零改动**（HTTP 协议不变）；
+- `models/` 加入 `.gitignore`（1GB，不进仓库）。
+
+**模型获取**（重建环境时用）：
+```
+curl -L -C - -o models/sv.tar.bz2 \
+  https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2
+# 先 curl -sIL 确认 Content-Length = 1047870769，再解压（否则 tar 会静默截断）
+tar -xjf models/sv.tar.bz2 -C models/
+pip install sherpa-onnx
+```
+
+**★ 教训**：`curl` 返回 0 / HTTP 200 **不代表文件完整**。大文件下载必须
+①查远端 Content-Length ②`-C -` 续传 ③比对本地字节数 ④解压时留意 `Truncated` 警告。
