@@ -31,7 +31,7 @@ import tempfile
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-PORT = int(os.environ.get("ASR_PORT", "8080"))
+PORT = int(os.environ.get("ASR_PORT", "8081"))
 BACKEND = os.environ.get("ASR_BACKEND", "openai").lower()
 
 

@@ -474,3 +474,33 @@ const char *wifi_prov_ssid(void)
 {
     return "ESP32-S31-SETUP";
 }
+
+/* ---------------- 语音组件桩（模拟器只验证 UI 渲染） ---------------- */
+#include "voice.h"
+
+static voice_cb_t s_sim_voice_cb = NULL;
+static bool       s_sim_listening = false;
+
+esp_err_t voice_init(void) { return ESP_OK; }
+
+int voice_subscribe(voice_cb_t cb)
+{
+    s_sim_voice_cb = cb;
+    return 0;
+}
+
+void voice_set_mode(voice_mode_t m) { (void)m; }
+voice_mode_t voice_get_mode(void) { return VOICE_MODE_TASK; }
+
+bool voice_listen(void)
+{
+    /* 模拟器直接吐一段中文结果，验证中文字形/换行/排版 */
+    if (s_sim_voice_cb != NULL)
+    {
+        voice_evt_t ev = { .type = VOICE_EV_TEXT, .text = "今天天气不错，帮我打开屏保。" };
+        s_sim_voice_cb(&ev);
+    }
+    return true;
+}
+
+bool voice_is_listening(void) { return s_sim_listening; }

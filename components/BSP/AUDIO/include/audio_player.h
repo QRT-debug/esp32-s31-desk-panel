@@ -90,5 +90,8 @@ int audio_player_mic_level(void);
  *  返回样本数；<0 失败（播放态/未初始化） */
 int audio_rec_read_mono(int16_t *out, int max_samples, int timeout_ms);
 
+/** 每次开始录音前调用：重置通道判定，让本次重新锁定（防跨次残留） */
+void audio_rec_begin(void);
+
 /** ★ 麦克风诊断：读一帧打印每通道 DC/min/max（排查数据质量用） */
 void audio_player_mic_debug_log(void);

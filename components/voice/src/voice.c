@@ -81,6 +81,30 @@ static void wav_header(uint8_t *h, uint32_t data_bytes)
 
 /* ---------------- ASR 上传 ---------------- */
 
+/* ★ perform() 之后 read_response 读不到 body（内部已消费）——用事件回调收。 */
+typedef struct
+{
+    char *buf;
+    int   len;
+    int   cap;
+} http_rx_t;
+
+static esp_err_t on_http_rx(esp_http_client_event_t *e)
+{
+    if (e->event_id == HTTP_EVENT_ON_DATA && e->user_data != NULL)
+    {
+        http_rx_t *r = (http_rx_t *)e->user_data;
+        int n = e->data_len;
+        if (n > 0 && r->len + n < r->cap)
+        {
+            memcpy(r->buf + r->len, e->data, (size_t)n);
+            r->len += n;
+            r->buf[r->len] = '\0';
+        }
+    }
+    return ESP_OK;
+}
+
 static bool asr_upload(const uint8_t *wav, int wav_len, char *out, size_t out_sz)
 {
     const app_cfg_t *c = app_cfg_get();
@@ -93,13 +117,18 @@ static bool asr_upload(const uint8_t *wav, int wav_len, char *out, size_t out_sz
     else
     {
         /* PC 中转：http://pc_host:pc_port/api/asr（key 不出 PC） */
-        snprintf(url, sizeof(url), "http://%s:%u/api/asr", c->pc_host, (unsigned)c->pc_port);
+        snprintf(url, sizeof(url), "http://%s:8081/api/asr", c->pc_host);   /* 8080 是 pc_monitor，避开 */
     }
 
+    http_rx_t rx = { .buf = out, .len = 0, .cap = (int)out_sz };
+    out[0] = '\0';
+
     esp_http_client_config_t cfg = {
-        .url        = url,
-        .method     = HTTP_METHOD_POST,
-        .timeout_ms = 15000,
+        .url           = url,
+        .method        = HTTP_METHOD_POST,
+        .timeout_ms    = 15000,
+        .event_handler = on_http_rx,
+        .user_data     = &rx,
     };
     esp_http_client_handle_t cli = esp_http_client_init(&cfg);
     if (cli == NULL)
@@ -119,17 +148,13 @@ static bool asr_upload(const uint8_t *wav, int wav_len, char *out, size_t out_sz
     bool ok = false;
     if (err == ESP_OK && code == 200)
     {
-        int len = esp_http_client_read_response(cli, out, (int)out_sz - 1);
-        if (len > 0)
+        int len = rx.len;
+        while (len > 0 && (out[len - 1] == '\n' || out[len - 1] == '\r' || out[len - 1] == ' '))
         {
-            out[len] = '\0';
-            /* 去掉尾部换行 */
-            while (len > 0 && (out[len - 1] == '\n' || out[len - 1] == '\r' || out[len - 1] == ' '))
-            {
-                out[--len] = '\0';
-            }
-            ok = (len > 0);
+            out[--len] = '\0';
         }
+        ok = (len > 0);
+        ESP_LOGI(TAG, "asr http 200, body %d B", len);
     }
     else
     {
@@ -163,6 +188,8 @@ static void voice_task(void *arg)
 
     char text[512];
 
+    int s_peak_rms = 0;     /* 本次录音峰值（每次开始清零） */
+
     while (1)
     {
         if (!s_trigger)
@@ -172,6 +199,8 @@ static void voice_task(void *arg)
         }
         s_trigger   = 0;
         s_listening = true;
+        audio_rec_begin();      /* 重置通道判定，本次录音重新锁定 */
+        s_peak_rms = 0;         /* ★ 每次清零：static 累计会让日志数据完全失真 */
         ESP_LOGI(TAG, "listening (max %us, vad %u)", (unsigned)max_sec,
                  (unsigned)app_cfg_get()->vad_thresh);
 
@@ -179,6 +208,7 @@ static void voice_task(void *arg)
         int  silence_ms = 0;
         int  voiced_ms  = 0;
         bool started    = false;
+        /* s_peak_rms 已提升到任务内（每次录音清零），见下方 while 前 */
 
         while (used < cap_samples)
         {
@@ -202,6 +232,10 @@ static void voice_task(void *arg)
             used += n;
             int block_ms = n * 1000 / REC_RATE_HZ;
 
+            if (rms > s_peak_rms)
+            {
+                s_peak_rms = rms;
+            }
             if (rms > (int)app_cfg_get()->vad_thresh)
             {
                 if (!started)
@@ -235,10 +269,35 @@ static void voice_task(void *arg)
         memcpy(wav + 44, pcm, (size_t)data_bytes);
         emit(VOICE_EV_SPEECH_END, NULL);
 
-        ESP_LOGI(TAG, "uploading %d bytes (%.1fs speech)", data_bytes + 44, voiced_ms / 1000.0f);
+        ESP_LOGI(TAG, "uploading %d bytes (%.1fs speech, peak rms %d)",
+                 data_bytes + 44, voiced_ms / 1000.0f, s_peak_rms);
+        /* ★ 调试取证：把真实录音存到 SD 卡，可拷到 PC 直接听/分析波形——
+         *   区分"麦克风信号差"和"模型识别差"的唯一硬办法。 */
+        {
+            FILE *dbg = fopen("/sdcard/voice_last.wav", "wb");
+            if (dbg != NULL)
+            {
+                fwrite(wav, 1, (size_t)(data_bytes + 44), dbg);
+                fclose(dbg);
+                ESP_LOGI(TAG, "dump /sdcard/voice_last.wav (%d B)", data_bytes + 44);
+            }
+        }
+
         if (asr_upload(wav, data_bytes + 44, text, sizeof(text)))
         {
             ESP_LOGI(TAG, "asr: \"%s\"", text);
+            /* ★ 打字节：若尾部是半个 UTF-8 字符（被截断），LVGL 会渲染成方框 */
+            {
+                char hx[200] = { 0 };
+                int  ln = (int)strlen(text);
+                for (int k = 0; k < ln && k < 60; k++)
+                {
+                    char t2[5];
+                    snprintf(t2, sizeof(t2), "%02X ", (unsigned char)text[k]);
+                    strlcat(hx, t2, sizeof(hx));
+                }
+                ESP_LOGI(TAG, "asr bytes(%d): %s", ln, hx);
+            }
             emit(VOICE_EV_TEXT, text);
         }
         else

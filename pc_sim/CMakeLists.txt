@@ -34,6 +34,7 @@ set(UI_SRC
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/ui/src/scene_hf.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/ui/src/scene_ai_rank.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/ui/src/scene_bili.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/ui/src/scene_voice.c"
 )
 
 file(GLOB FONT_SRC CONFIGURE_DEPENDS
@@ -62,6 +63,7 @@ target_include_directories(pc_sim PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/BSP/LCD"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/BSP/LED/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/netapp/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/voice/include"
     "${LVGL_ROOT}/demos"
 )
 

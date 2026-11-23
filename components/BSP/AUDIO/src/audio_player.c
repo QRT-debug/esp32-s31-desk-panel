@@ -507,17 +507,27 @@ static void adc_manual_init(void)
         {0x20, 0x60},                                          /* ADC: 16bit I2S 立体声 */
         {0x40, 0x60},                                          /* DAC 格式（回 PLAY 时旧驱动重写） */
         {0x02, 0x00},
-        /* ★ 11-20 01:10 完全复刻厂商例程运行态（录音实测有声）：
-         *   厂商 no_mclk=true（ES8389 吃 BCLK 512k），但 set_fs 按软件 dataformat
-         *   的 mclk=4.096M 查表 → coeff ratio=256 行。厂商源码 coeff_div 103 行。 */
-        {0x04, 0x00}, {0x05, 0x41}, {0x06, 0x04}, {0x07, 0xC0},
-        {0x08, 0x01}, {0x09, 0xD1}, {0x0A, 0x90},
-        {0x0B, 0x04}, {0x0C, 0x01}, {0x0D, 0x00},
+        /* ★★★ 11-23 17:30 修正：原来照抄厂商 ratio=256 行（假设 MCLK=4.096MHz），
+         *   但本板 MCLK 脚未接（R56 标 NC），codec 只有 BCLK = 32×16k = **512kHz**
+         *   当主时钟 —— 分频比差 8 倍！！
+         *
+         *   后果（实测）：ADC 数字滤波器带宽被设成 16k/8 = 2kHz，截止约 900Hz
+         *     ⇒ 录到的音频 83% 能量压在 600Hz 以下、辅音高频全丢，
+         *       听起来"像被子蒙着嘴"，ASR 只能瞎猜（"测试一下"→"呵呵,遇到"）。
+         *
+         *   修法：改用 **ratio=32** 那行（coeff_div[0] = {32,256000,8000}）的分频+滤波值。
+         *     512kHz ÷ 32 = 16kHz ✔ 与 I2S LRCK 一致，滤波器也回到 16k 带宽。
+         *   原值（ratio=256，宽带错误）保留在下方注释，便于回退：
+         *     0x05=41 0x06=04 0x07=C0 0x08=01 0x09=D1 0x0A=90
+         *     0x0C=01 0x0D=00(divider 256)  0x43=00  0x16=12 0x18=31 0x19=0E */
+        {0x04, 0x00}, {0x05, 0x57}, {0x06, 0x84}, {0x07, 0xD0},
+        {0x08, 0x03}, {0x09, 0xC1}, {0x0A, 0xB0},
+        {0x0B, 0x04}, {0x0C, 0x00}, {0x0D, 0x20},              /* MCLK divider 256 -> 32 */
         {0x0F, 0x00}, {0x11, 0x00},
         {0x21, 0x1F}, {0x22, 0x7F}, {0x2F, 0xC0},
         {0x30, 0xC0}, {0x31, 0x00},
-        {0x16, 0x12}, {0x17, 0x09}, {0x18, 0x31}, {0x19, 0x0E},  /* coeff 行覆盖 open 值 */
-        {0x44, 0x00}, {0x41, 0xFF}, {0x42, 0x7F}, {0x43, 0x00},
+        {0x16, 0x09}, {0x17, 0x09}, {0x18, 0x19}, {0x19, 0x07},
+        {0x44, 0x00}, {0x41, 0xFF}, {0x42, 0x7F}, {0x43, 0x01},
         {0x49, 0x0F}, {0x4C, 0xC0},
         {0x00, 0x00}, {0x03, 0xC3}, {0x00, 0x01},              /* 解复位 + 时钟开 */
         {0x4D, 0x00},
@@ -1311,6 +1321,18 @@ uint32_t audio_player_duration_ms(void)
  * @param timeout_ms   阻塞超时
  * @return 实际输出样本数；<0 失败（PLAY 态/句柄未开）
  */
+/* ★★ 录音通道锁定：绝不能每块都重新判"哪路能量大"——
+ *   两路能量接近时通道会逐块跳变，音频被切成两段不同信号（甚至相位相反），
+ *   ASR 直接听不懂（实测"测试一下"被识别成"来证据一下"）。
+ *   正确做法：首次遇到有信号的块时判定一次，之后整段锁定。
+ *   -1 = 待判定，0 = 左，1 = 右。 */
+static int s_rec_use_r = -1;
+
+void audio_rec_begin(void)
+{
+    s_rec_use_r = -1;
+}
+
 int audio_rec_read_mono(int16_t *out, int max_samples, int timeout_ms)
 {
     if (s_rx == NULL || !s_rec_open || out == NULL || max_samples <= 0)
@@ -1349,7 +1371,13 @@ int audio_rec_read_mono(int16_t *out, int max_samples, int timeout_ms)
         pl += (long)vl * vl;
         pr += (long)vr * vr;
     }
-    int use_r = (pr > pl);
+    if (s_rec_use_r < 0 && (pl > 4000 || pr > 4000))
+    {
+        s_rec_use_r = (pr > pl) ? 1 : 0;   /* 有信号才判定，之后整段锁定 */
+        ESP_LOGI("audio", "rec channel locked to %s (L=%ld R=%ld)",
+                 s_rec_use_r ? "R" : "L", pl, pr);
+    }
+    int use_r = (s_rec_use_r == 1);
 
     int n = (frames < max_samples) ? frames : max_samples;
     for (int i = 0; i < n; i++)

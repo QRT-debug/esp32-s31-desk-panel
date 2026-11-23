@@ -3,5 +3,5 @@
 idf_component_register(
     SRC_DIRS     "src" "src/fonts"
     INCLUDE_DIRS "include"
-    REQUIRES     BSP netapp esp_timer nvs_flash lvgl__lvgl esp_mm esp_driver_jpeg   # esp_mm: esp_cache_msync（帧缓冲 cache 回写）
+    REQUIRES     BSP netapp voice esp_timer nvs_flash lvgl__lvgl esp_mm esp_driver_jpeg   # esp_mm: esp_cache_msync（帧缓冲 cache 回写）
 )

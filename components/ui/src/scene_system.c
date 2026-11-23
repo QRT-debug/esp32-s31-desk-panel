@@ -29,6 +29,7 @@
 #include "bsp_led.h"
 #include "wifi_config.h"
 #include "wifi_prov.h"
+#include "voice.h"
 #include "wifi_sta.h"
 
 /* 11-20 主题化：指向可切换色板（本页还承载"深色模式"开关） */
@@ -47,7 +48,14 @@ static lv_obj_t *s_lbl_log;      /* 底部：最近日志 */
 static lv_obj_t *s_lbl_btn;      /* WiFi 按钮文字 */
 static lv_obj_t *s_btn_wifi;
 static lv_obj_t *s_lbl_bl;      /* 背光百分比 */
-static lv_obj_t *s_bar_mic;     /* 麦克风电平条 */
+static lv_obj_t *s_bar_mic;
+static lv_obj_t *s_lbl_asr;
+
+/* ★ 语音识别结果桥：voice 回调在 voice_task 上下文，绝不能直接碰 LVGL
+ *   （lv_async_call 也死锁过）——只写标志，由本场景 draw 里轮询消费。 */
+static char          s_asr_buf[256];
+static volatile bool s_asr_ready;
+static bool          s_asr_subscribed;     /* 麦克风电平条 */
 static lv_obj_t *s_lbl_mic;     /* 麦克风电平数值 */
 static lv_obj_t *s_slider_hue;  /* RGB 灯色相滑块 */
 static lv_obj_t *s_slider_val;  /* RGB 灯亮度滑块 */
@@ -207,6 +215,22 @@ static void prov_close_cb(lv_event_t *e)
     {
         lv_obj_del(mask);
     }
+}
+
+static void on_voice_evt(const voice_evt_t *e)
+{
+    if (e->type == VOICE_EV_TEXT || e->type == VOICE_EV_ERROR)
+    {
+        snprintf(s_asr_buf, sizeof(s_asr_buf), "%s",
+                 e->text ? e->text : "(empty)");
+        s_asr_ready = true;
+    }
+}
+
+static void voice_cb(lv_event_t *e)
+{
+    (void)e;
+    ui_goto_scene(UI_SCENE_VOICE);   /* 独立语音页（本页只做入口） */
 }
 
 static void prov_cb(lv_event_t *e)
@@ -500,6 +524,27 @@ static void build_system(void)
         lv_obj_center(ckl);
     }
 
+    /* ---- 语音按钮（MIC 行右侧空位）+ 识别结果行 ---- */
+    {
+        lv_obj_t *vb = lv_obj_create(p3);
+        lv_obj_set_size(vb, 100, 26);
+        lv_obj_set_pos(vb, 520, 36);
+        lv_obj_set_style_bg_color(vb, lv_color_hex(0xFF9A3D), 0);
+        lv_obj_set_style_bg_opa(vb, LV_OPA_COVER, 0);
+        lv_obj_set_style_radius(vb, 8, 0);
+        lv_obj_set_style_border_width(vb, 0, 0);
+        lv_obj_set_style_pad_all(vb, 0, 0);
+        lv_obj_add_flag(vb, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_clear_flag(vb, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_event_cb(vb, voice_cb, LV_EVENT_CLICKED, NULL);
+
+        lv_obj_t *vbl = lv_label_create(vb);
+        lv_obj_set_style_text_font(vbl, &ui_font_14, 0);
+        lv_obj_set_style_text_color(vbl, lv_color_hex(0xFFFFFF), 0);
+        lv_label_set_text(vbl, "VOICE");
+        lv_obj_center(vbl);
+    }
+
     /* ---- 麦克风电平（日志卡第二行）：说话时条会跳 ---- */
     {
         lv_obj_t *mi = lv_label_create(p3);
@@ -511,6 +556,15 @@ static void build_system(void)
         s_bar_mic = lv_bar_create(p3);
         lv_obj_set_size(s_bar_mic, 320, 12);
         lv_obj_set_pos(s_bar_mic, 96, 42);
+
+        /* 语音识别结果（VOICE 按钮触发后显示） */
+        s_lbl_asr = lv_label_create(p3);
+        lv_obj_set_style_text_font(s_lbl_asr, &ui_font_cn18, 0);
+        lv_obj_set_style_text_color(s_lbl_asr, lv_color_hex(ui_theme()->title), 0);
+        lv_label_set_text(s_lbl_asr, "");
+        lv_obj_set_pos(s_lbl_asr, 0, 66);
+        lv_obj_set_width(s_lbl_asr, 740);
+        lv_label_set_long_mode(s_lbl_asr, LV_LABEL_LONG_WRAP);
         lv_bar_set_range(s_bar_mic, 0, 100);
         lv_bar_set_value(s_bar_mic, 0, LV_ANIM_OFF);
         lv_obj_set_style_bg_color(s_bar_mic, lv_color_hex(ui_theme()->card_line), LV_PART_MAIN);
@@ -639,6 +693,13 @@ void scene_system(uint16_t *fb, int frame)
             char b[8];
             snprintf(b, sizeof(b), "%d", lv);
             lv_label_set_text(s_lbl_mic, b);
+        }
+
+        /* 语音识别结果：voice 回调只置标志，这里（LVGL 上下文）消费 */
+        if (s_asr_ready && s_lbl_asr != NULL)
+        {
+            s_asr_ready = false;
+            lv_label_set_text(s_lbl_asr, s_asr_buf);
         }
     }
 

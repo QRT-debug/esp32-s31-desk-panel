@@ -408,6 +408,47 @@ static esp_err_t h_clear(httpd_req_t *req)
     return httpd_resp_send(req, msg, HTTPD_RESP_USE_STRLEN);
 }
 
+/** 下载最近一次录音（调试用）：GET /voicedbg → /sdcard/voice_last.wav
+ *  用来把真实录到的音频拷到 PC 分析（波形/频谱/过零率），
+ *  区分"麦克风/采样率问题"和"模型识别问题"。 */
+static esp_err_t h_voicedbg(httpd_req_t *req)
+{
+    FILE *f = fopen("/sdcard/voice_last.wav", "rb");
+    if (f == NULL)
+    {
+        httpd_resp_sendstr(req, "no dump");
+        return ESP_OK;
+    }
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    httpd_resp_set_type(req, "audio/wav");
+    httpd_resp_set_hdr(req, "Content-Disposition",
+                       "attachment; filename=voice_last.wav");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+
+    char buf[2048];
+    long sent = 0;
+    while (sent < sz)
+    {
+        size_t n = fread(buf, 1, sizeof(buf), f);
+        if (n == 0)
+        {
+            break;
+        }
+        if (httpd_resp_send_chunk(req, buf, n) != ESP_OK)
+        {
+            break;
+        }
+        sent += (long)n;
+    }
+    fclose(f);
+    httpd_resp_send_chunk(req, NULL, 0);
+    ESP_LOGI(TAG, "voice dump sent: %ld bytes", sz);
+    return ESP_OK;
+}
+
 static esp_err_t h_save(httpd_req_t *req)
 {
     /* ★ content_len 上限保护：配置页只有十来个字段，2KB 足够，超了直接拒 */
@@ -621,7 +662,7 @@ esp_err_t wifi_prov_httpd_start(void)
     }
 
     httpd_config_t hc = HTTPD_DEFAULT_CONFIG();
-    hc.max_uri_handlers = 6;
+    hc.max_uri_handlers = 8;
     hc.stack_size       = 6144;
     hc.lru_purge_enable = true;
 
@@ -644,10 +685,14 @@ esp_err_t wifi_prov_httpd_start(void)
     static const httpd_uri_t uri_clear = {
         .uri = "/wpclear", .method = HTTP_GET, .handler = h_clear, .user_ctx = NULL,
     };
+    static const httpd_uri_t uri_vdbg = {
+        .uri = "/voicedbg", .method = HTTP_GET, .handler = h_voicedbg, .user_ctx = NULL,
+    };
     httpd_register_uri_handler(s_srv, &uri_root);
     httpd_register_uri_handler(s_srv, &uri_save);
     httpd_register_uri_handler(s_srv, &uri_upload);
     httpd_register_uri_handler(s_srv, &uri_clear);
+    httpd_register_uri_handler(s_srv, &uri_vdbg);
 
     ESP_LOGI(TAG, "config page ready (STA 也可访问)");
     return ESP_OK;

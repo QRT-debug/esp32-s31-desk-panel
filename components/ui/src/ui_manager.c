@@ -45,6 +45,7 @@ const ui_scene_t g_scenes[] = {
      *   处理一次触摸——轻点 100ms 落在空窗必丢、长按 2s 必中（实测"长按灵轻点不灵"）。
      *   时间标签内部自带秒变化判断，高频空跑无害；脏区不变时 refr 也几乎零开销。 */
     { "CLOCK",      scene_clock,   20, -1, false, true },
+    { "VOICE",      scene_voice,   20, -1, false, true },
 };
 const int g_scene_count = (int)(sizeof(g_scenes) / sizeof(g_scenes[0]));
 
