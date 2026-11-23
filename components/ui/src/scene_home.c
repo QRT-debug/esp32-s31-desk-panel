@@ -95,20 +95,36 @@ static void to_config_cb(lv_event_t *e)
     char ip[24] = { 0 };
     wifi_sta_get_ip(ip, sizeof(ip));
 
+    /* ★★ 必须是「全屏遮罩 + 内层卡片」：
+     *   之前只做一个 540x250 的框，框周围仍是应用页卡片区，点关闭时手指落在
+     *   旁边的卡片上就会直接进那个应用（实测）。遮罩铺满 800x480 后，
+     *   点到任何位置都落在遮罩上 ⇒ 只关闭，不穿透。 */
     s_cfg_overlay = lv_obj_create(lv_screen_active());
-    lv_obj_set_size(s_cfg_overlay, 540, 250);
-    lv_obj_center(s_cfg_overlay);
-    lv_obj_set_style_bg_color(s_cfg_overlay, lv_color_hex(C_CARD), 0);
-    lv_obj_set_style_bg_opa(s_cfg_overlay, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(s_cfg_overlay, 20, 0);
-    lv_obj_set_style_border_width(s_cfg_overlay, 2, 0);
-    lv_obj_set_style_border_color(s_cfg_overlay, lv_color_hex(C_BLUE), 0);
+    lv_obj_set_size(s_cfg_overlay, 800, 480);
+    lv_obj_set_pos(s_cfg_overlay, 0, 0);
+    lv_obj_set_style_bg_color(s_cfg_overlay, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(s_cfg_overlay, LV_OPA_50, 0);
+    lv_obj_set_style_border_width(s_cfg_overlay, 0, 0);
+    lv_obj_set_style_radius(s_cfg_overlay, 0, 0);
     lv_obj_set_style_pad_all(s_cfg_overlay, 0, 0);
     lv_obj_clear_flag(s_cfg_overlay, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(s_cfg_overlay, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(s_cfg_overlay, config_overlay_close, LV_EVENT_CLICKED, NULL);
 
-    lv_obj_t *lt = lv_label_create(s_cfg_overlay);
+    lv_obj_t *card = lv_obj_create(s_cfg_overlay);
+    lv_obj_set_size(card, 540, 250);
+    lv_obj_center(card);
+    lv_obj_set_style_bg_color(card, lv_color_hex(C_CARD), 0);
+    lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(card, 20, 0);
+    lv_obj_set_style_border_width(card, 2, 0);
+    lv_obj_set_style_border_color(card, lv_color_hex(C_BLUE), 0);
+    lv_obj_set_style_pad_all(card, 0, 0);
+    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+    /* 卡片可点击但不绑事件：挡住点击，避免穿透到遮罩导致"点卡片也关闭" */
+    lv_obj_add_flag(card, LV_OBJ_FLAG_CLICKABLE);
+
+    lv_obj_t *lt = lv_label_create(card);
     lv_obj_set_style_text_font(lt, &ui_font_cn18, 0);
     lv_obj_set_style_text_color(lt, lv_color_hex(C_TITLE), 0);
     lv_label_set_text_fmt(lt,
