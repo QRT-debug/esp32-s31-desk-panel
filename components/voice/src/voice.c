@@ -218,8 +218,9 @@ static void voice_task(void *arg)
         ESP_LOGI(TAG, "listening (max %us, vad %u)", (unsigned)max_sec,
                  (unsigned)app_cfg_get()->vad_thresh);
 
-        /* ★ LED 服务用法示例：说话时彩虹渐变（提示"正在听"），结束后自动恢复底色 */
-        led_rainbow(2400);
+        /* ★ LED 服务用法示例：说话时彩虹渐变（提示"正在听"），结束后自动恢复底色。
+         *   3600ms 走完一圈色相（≈100°/s）——太快会有"跳色"感，太慢又看不出在动。 */
+        led_rainbow(3600);
 
         int  used       = 0;
         int  silence_ms = 0;
