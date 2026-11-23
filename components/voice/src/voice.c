@@ -1,0 +1,309 @@
+/**
+ * 语音服务实现：录音 → 能量 VAD 断句 → WAV → POST /api/asr → 文本事件
+ *
+ * ★ 架构约束（写给以后的自己）：
+ *   1. 本组件只产出**文本**，不关心谁在用（任务/对话/agent 各自订阅）。
+ *   2. 绝不在本组件里调 LVGL —— 事件通过订阅回调抛给 UI 层，由 UI 自己切回
+ *      LVGL 上下文（或让 ui_manager 轮询标志，参考 scene_clock 的教训）。
+ *   3. 录音缓冲在 PSRAM（rec_max_sec × 32KB/s，10s ≈ 320KB）。
+ */
+
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <math.h>
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
+
+#include "esp_log.h"
+#include "esp_heap_caps.h"
+#include "esp_http_client.h"
+
+#include "app_cfg.h"
+#include "audio_player.h"
+#include "voice.h"
+
+static const char *TAG = "voice";
+
+#define REC_RATE_HZ      16000
+#define BYTES_PER_SEC    (REC_RATE_HZ * 2)     /* 16bit 单声道 */
+#define BLOCK_SAMPLES    512                   /* 每次读 512 样本 = 32ms */
+#define SILENCE_END_MS   800                   /* 静音这么久 = 一句话结束 */
+#define MIN_SPEECH_MS    300                   /* 短于这个 = 误触，丢弃 */
+#define MAX_SUBS         4
+
+static voice_cb_t      s_subs[MAX_SUBS];
+static int             s_sub_n;
+static volatile voice_mode_t s_mode = VOICE_MODE_TASK;
+static volatile bool   s_listening;
+static volatile bool   s_trigger;
+static SemaphoreHandle_t s_lock;
+
+/* ---------------- 事件分发 ---------------- */
+
+static void emit(voice_ev_t t, const char *text)
+{
+    voice_evt_t e = { .type = t, .text = text, .text_len = text ? (int)strlen(text) : 0 };
+    for (int i = 0; i < s_sub_n; i++)
+    {
+        if (s_subs[i])
+        {
+            s_subs[i](&e);
+        }
+    }
+}
+
+/* ---------------- WAV 头 ---------------- */
+
+static void wav_header(uint8_t *h, uint32_t data_bytes)
+{
+    uint32_t chunk = 36 + data_bytes;
+    uint32_t rate  = REC_RATE_HZ;
+    uint32_t brate = REC_RATE_HZ * 2;
+    memcpy(h + 0,  "RIFF", 4);
+    memcpy(h + 4,  &chunk, 4);
+    memcpy(h + 8,  "WAVEfmt ", 8);
+    uint32_t sz = 16;
+    memcpy(h + 16, &sz, 4);
+    uint16_t fmt = 1, ch = 1;
+    memcpy(h + 20, &fmt, 2);
+    memcpy(h + 22, &ch, 2);
+    memcpy(h + 24, &rate, 4);
+    memcpy(h + 28, &brate, 4);
+    uint16_t align = 2, bits = 16;
+    memcpy(h + 32, &align, 2);
+    memcpy(h + 34, &bits, 2);
+    memcpy(h + 36, "data", 4);
+    memcpy(h + 40, &data_bytes, 4);
+}
+
+/* ---------------- ASR 上传 ---------------- */
+
+static bool asr_upload(const uint8_t *wav, int wav_len, char *out, size_t out_sz)
+{
+    const app_cfg_t *c = app_cfg_get();
+    char url[160];
+
+    if (c->asr_url[0] != '\0')
+    {
+        snprintf(url, sizeof(url), "%s", c->asr_url);
+    }
+    else
+    {
+        /* PC 中转：http://pc_host:pc_port/api/asr（key 不出 PC） */
+        snprintf(url, sizeof(url), "http://%s:%u/api/asr", c->pc_host, (unsigned)c->pc_port);
+    }
+
+    esp_http_client_config_t cfg = {
+        .url        = url,
+        .method     = HTTP_METHOD_POST,
+        .timeout_ms = 15000,
+    };
+    esp_http_client_handle_t cli = esp_http_client_init(&cfg);
+    if (cli == NULL)
+    {
+        return false;
+    }
+    esp_http_client_set_header(cli, "Content-Type", "audio/wav");
+    if (c->asr_key[0] != '\0')
+    {
+        esp_http_client_set_header(cli, "Authorization", c->asr_key);
+    }
+    esp_http_client_set_post_field(cli, (const char *)wav, wav_len);
+
+    esp_err_t err  = esp_http_client_perform(cli);
+    int       code = esp_http_client_get_status_code(cli);
+
+    bool ok = false;
+    if (err == ESP_OK && code == 200)
+    {
+        int len = esp_http_client_read_response(cli, out, (int)out_sz - 1);
+        if (len > 0)
+        {
+            out[len] = '\0';
+            /* 去掉尾部换行 */
+            while (len > 0 && (out[len - 1] == '\n' || out[len - 1] == '\r' || out[len - 1] == ' '))
+            {
+                out[--len] = '\0';
+            }
+            ok = (len > 0);
+        }
+    }
+    else
+    {
+        ESP_LOGW(TAG, "asr http %d err %s", code, esp_err_to_name(err));
+    }
+    esp_http_client_cleanup(cli);
+    return ok;
+}
+
+/* ---------------- 录音 + VAD ---------------- */
+
+static void voice_task(void *arg)
+{
+    (void)arg;
+
+    /* 缓冲按最长录音秒数分配（PSRAM） */
+    uint32_t max_sec = app_cfg_get()->rec_max_sec;
+    if (max_sec < 1 || max_sec > 30)
+    {
+        max_sec = 10;
+    }
+    const int cap_samples = (int)max_sec * REC_RATE_HZ;
+    int16_t  *pcm = heap_caps_malloc((size_t)cap_samples * sizeof(int16_t), MALLOC_CAP_SPIRAM);
+    uint8_t  *wav = heap_caps_malloc((size_t)cap_samples * sizeof(int16_t) + 44, MALLOC_CAP_SPIRAM);
+    if (pcm == NULL || wav == NULL)
+    {
+        ESP_LOGE(TAG, "no psram for record buffer (%d samples)", cap_samples);
+        vTaskDelete(NULL);
+        return;
+    }
+
+    char text[512];
+
+    while (1)
+    {
+        if (!s_trigger)
+        {
+            vTaskDelay(pdMS_TO_TICKS(50));
+            continue;
+        }
+        s_trigger   = 0;
+        s_listening = true;
+        ESP_LOGI(TAG, "listening (max %us, vad %u)", (unsigned)max_sec,
+                 (unsigned)app_cfg_get()->vad_thresh);
+
+        int  used       = 0;
+        int  silence_ms = 0;
+        int  voiced_ms  = 0;
+        bool started    = false;
+
+        while (used < cap_samples)
+        {
+            int n = audio_rec_read_mono(pcm + used, BLOCK_SAMPLES,
+                                        (int)(cap_samples - used < BLOCK_SAMPLES
+                                                  ? cap_samples - used : BLOCK_SAMPLES));
+            if (n <= 0)
+            {
+                vTaskDelay(pdMS_TO_TICKS(10));
+                continue;
+            }
+
+            /* 能量（RMS）判断 */
+            long acc = 0;
+            for (int i = 0; i < n; i++)
+            {
+                acc += (long)pcm[used + i] * pcm[used + i];
+            }
+            int rms = (int)sqrt((double)acc / n);
+
+            used += n;
+            int block_ms = n * 1000 / REC_RATE_HZ;
+
+            if (rms > (int)app_cfg_get()->vad_thresh)
+            {
+                if (!started)
+                {
+                    started = true;
+                    emit(VOICE_EV_SPEECH_START, NULL);
+                }
+                voiced_ms  += block_ms;
+                silence_ms  = 0;
+            }
+            else if (started)
+            {
+                silence_ms += block_ms;
+                if (silence_ms >= SILENCE_END_MS)
+                {
+                    break;
+                }
+            }
+        }
+
+        s_listening = false;
+
+        if (voiced_ms < MIN_SPEECH_MS)
+        {
+            ESP_LOGI(TAG, "too short (%dms), discard", voiced_ms);
+            continue;
+        }
+
+        int data_bytes = used * 2;
+        wav_header(wav, (uint32_t)data_bytes);
+        memcpy(wav + 44, pcm, (size_t)data_bytes);
+        emit(VOICE_EV_SPEECH_END, NULL);
+
+        ESP_LOGI(TAG, "uploading %d bytes (%.1fs speech)", data_bytes + 44, voiced_ms / 1000.0f);
+        if (asr_upload(wav, data_bytes + 44, text, sizeof(text)))
+        {
+            ESP_LOGI(TAG, "asr: \"%s\"", text);
+            emit(VOICE_EV_TEXT, text);
+        }
+        else
+        {
+            emit(VOICE_EV_ERROR, "asr failed");
+        }
+    }
+}
+
+/* ---------------- 对外接口 ---------------- */
+
+esp_err_t voice_init(void)
+{
+    if (s_lock == NULL)
+    {
+        s_lock = xSemaphoreCreateMutex();
+    }
+    if (xTaskCreate(voice_task, "voice", 6144, NULL, 4, NULL) != pdPASS)
+    {
+        return ESP_FAIL;
+    }
+    ESP_LOGI(TAG, "voice service ready (PC relay: http://%s:%u/api/asr)",
+             app_cfg_get()->pc_host, (unsigned)app_cfg_get()->pc_port);
+    return ESP_OK;
+}
+
+int voice_subscribe(voice_cb_t cb)
+{
+    if (cb == NULL)
+    {
+        return -1;
+    }
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    int id = -1;
+    if (s_sub_n < MAX_SUBS)
+    {
+        id = s_sub_n;
+        s_subs[s_sub_n++] = cb;
+    }
+    xSemaphoreGive(s_lock);
+    return id;
+}
+
+void voice_set_mode(voice_mode_t m)
+{
+    s_mode = m;
+}
+
+voice_mode_t voice_get_mode(void)
+{
+    return s_mode;
+}
+
+bool voice_listen(void)
+{
+    if (s_listening || audio_player_is_playing())
+    {
+        return false;
+    }
+    s_trigger   = 1;
+    s_listening = true;    /* 立刻置位，防连点 */
+    return true;
+}
+
+bool voice_is_listening(void)
+{
+    return s_listening;
+}

@@ -737,3 +737,24 @@ WiFi 就绪后调用 ⇒ **配网页常驻**，随时可访问（实测 `curl 19
 **顺手**：mDNS 保留（`s31.local`，设备端正常，将来装 Bonjour 或换 Mac 可用）。
 **构建踩坑**：两个 `idf.py build` 实例同时跑会互相抢 build 目录死锁（10 分钟 ninja 只烧 2.5s CPU）
 —— 排查时先看有没有重复实例。
+
+### 11-23 16:46 语音第 2 步：录音 API + voice 组件骨架（可编译可初始化）
+
+**audio_player 新增 `audio_rec_read_mono()`**：I2S RX 是**双声道交错**、右声道有 ~1100 固定直流
+（单端输入，见 mic_level 注释）。实现里对两路各自去直流、**选能量大的那路**输出单声道 int16，
+不依赖"哪一路接麦克风"。
+
+**新组件 `components/voice/`**（订阅式，三层架构的服务层）：
+- `voice.h`：事件（SPEECH_START / SPEECH_END / TEXT / ERROR）+ `voice_subscribe()` +
+  `voice_set_mode(TASK/CHAT)` + `voice_listen()` 触发
+- `voice.c`：录音（PSRAM 缓冲按 rec_max_sec 分配）→ 能量 VAD（阈值读 app_cfg，静音 800ms 断句，
+  最短 300ms 防误触）→ WAV 打包（44 字节头）→ POST 到 `asr_url`（空则走
+  `http://pc_host:pc_port/api/asr`，带 asr_key 则加 Authorization）→ 文本事件
+- ★ 不在 voice 组件里碰 LVGL（事件抛给订阅者，UI 自己回 LVGL 上下文——记住 scene_clock 的教训）
+
+**PC 侧 `tools/asr_server.py`**（标准库，无第三方依赖）：接 WAV → 两种后端二选一
+（OpenAI 兼容 API / 本地 whisper.cpp）→ 返回纯文本。
+
+**启动验证**：`voice service ready (PC relay: http://192.168.1.2:8080/api/asr)` ✔
+
+**下一步（第 3 步）**：UI 触发入口（长按/按钮）+ 识别结果显示 + PC 端确认 ASR 后端可用。

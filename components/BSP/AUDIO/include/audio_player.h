@@ -86,6 +86,9 @@ uint32_t audio_player_duration_ms(void);
  *   本函数取两声道较大值，避免选错声道读不到声音。
  */
 int audio_player_mic_level(void);
+/** 录音：读一段 PCM 转单声道 16kHz int16（自动选能量大的声道、去掉直流偏置）
+ *  返回样本数；<0 失败（播放态/未初始化） */
+int audio_rec_read_mono(int16_t *out, int max_samples, int timeout_ms);
 
 /** ★ 麦克风诊断：读一帧打印每通道 DC/min/max（排查数据质量用） */
 void audio_player_mic_debug_log(void);

@@ -37,6 +37,7 @@
 #include "ui_theme.h"
 #include "weather.h"
 #include "wifi_prov.h"
+#include "voice.h"
 #include "hf_trend.h"
 #include "ai_rank.h"
 #include "bili_hot.h"
@@ -118,6 +119,8 @@ static void mdns_boot_task(void *arg)
         {
             ESP_LOGI(TAG, "config page at http://<sta-ip>/");
         }
+        /* 语音服务：录音/VAD/ASR 上传（订阅式，暂无人订阅不产生副作用） */
+        voice_init();
     }
     else
     {

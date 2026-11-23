@@ -1299,6 +1299,69 @@ uint32_t audio_player_duration_ms(void)
     return s_dur_ms;
 }
 
+/**
+ * 录音读一段 PCM，转成单声道 16bit（16 kHz）——给语音识别用。
+ *
+ * ★ 硬件事实（实测注释见 mic_level）：I2S RX 是**双声道交错**，右声道有 ~1100 的
+ *   固定直流偏置（单端输入）。这里对两路各自去直流、选能量大的那一路输出，
+ *   避免依赖"哪一路接的是麦克风"。
+ *
+ * @param out          输出缓冲（int16 单声道）
+ * @param max_samples  输出缓冲容量（样本数）
+ * @param timeout_ms   阻塞超时
+ * @return 实际输出样本数；<0 失败（PLAY 态/句柄未开）
+ */
+int audio_rec_read_mono(int16_t *out, int max_samples, int timeout_ms)
+{
+    if (s_rx == NULL || !s_rec_open || out == NULL || max_samples <= 0)
+    {
+        return -1;
+    }
+
+    static int16_t raw[1024];          /* 512 帧 × 2 声道 ≈ 32ms @16k */
+    size_t got = 0;
+    if (i2s_channel_read(s_rx, raw, sizeof(raw), &got,
+                         pdMS_TO_TICKS(timeout_ms)) != ESP_OK)
+    {
+        return -1;
+    }
+
+    int frames = (int)(got / (2 * sizeof(int16_t)));
+    if (frames <= 0)
+    {
+        return 0;
+    }
+
+    long sl = 0, sr = 0;
+    for (int i = 0; i < frames; i++)
+    {
+        sl += raw[i * 2];
+        sr += raw[i * 2 + 1];
+    }
+    int dcl = (int)(sl / frames);
+    int dcr = (int)(sr / frames);
+
+    long pl = 0, pr = 0;
+    for (int i = 0; i < frames; i++)
+    {
+        int vl = raw[i * 2] - dcl;
+        int vr = raw[i * 2 + 1] - dcr;
+        pl += (long)vl * vl;
+        pr += (long)vr * vr;
+    }
+    int use_r = (pr > pl);
+
+    int n = (frames < max_samples) ? frames : max_samples;
+    for (int i = 0; i < n; i++)
+    {
+        int v = use_r ? (raw[i * 2 + 1] - dcr) : (raw[i * 2] - dcl);
+        if (v < -32768) { v = -32768; }
+        if (v > 32767)  { v = 32767; }
+        out[i] = (int16_t)v;
+    }
+    return n;
+}
+
 int audio_player_mic_level(void)
 {
     if (s_rx == NULL || !s_rec_open)
