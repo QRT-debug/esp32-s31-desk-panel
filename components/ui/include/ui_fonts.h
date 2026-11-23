@@ -41,6 +41,7 @@ extern const lv_font_t ui_font_cn18;   /* 黑体 18 + ASCII，fallback 链 head 
 extern const lv_font_t ui_font_cn18b;  /* GB2312 一级字库 2/4 块（~939 字） */
 extern const lv_font_t ui_font_cn18c;  /* 3/4 块 */
 extern const lv_font_t ui_font_cn18d;
+extern const lv_font_t ui_font_cn_punct;  /* 18px 中文标点（，。、；：？！…— 等），挂在 cn18d 之后 */
 /* 天气页专用小字库（168 字：常见城市名 + 和风天气描述用字）——全字库 24px 会撑爆 Flash */
 extern const lv_font_t ui_font_city24;   /* 24px 城市名 */
 extern const lv_font_t ui_font_wx28;     /* 28px 天气描述 */  /* 4/4 块 —— 合计覆盖 3755 常用汉字，榜单换名也不会缺字 */
