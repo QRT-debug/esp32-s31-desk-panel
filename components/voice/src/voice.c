@@ -107,7 +107,16 @@ static esp_err_t on_http_rx(esp_http_client_event_t *e)
     return ESP_OK;
 }
 
-static bool asr_upload(const uint8_t *wav, int wav_len, char *out, size_t out_sz)
+/* ★ 上传结果要区分原因：只说 "asr failed" 时，用户分不清"服务没开"和"识别出错" */
+typedef enum
+{
+    ASR_OK = 0,
+    ASR_ERR_CONNECT,   /* 连不上（PC 服务未启动 / 网络不通） */
+    ASR_ERR_HTTP,      /* 服务返回非 200 */
+    ASR_ERR_EMPTY,     /* 200 但响应为空（没识别出内容） */
+} asr_status_t;
+
+static asr_status_t asr_upload(const uint8_t *wav, int wav_len, char *out, size_t out_sz)
 {
     const app_cfg_t *c = app_cfg_get();
     char url[160];
@@ -135,7 +144,7 @@ static bool asr_upload(const uint8_t *wav, int wav_len, char *out, size_t out_sz
     esp_http_client_handle_t cli = esp_http_client_init(&cfg);
     if (cli == NULL)
     {
-        return false;
+        return ASR_ERR_CONNECT;
     }
     esp_http_client_set_header(cli, "Content-Type", "audio/wav");
     if (c->asr_key[0] != '\0')
@@ -147,23 +156,26 @@ static bool asr_upload(const uint8_t *wav, int wav_len, char *out, size_t out_sz
     esp_err_t err  = esp_http_client_perform(cli);
     int       code = esp_http_client_get_status_code(cli);
 
-    bool ok = false;
-    if (err == ESP_OK && code == 200)
+    asr_status_t st;
+    if (err != ESP_OK || code != 200)
+    {
+        /* code==0 说明连 TCP 都没建立（服务没跑 / IP 变了 / 防火墙） */
+        st = (code == 0) ? ASR_ERR_CONNECT : ASR_ERR_HTTP;
+        ESP_LOGW(TAG, "asr http %d err %s -> %s", code, esp_err_to_name(err),
+                 st == ASR_ERR_CONNECT ? "connect fail" : "http error");
+    }
+    else
     {
         int len = rx.len;
         while (len > 0 && (out[len - 1] == '\n' || out[len - 1] == '\r' || out[len - 1] == ' '))
         {
             out[--len] = '\0';
         }
-        ok = (len > 0);
+        st = (len > 0) ? ASR_OK : ASR_ERR_EMPTY;
         ESP_LOGI(TAG, "asr http 200, body %d B", len);
     }
-    else
-    {
-        ESP_LOGW(TAG, "asr http %d err %s", code, esp_err_to_name(err));
-    }
     esp_http_client_cleanup(cli);
-    return ok;
+    return st;
 }
 
 /* ---------------- 录音 + VAD ---------------- */
@@ -290,7 +302,8 @@ static void voice_task(void *arg)
             }
         }
 
-        if (asr_upload(wav, data_bytes + 44, text, sizeof(text)))
+        asr_status_t rst = asr_upload(wav, data_bytes + 44, text, sizeof(text));
+        if (rst == ASR_OK)
         {
             ESP_LOGI(TAG, "asr: \"%s\"", text);
             /* ★ 打字节：若尾部是半个 UTF-8 字符（被截断），LVGL 会渲染成方框 */
@@ -309,7 +322,20 @@ static void voice_task(void *arg)
         }
         else
         {
-            emit(VOICE_EV_ERROR, "asr failed");
+            const char *msg = "识别失败";
+            if (rst == ASR_ERR_CONNECT)
+            {
+                msg = "连不上识别服务（PC 上需运行 启动语音服务.bat）";
+            }
+            else if (rst == ASR_ERR_HTTP)
+            {
+                msg = "识别服务返回错误（看 PC 窗口日志）";
+            }
+            else if (rst == ASR_ERR_EMPTY)
+            {
+                msg = "没听清，请再说一次";
+            }
+            emit(VOICE_EV_ERROR, msg);
         }
 
         s_busy = false;     /* 全流程结束（含上传/识别），释放占位 */
