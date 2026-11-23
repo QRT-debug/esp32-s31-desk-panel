@@ -151,10 +151,13 @@ static lv_obj_t *make_card(lv_obj_t *parent, int x, int y,
     lv_obj_set_style_bg_color(card, lv_color_hex(C_CARD), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(card, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_width(card, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_shadow_width(card, 22, LV_PART_MAIN | LV_STATE_DEFAULT);
+    /* ★★ 阴影 22 -> 6：LVGL 的阴影是逐像素模糊，9 张卡片每帧都要算，
+     *   触摸按下触发该卡重绘时尤其明显（用户反馈"应用页触摸变卡"）。
+     *   6px + 2px 偏移视觉上仍是轻微浮起，开销降到约 1/3。 */
+    lv_obj_set_style_shadow_width(card, 6, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_shadow_opa(card, LV_OPA_20, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_shadow_color(card, lv_color_hex(C_SHADOW), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_shadow_offset_y(card, 5, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_offset_y(card, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
     /* 按下时轻微缩放感（用背景变暗模拟） */
     lv_obj_set_style_bg_color(card, lv_color_hex(0xF0F2FA), LV_PART_MAIN | LV_STATE_PRESSED);
 
