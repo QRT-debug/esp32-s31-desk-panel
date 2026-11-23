@@ -25,6 +25,20 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import psutil
 
+# ★★★ 清掉代理环境变量 —— 必须在任何网络请求之前执行（2026-11-23 踩过）
+#   urllib 会读 HTTP_PROXY / HTTPS_PROXY。如果启动本服务的会话里带着一个**已失效**的代理
+#   （IDE、终端、代理软件退出后的残留都很常见），所有出网请求都会被送到那个死端口，
+#   报 WinError 10061「目标计算机积极拒绝，无法连接」。
+#   设备侧的表现就是：BILI HOT 反复断开、榜单/天气拿不到数据，而 PC 浏览器一切正常
+#   —— 因为浏览器用的是系统代理设置，不读这些环境变量。
+#   ★ 实测：只加 ProxyHandler({}) 不够，必须连 os.environ 一起清干净。
+#   本服务只访问公网 B 站 + 本机数据，不需要代理。
+import os as _os
+
+for _k in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy",
+           "ALL_PROXY", "all_proxy"):
+    _os.environ.pop(_k, None)
+
 # ------------------------------------------------------------------ GPU
 try:
     import pynvml
@@ -225,7 +239,13 @@ def fetch_bili() -> str:
     #   （app.bilibili.com 的 v2 接口 list 里没有热度字段，只有 position）
     url = "https://api.bilibili.com/x/web-interface/search/square?limit=10"
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=10) as r:
+    # ★★ 显式禁用代理：urllib 默认会读 HTTP_PROXY/HTTPS_PROXY 环境变量和系统代理设置。
+    #    本服务只访问公网 B 站和本机数据，不需要代理；而启动会话里若带着失效的代理变量
+    #    （IDE、终端、代理软件残留都很常见），请求就会被送到一个没人监听的本地端口，
+    #    报 WinError 10061「目标计算机积极拒绝」，设备侧表现就是 BILI HOT 老是断开。
+    #    ProxyHandler({}) = 不走任何代理，一劳永逸。
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(req, timeout=10) as r:
         data = json.load(r)
 
     lst = (((data.get("data") or {}).get("trending") or {}).get("list")) or []
