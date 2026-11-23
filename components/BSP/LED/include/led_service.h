@@ -16,6 +16,9 @@
  *   - 后发起的临时效果会覆盖前一个（最后调用者获胜），适合"高优先级提示打断低优先级"。
  *
  * ★ 线程安全：所有接口可从任意任务调用（内部互斥 + 独立刷新任务驱动，10ms tick）。
+ *
+ * ★ 亮度：内部有全局上限（`LED_MASTER_SCALE`，当前约满亮的 19%）。传 (255,255,255)
+ *   不等于满亮——板上灯珠近距直视太刺眼，统一在出口压一档。要调只需改那一个宏。
  */
 #pragma once
 
@@ -48,6 +51,13 @@ void led_flash(uint8_t r, uint8_t g, uint8_t b, int on_ms, int off_ms, int times
  * 适合"正在监听""待机"这类持续性状态。
  */
 void led_breath(uint8_t r, uint8_t g, uint8_t b, int period_ms);
+
+/**
+ * 彩虹渐变：色相在一个 period_ms 内走完 360°（颜色连续流转），
+ * 同时亮度半周期呼吸一次，明暗起伏更明显。period_ms=0 停止并恢复底色。
+ * 适合"正在录音""加载中"这类需要明显动感的状态。
+ */
+void led_rainbow(int period_ms);
 
 /** 立即停止任何临时效果并恢复底色 */
 void led_stop_effect(void);

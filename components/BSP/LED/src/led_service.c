@@ -20,11 +20,18 @@ static const char *TAG = "ledsvc";
 
 #define TICK_MS     10
 
+/* ★ 全局亮度上限（0~255）：WS2812 近距离直视很刺眼，统一在这里压一档。
+ *   放在 write_rgb 这个**唯一出口**上，底色/闪烁/呼吸/彩虹全部自动受约束，
+ *   不必逐个调用点去改颜色值。
+ *   WS2812 亮度近似与 PWM 占空比线性 ⇒ 48/255 ≈ 满亮的 19%。 */
+#define LED_MASTER_SCALE   48
+
 typedef enum
 {
     FX_NONE = 0,
     FX_FLASH,
     FX_BREATH,
+    FX_RAINBOW,
 } fx_t;
 
 static SemaphoreHandle_t s_mtx;
@@ -78,8 +85,48 @@ static void rgb_to_hsv(uint8_t r, uint8_t g, uint8_t b,
     *h = (uint16_t)(hv % 360);
 }
 
+/* HSV -> RGB，输出 0xRRGGBB（hue 0~359，sat/val 0~255） */
+static led_rgb_t hsv_to_rgb(uint16_t hue, uint8_t sat, uint8_t val)
+{
+    if (val == 0)
+    {
+        return 0;
+    }
+    if (sat == 0)
+    {
+        return ((led_rgb_t)val << 16) | ((led_rgb_t)val << 8) | val;
+    }
+
+    hue %= 360;
+    uint8_t region    = (uint8_t)(hue / 60);
+    uint8_t remainder = (uint8_t)(hue % 60);
+    uint8_t p = (uint8_t)((uint32_t)val * (255 - sat) / 255);
+    uint8_t q = (uint8_t)((uint32_t)val * (255 - (uint32_t)sat * remainder / 60) / 255);
+    uint8_t t = (uint8_t)((uint32_t)val * (255 - (uint32_t)sat * (60 - remainder) / 60) / 255);
+
+    uint8_t r, g, b;
+    switch (region)
+    {
+    case 0:  r = val; g = t;   b = p;   break;
+    case 1:  r = q;   g = val; b = p;   break;
+    case 2:  r = p;   g = val; b = t;   break;
+    case 3:  r = p;   g = q;   b = val; break;
+    case 4:  r = t;   g = p;   b = val; break;
+    default: r = val; g = p;   b = q;   break;
+    }
+    return ((led_rgb_t)r << 16) | ((led_rgb_t)g << 8) | b;
+}
+
 static void write_rgb(led_rgb_t rgb)
 {
+    /* ★ 唯一出口：先压全局亮度，再送去重/写硬件。 */
+    {
+        uint32_t r = (((rgb >> 16) & 0xFFu) * LED_MASTER_SCALE + 127u) / 255u;
+        uint32_t g = (((rgb >>  8) & 0xFFu) * LED_MASTER_SCALE + 127u) / 255u;
+        uint32_t b = (( rgb        & 0xFFu) * LED_MASTER_SCALE + 127u) / 255u;
+        rgb = (r << 16) | (g << 8) | b;
+    }
+
     if (rgb == s_last_out)
     {
         return;     /* 去重：颜色没变就不碰 RMT，省总线时间 */
@@ -175,6 +222,30 @@ static void led_task(void *arg)
             int scale = (p < half) ? (p * 255 / half) : ((s_period_ms - p) * 255 / half);
             write_fx_scaled(scale);
         }
+        else if (s_fx == FX_RAINBOW && s_period_ms > 0)
+        {
+            int64_t el = (esp_timer_get_time() / 1000) - s_t_start;
+
+            /* 色相：一个周期走完 360°，看上去颜色连续流转 */
+            int p = (int)(el % s_period_ms);
+            uint16_t hue = (uint16_t)((int64_t)p * 360 / s_period_ms);
+
+            /* 亮度：同周期内呼吸两次（半周期一呼一吸），让"渐变"有明暗起伏而不是死亮 */
+            int lb   = s_period_ms / 2;
+            int half = lb / 2;
+            if (lb < 4 || half < 1)
+            {
+                lb   = 4;
+                half = 2;
+            }
+            int lp    = (int)(el % lb);
+            int scale = (lp < half) ? (lp * 255 / half) : ((lb - lp) * 255 / half);
+
+            /* 留一点底亮度：全灭那一下看起来像灯坏了 */
+            scale = 40 + scale * 215 / 255;
+
+            write_rgb(hsv_to_rgb(hue, 255, (uint8_t)scale));
+        }
 
         xSemaphoreGive(s_mtx);
         vTaskDelay(pdMS_TO_TICKS(TICK_MS));
@@ -237,32 +308,8 @@ void led_set_rgb(uint8_t r, uint8_t g, uint8_t b)
 
 void led_set_hsv(uint16_t hue, uint8_t sat, uint8_t val)
 {
-    /* 复用 LVGL 的转换会引入 UI 依赖，这里手算，保持 BSP 层干净 */
-    uint8_t v = val;
-    uint8_t s = sat;
-    uint8_t r = 0, g = 0, b = 0;
-
-    if (v == 0)
-    {
-        led_set_rgb(0, 0, 0);
-        return;
-    }
-    uint8_t region    = (uint8_t)(hue / 60);
-    uint8_t remainder = (uint8_t)(hue % 60);
-    uint8_t p = (uint8_t)((uint32_t)v * (255 - s) / 255);
-    uint8_t q = (uint8_t)((uint32_t)v * (255 - (uint32_t)s * remainder / 60) / 255);
-    uint8_t t = (uint8_t)((uint32_t)v * (255 - (uint32_t)s * (60 - remainder) / 60) / 255);
-
-    switch (region)
-    {
-    case 0: r = v; g = t; b = p; break;
-    case 1: r = q; g = v; b = p; break;
-    case 2: r = p; g = v; b = t; break;
-    case 3: r = p; g = q; b = v; break;
-    case 4: r = t; g = p; b = v; break;
-    default: r = v; g = p; b = q; break;
-    }
-    led_set_rgb(r, g, b);
+    led_rgb_t rgb = hsv_to_rgb(hue, sat, val);
+    led_set_rgb((uint8_t)(rgb >> 16), (uint8_t)(rgb >> 8), (uint8_t)rgb);
 }
 
 void led_off(void)
@@ -317,6 +364,25 @@ void led_breath(uint8_t r, uint8_t g, uint8_t b, int period_ms)
     s_period_ms = period_ms;
     s_t_start   = esp_timer_get_time() / 1000;
     s_fx        = FX_BREATH;
+    xSemaphoreGive(s_mtx);
+}
+
+void led_rainbow(int period_ms)
+{
+    if (period_ms <= 0)
+    {
+        led_stop_effect();
+        return;
+    }
+    ensure_init();
+    if (s_mtx == NULL)
+    {
+        return;
+    }
+    xSemaphoreTake(s_mtx, portMAX_DELAY);
+    s_period_ms = period_ms;
+    s_t_start   = esp_timer_get_time() / 1000;
+    s_fx        = FX_RAINBOW;
     xSemaphoreGive(s_mtx);
 }
 

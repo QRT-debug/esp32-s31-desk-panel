@@ -218,8 +218,8 @@ static void voice_task(void *arg)
         ESP_LOGI(TAG, "listening (max %us, vad %u)", (unsigned)max_sec,
                  (unsigned)app_cfg_get()->vad_thresh);
 
-        /* ★ LED 服务用法示例：说话时蓝色呼吸（提示"正在听"），结束后自动恢复底色 */
-        led_breath(0, 120, 255, 1600);
+        /* ★ LED 服务用法示例：说话时彩虹渐变（提示"正在听"），结束后自动恢复底色 */
+        led_rainbow(2400);
 
         int  used       = 0;
         int  silence_ms = 0;
