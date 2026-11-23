@@ -96,13 +96,21 @@ def save_pids(pids):
 
 
 def pid_alive(pid):
+    """检测进程是否还在。
+
+    ★★★ 绝对不能用 os.kill(pid, 0)：POSIX 里这是"无副作用探测"，但 **Windows 上
+       os.kill 对任意 sig 都会走 TerminateProcess(handle, sig)**。也就是说
+       `os.kill(pid, 0)` 在权限足够时会**真的把进程杀掉** ——
+       status 查询会变成"杀服务"，用户会莫名其妙发现服务没了。
+       这里改用 tasklist 查询（只读）。
+    """
     if not pid:
         return False
     try:
-        # Windows 上 os.kill(pid, 0) 会抛异常表示不存在
-        os.kill(pid, 0)
-        return True
-    except OSError:
+        out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+                             capture_output=True, timeout=5).stdout
+        return str(pid).encode() in out
+    except Exception:
         return False
 
 
@@ -167,6 +175,16 @@ def start_one(name, quiet=False):
     return False
 
 
+def kill_pid(pid):
+    """真正结束进程。用 taskkill 而不是 os.kill：能正确处理权限与进程树，返回码可判断。"""
+    try:
+        r = subprocess.run(["taskkill", "/PID", str(pid), "/F"],
+                           capture_output=True, timeout=10)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
 def stop_one(name, quiet=False):
     svc = SERVICES[name]
     pids = load_pids()
@@ -174,11 +192,7 @@ def stop_one(name, quiet=False):
     killed = False
 
     if pid and pid_alive(pid):
-        try:
-            os.kill(pid, 15)              # Windows: TerminateProcess
-            killed = True
-        except OSError:
-            pass
+        killed = kill_pid(pid)
     # 兜底：PID 丢了但端口还占着 → 按端口找进程
     if not killed and port_open(svc["port"]):
         try:
@@ -186,9 +200,7 @@ def stop_one(name, quiet=False):
             raw = subprocess.run(["netstat", "-ano"], capture_output=True, timeout=10).stdout
             for line in raw.decode("gbk", errors="replace").splitlines():
                 if f":{svc['port']}" in line and "LISTENING" in line:
-                    p = int(line.split()[-1])
-                    os.kill(p, 15)
-                    killed = True
+                    killed = kill_pid(int(line.split()[-1]))
                     break
         except Exception:
             pass
@@ -199,9 +211,11 @@ def stop_one(name, quiet=False):
                 break
             time.sleep(0.1)
         if not quiet:
-            print(f"  {C_OK}{name:8s} 已停止{C_END}")
+            print(f"  {name:8s} 已停止")
+    elif port_open(svc["port"]) and not quiet:
+        print(f"  {name:8s} 停止失败（权限不足？试试以管理员运行）")
     elif not quiet:
-        print(f"  {C_DIM}{name:8s} 本来就没在运行{C_END}")
+        print(f"  {name:8s} 本来就没在运行")
 
     pids.pop(name, None)
     save_pids(pids)
