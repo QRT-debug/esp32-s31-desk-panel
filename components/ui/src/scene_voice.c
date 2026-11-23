@@ -9,6 +9,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "esp_timer.h"
+
 #include "lvgl.h"
 
 #include "ui_scenes.h"
@@ -29,6 +31,10 @@ static bool          s_subscribed;
 
 /* ★ 意图动作桥：回调（voice_task）只写，draw（LVGL 上下文）执行。
  *   绝不能在回调里调 ui_goto_scene/backlight_set —— 那会跨线程碰 UI。 */
+/* 设备忙提示的到期时刻（ms）：点 TALK 失败时短暂显示在状态行，
+ * ★ 不能写进结果标签——那是"识别结果"的位置，混在一起会让人以为识别出了这句话。 */
+static volatile int64_t s_hint_until_ms;
+
 static volatile ui_vact_t s_act     = UI_VACT_NONE;
 static volatile int       s_act_arg = 0;
 
@@ -58,8 +64,8 @@ static void mic_cb(lv_event_t *e)
     (void)e;
     if (!voice_listen())
     {
-        snprintf(s_buf, sizeof(s_buf), "(设备忙：放歌中或已在听)");
-        s_ready = true;
+        /* 只设一个 3 秒的提示，显示在状态行；不动 s_buf（那是识别结果的位置） */
+        s_hint_until_ms = esp_timer_get_time() / 1000 + 3000;
     }
 }
 
@@ -169,12 +175,35 @@ void scene_voice(uint16_t *fb, int frame)
     }
     if (s_lbl_state != NULL)
     {
+        /* ★ 三态必须分开看（原来只查 listening，导致上传期间显示"点 TALK 开始说话"，
+         *   用户再点却弹"设备忙"，前后矛盾）：
+         *   listening = 正在录音   busy = 录音结束但还在上传/识别 */
         bool listening = voice_is_listening();
-        lv_label_set_text(s_lbl_state, listening ? "正在听…（说完停一秒自动结束）"
-                                                 : "点 TALK 开始说话");
+        bool busy      = voice_is_busy();
+        bool hinted    = (esp_timer_get_time() / 1000) < s_hint_until_ms;
+
+        const char *st;
+        if (listening)
+        {
+            st = "正在听…（说完停一秒自动结束）";
+        }
+        else if (busy)
+        {
+            st = "正在识别…请稍候";
+        }
+        else if (hinted)
+        {
+            st = "设备忙（放歌中或正在处理）";
+        }
+        else
+        {
+            st = "点 TALK 开始说话";
+        }
+        lv_label_set_text(s_lbl_state, st);
+
         if (s_lbl_btn != NULL)
         {
-            lv_label_set_text(s_lbl_btn, listening ? "..." : "TALK");
+            lv_label_set_text(s_lbl_btn, (listening || busy) ? "..." : "TALK");
         }
     }
 

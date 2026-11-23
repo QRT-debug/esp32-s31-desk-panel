@@ -64,6 +64,10 @@ bool voice_listen(void);
 /** 是否正在录音（UI 可用来显示状态） */
 bool voice_is_listening(void);
 
+/** 是否在处理中（从触发到上传/识别完成）。与 listening 区分：
+ *  listening 只表示"正在录音"；busy 还包含上传识别阶段。 */
+bool voice_is_busy(void);
+
 #ifdef __cplusplus
 }
 #endif

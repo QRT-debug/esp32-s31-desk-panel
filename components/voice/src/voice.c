@@ -39,6 +39,7 @@ static voice_cb_t      s_subs[MAX_SUBS];
 static int             s_sub_n;
 static volatile voice_mode_t s_mode = VOICE_MODE_TASK;
 static volatile bool   s_listening;
+static volatile bool   s_busy;      /* 全流程忙碌：触发 -> 录音 -> 上传完成 */
 static volatile bool   s_trigger;
 static SemaphoreHandle_t s_lock;
 
@@ -199,7 +200,7 @@ static void voice_task(void *arg)
             continue;
         }
         s_trigger   = 0;
-        s_listening = true;
+        s_listening = true;      /* 真正开始录音 */
         audio_rec_begin();      /* 重置通道判定，本次录音重新锁定 */
         s_peak_rms = 0;         /* ★ 每次清零：static 累计会让日志数据完全失真 */
         ESP_LOGI(TAG, "listening (max %us, vad %u)", (unsigned)max_sec,
@@ -261,11 +262,12 @@ static void voice_task(void *arg)
         }
 
         s_listening = false;
-        led_stop_effect();      /* 停止呼吸，回到常亮底色 */
+        led_stop_effect();      /* 录音结束即停呼吸（上传阶段不再占着灯） */
 
         if (voiced_ms < MIN_SPEECH_MS)
         {
             ESP_LOGI(TAG, "too short (%dms), discard", voiced_ms);
+            s_busy = false;     /* ★ 提前退出也必须释放，否则此后永远"设备忙" */
             continue;
         }
 
@@ -309,6 +311,8 @@ static void voice_task(void *arg)
         {
             emit(VOICE_EV_ERROR, "asr failed");
         }
+
+        s_busy = false;     /* 全流程结束（含上传/识别），释放占位 */
     }
 }
 
@@ -358,16 +362,25 @@ voice_mode_t voice_get_mode(void)
 
 bool voice_listen(void)
 {
-    if (s_listening || audio_player_is_playing())
+    /* ★ 三态语义（原来只有 s_listening，导致上传期间 UI 显示"正在听"却没在录）：
+     *   s_busy      = 从触发到上传/识别完成，全程占位 → 防连点、防重入
+     *   s_listening = 真正在录音 → UI 显示"正在听"、LED 呼吸
+     *   必须先判 busy：上传阶段 listening 已是 false，只有 busy 能拦住第二次点击。 */
+    if (s_busy || s_listening || audio_player_is_playing())
     {
         return false;
     }
-    s_trigger   = 1;
-    s_listening = true;    /* 立刻置位，防连点 */
+    s_busy    = true;      /* 立刻占位，不等任务调度 */
+    s_trigger = 1;
     return true;
 }
 
 bool voice_is_listening(void)
 {
     return s_listening;
+}
+
+bool voice_is_busy(void)
+{
+    return s_busy;
 }

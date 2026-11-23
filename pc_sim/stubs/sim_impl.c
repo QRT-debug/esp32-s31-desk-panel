@@ -506,6 +506,7 @@ bool voice_listen(void)
 }
 
 bool voice_is_listening(void) { return s_sim_listening; }
+bool voice_is_busy(void) { return false; }
 
 /* ---------------- 屏保时钟桩 ----------------
  * scene_clock.c 依赖硬件 JPEG 解码（esp_jpeg/esp_mm），模拟器不编它；
