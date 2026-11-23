@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "esp_log.h"
 #include "lvgl.h"
 #include "lvgl_port.h"
 #include "ui_fonts.h"
@@ -144,6 +145,8 @@ static void draw_cloud(bool with_rain)
 }
 
 /* 按描述关键字选形态（中文描述来自 wttr.in lang=zh） */
+static char s_last_desc[40] = { 0 };   /* 图标重画判据；frame==0 清空强制重画 */
+
 static void icon_update(const char *desc)
 {
     icon_clear();
@@ -390,6 +393,7 @@ static void build_weather(void)
     }
 
     bg_apply(NULL);   /* 首帧默认渐变（多云），数据到达后随描述切换 */
+    s_last_desc[0] = 0;   /* ★ 进页清残留：强制本帧重画图标/背景（防 static 残留） */
 
     /* ---- 底部 dock ---- */
     {
@@ -495,11 +499,14 @@ static void refresh_ui(void)
         lv_label_set_text(s_feel_val, b);
     }
 
-    /* 图标只在描述变化时重建（每 500ms 重建会闪） */
-    static char last_desc[40] = { 0 };
-    if (strcmp(last_desc, w.desc) != 0)
+    /* 图标只在描述变化时重建（每 500ms 重建会闪）。
+     * ★ s_last_desc 是文件级变量（见上），frame==0 清空 ⇒ 每次进页强制重画一次。
+     *   曾因它用函数内 static 跨场景残留：数据在屏保期间刷新了、残留值卡住
+     *   变化判断 ⇒ 重进天气页时文字已是 Sunny、图标还是旧的乌云（实测踩到）。 */
+    if (strcmp(s_last_desc, w.desc) != 0)
     {
-        snprintf(last_desc, sizeof(last_desc), "%s", w.desc);
+        snprintf(s_last_desc, sizeof(s_last_desc), "%s", w.desc);
+        ESP_LOGI("wx_icon", "icon update: '%s'", w.desc);
         icon_update(w.desc);
         bg_apply(w.desc);
     }
