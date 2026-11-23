@@ -37,6 +37,7 @@ extern const lv_font_t ui_font_digit_48;   /* 48px Consolas 等宽：时钟页�
  *   f6ff 网线       f1eb WiFi    f2c9 温度计
  * 用法：lv_label_set_text(lbl, "\xEF\x8B\x9B")  // 芯片 */
 extern const lv_font_t ui_font_hw;
+extern const lv_font_t ui_font_icon3;  /* 补充图标：F017 时钟 / F130 麦克风 / F1DE 滑块 */
 extern const lv_font_t ui_font_cn18;   /* 黑体 18 + ASCII，fallback 链 head */
 extern const lv_font_t ui_font_cn18b;  /* GB2312 一级字库 2/4 块（~939 字） */
 extern const lv_font_t ui_font_cn18c;  /* 3/4 块 */

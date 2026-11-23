@@ -55,7 +55,7 @@ static lv_obj_t *s_lbl_net_up, *s_lbl_net_dn, *s_lbl_up, *s_lbl_online;
 static void home_cb(lv_event_t *e)
 {
     (void)e;
-    ui_goto_scene(UI_SCENE_HOME);
+    ui_goto_scene(UI_SCENE_APPS);
 }
 
 static void fmt_uptime(int sec, char *out, size_t cap)

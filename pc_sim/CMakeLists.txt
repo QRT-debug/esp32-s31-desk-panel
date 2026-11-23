@@ -35,6 +35,7 @@ set(UI_SRC
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/ui/src/scene_ai_rank.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/ui/src/scene_bili.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/ui/src/scene_voice.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/ui/src/ui_voice_intent.c"
 )
 
 file(GLOB FONT_SRC CONFIGURE_DEPENDS

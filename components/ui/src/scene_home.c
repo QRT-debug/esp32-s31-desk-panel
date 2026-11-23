@@ -28,6 +28,7 @@
 #include "ui_scenes.h"
 #include "ui_theme.h"
 #include "wifi_sta.h"
+#include "wifi_prov.h"
 
 /* 浅色规范（与播放器页保持一致）——11-20 主题化，指向可切换色板 */
 #define C_BG_TOP   (ui_theme()->bg_top)
@@ -43,8 +44,8 @@
 #define C_GREEN    0x35D07F
 #define C_PURPLE   (ui_theme()->accent)
 
-static lv_obj_t *s_val[6];   /* 每张卡的大数值 */
-static lv_obj_t *s_sub[6];   /* 每张卡的说明文字 */
+static lv_obj_t *s_val[9];   /* 每张卡的大数值（3x3 九宫格） */
+static lv_obj_t *s_sub[9];   /* 每张卡的说明文字 */
 
 /* ---------------- 跳转 ---------------- */
 static void to_monitor_cb(lv_event_t *e) { (void)e; ui_goto_scene(UI_SCENE_MONITOR); }
@@ -54,6 +55,20 @@ static void to_weather_cb(lv_event_t *e) { (void)e; ui_goto_scene(UI_SCENE_HOME)
 static void to_hf_cb(lv_event_t *e)      { (void)e; ui_goto_scene(UI_SCENE_HF); }
 static void to_airank_cb(lv_event_t *e)   { (void)e; ui_goto_scene(UI_SCENE_AIRANK); }
 static void to_bili_cb(lv_event_t *e)      { (void)e; ui_goto_scene(UI_SCENE_BILI); }
+/* ★ 屏保/语音/配网 三个入口从 SYSTEM 页搬到这里（它们本来就是"应用"，
+ *   放在系统设置页是导航混乱的根源）。 */
+static void to_clock_cb(lv_event_t *e)
+{
+    (void)e;
+    g_clock_return_scene = UI_SCENE_APPS;   /* 触摸返回回应用页 */
+    ui_goto_scene(UI_SCENE_CLOCK);
+}
+static void to_voice_cb(lv_event_t *e) { (void)e; ui_goto_scene(UI_SCENE_VOICE); }
+static void to_config_cb(lv_event_t *e)
+{
+    (void)e;
+    wifi_prov_start();      /* 开配网热点（AP 模式），手机连上配置 */
+}
 
 /* 一张卡片：图标圆 + 标题 + 大数值 + 说明 */
 static lv_obj_t *make_card(lv_obj_t *parent, int x, int y,
@@ -61,7 +76,9 @@ static lv_obj_t *make_card(lv_obj_t *parent, int x, int y,
                            lv_event_cb_t cb, int idx)
 {
     lv_obj_t *card = lv_button_create(parent);
-    lv_obj_set_size(card, 360, 168);
+    /* ★ 232x113：3 列 × 3 行。原为 360 宽但坐标只隔 248 —— 卡片互相重叠、
+     *   第三张超出屏幕右侧，是"布局乱"的直接原因之一。 */
+    lv_obj_set_size(card, 232, 113);
     lv_obj_set_pos(card, x, y);
     lv_obj_set_style_radius(card, 24, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_color(card, lv_color_hex(C_CARD), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -76,8 +93,8 @@ static lv_obj_t *make_card(lv_obj_t *parent, int x, int y,
 
     /* 图标圆：浅色底 + 主题色图标 */
     lv_obj_t *circle = lv_obj_create(card);
-    lv_obj_set_size(circle, 56, 56);
-    lv_obj_set_pos(circle, 22, 22);
+    lv_obj_set_size(circle, 42, 42);
+    lv_obj_set_pos(circle, 14, 12);
     lv_obj_set_style_radius(circle, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(circle, lv_color_hex(accent), 0);
     lv_obj_set_style_bg_opa(circle, LV_OPA_20, 0);
@@ -95,8 +112,8 @@ static lv_obj_t *make_card(lv_obj_t *parent, int x, int y,
 
         /* 外框 */
         lv_obj_t *frame = lv_obj_create(circle);
-        lv_obj_set_size(frame, 44, 30);
-        lv_obj_set_pos(frame, 6, 15);
+        lv_obj_set_size(frame, 33, 22);
+        lv_obj_set_pos(frame, 5, 11);
         lv_obj_set_style_radius(frame, 5, 0);
         lv_obj_set_style_bg_opa(frame, LV_OPA_TRANSP, 0);
         lv_obj_set_style_border_width(frame, 3, 0);
@@ -106,8 +123,8 @@ static lv_obj_t *make_card(lv_obj_t *parent, int x, int y,
 
         /* 内屏 */
         lv_obj_t *scr = lv_obj_create(circle);
-        lv_obj_set_size(scr, 36, 22);
-        lv_obj_set_pos(scr, 10, 19);
+        lv_obj_set_size(scr, 27, 16);
+        lv_obj_set_pos(scr, 8, 14);
         lv_obj_set_style_radius(scr, 3, 0);
         lv_obj_set_style_bg_opa(scr, LV_OPA_TRANSP, 0);
         lv_obj_set_style_border_width(scr, 2, 0);
@@ -119,8 +136,8 @@ static lv_obj_t *make_card(lv_obj_t *parent, int x, int y,
         for (int e = 0; e < 2; e++)
         {
             lv_obj_t *eye = lv_obj_create(circle);
-            lv_obj_set_size(eye, 2, 8);
-            lv_obj_set_pos(eye, e ? 35 : 17, 24);   /* 两眼拉到更开（用户要求） */
+            lv_obj_set_size(eye, 2, 6);
+            lv_obj_set_pos(eye, e ? 26 : 13, 18);   /* 两眼拉到更开（用户要求） */
             lv_obj_set_style_radius(eye, 1, 0);
             lv_obj_set_style_bg_color(eye, lv_color_hex(PINK), 0);
             lv_obj_set_style_bg_opa(eye, LV_OPA_COVER, 0);
@@ -137,8 +154,8 @@ static lv_obj_t *make_card(lv_obj_t *parent, int x, int y,
         for (int m = 0; m < 2; m++)
         {
             lv_obj_t *arc = lv_arc_create(circle);
-            lv_obj_set_size(arc, 8, 8);
-            lv_obj_set_pos(arc, m ? 28 : 21, 31);
+            lv_obj_set_size(arc, 6, 6);
+            lv_obj_set_pos(arc, m ? 21 : 16, 23);
             lv_obj_set_style_arc_width(arc, 2, LV_PART_INDICATOR);
             lv_obj_set_style_arc_color(arc, lv_color_hex(PINK), LV_PART_INDICATOR);
             lv_obj_set_style_arc_opa(arc, LV_OPA_TRANSP, LV_PART_MAIN);       /* 不要背景弧 */
@@ -157,8 +174,8 @@ static lv_obj_t *make_card(lv_obj_t *parent, int x, int y,
         for (int a = 0; a < 2; a++)
         {
             lv_obj_t *ant = lv_obj_create(circle);
-            lv_obj_set_size(ant, 2, 13);
-            lv_obj_set_pos(ant, a ? 38 : 16, 2);   /* 底边 y=15 贴外框顶 */
+            lv_obj_set_size(ant, 2, 10);
+            lv_obj_set_pos(ant, a ? 29 : 12, 1);   /* 底边 y=15 贴外框顶 */
             lv_obj_set_style_radius(ant, 1, 0);
             lv_obj_set_style_bg_color(ant, lv_color_hex(PINK), 0);
             lv_obj_set_style_bg_opa(ant, LV_OPA_COVER, 0);
@@ -167,7 +184,7 @@ static lv_obj_t *make_card(lv_obj_t *parent, int x, int y,
             lv_obj_clear_flag(ant, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
             lv_obj_set_style_transform_pivot_x(ant, 1, 0);
             /* ★ 两根都绕底部中心转：支点在顶部时旋转会把底端甩离电视框（右天线实测有缝） */
-            lv_obj_set_style_transform_pivot_y(ant, 12, 0);
+            lv_obj_set_style_transform_pivot_y(ant, 9, 0);
             lv_obj_set_style_transform_rotation(ant, a ? 320 : -320, 0);
         }
 
@@ -175,8 +192,8 @@ static lv_obj_t *make_card(lv_obj_t *parent, int x, int y,
         for (int f = 0; f < 2; f++)
         {
             lv_obj_t *foot = lv_obj_create(circle);
-            lv_obj_set_size(foot, 7, 5);
-            lv_obj_set_pos(foot, f ? 32 : 17, 45);
+            lv_obj_set_size(foot, 5, 4);
+            lv_obj_set_pos(foot, f ? 24 : 13, 34);
             lv_obj_set_style_radius(foot, 2, 0);
             lv_obj_set_style_bg_color(foot, lv_color_hex(PINK), 0);
             lv_obj_set_style_bg_opa(foot, LV_OPA_COVER, 0);
@@ -199,21 +216,22 @@ static lv_obj_t *make_card(lv_obj_t *parent, int x, int y,
     lv_obj_set_style_text_font(t, &ui_font_20, 0);
     lv_obj_set_style_text_color(t, lv_color_hex(C_TITLE), 0);
     lv_label_set_text(t, title);
-    lv_obj_set_pos(t, 96, 30);
+    lv_obj_set_pos(t, 64, 14);
 
     /* 大数值 */
     s_val[idx] = lv_label_create(card);
-    lv_obj_set_style_text_font(s_val[idx], &ui_font_28, 0);
+    lv_obj_set_style_text_font(s_val[idx], &ui_font_24, 0);
     lv_obj_set_style_text_color(s_val[idx], lv_color_hex(C_TITLE), 0);
     lv_label_set_text(s_val[idx], "--");
-    lv_obj_set_pos(s_val[idx], 24, 92);
+    lv_obj_set_pos(s_val[idx], 64, 40);
 
     /* 说明小字 */
     s_sub[idx] = lv_label_create(card);
     lv_obj_set_style_text_font(s_sub[idx], &ui_font_14, 0);
     lv_obj_set_style_text_color(s_sub[idx], lv_color_hex(C_SUB), 0);
     lv_label_set_text(s_sub[idx], "");
-    lv_obj_set_pos(s_sub[idx], 26, 132);
+    lv_obj_set_pos(s_sub[idx], 14, 82);
+    lv_obj_set_width(s_sub[idx], 204);
 
     lv_obj_add_event_cb(card, cb, LV_EVENT_CLICKED, NULL);
     return card;
@@ -276,19 +294,25 @@ static void build_home(void)
         lv_obj_center(bl);
     }
 
-    /* 3 + 2 卡片（232 宽，间距 16） */
-    make_card(scr,  32,  96, C_BLUE,   "\xEF\x8B\x9B", "PC MONITOR",  /* 芯片 */
-              to_monitor_cb, 0);
-    make_card(scr, 280,  96, C_ORANGE, "\xEF\x80\x81", "AUDIO",       /* 音符 */
-              to_audio_cb, 1);
-    make_card(scr, 528,  96, C_GREEN,  "\xEF\x80\x93", "SYSTEM",      /* 齿轮 */
-              to_system_cb, 2);
-    make_card(scr,  32, 280, C_PURPLE, "\xEF\x81\xAD", "HF TREND",    /* 火焰 */
-              to_hf_cb, 3);
-    make_card(scr, 280, 280, C_BLUE,   "\xEF\x82\x80", "AI RANK",     /* 榜单 */
-              to_airank_cb, 4);
-    make_card(scr, 528, 280, C_ORANGE, "\xEF\x89\xAC", "BILI HOT",    /* 播放 */
-              to_bili_cb, 5);
+    /* ★ 3x3 九宫格（232x113，列间距 16、行间距 14）
+     *   统一布局：所有功能入口都在这张网格里，不再散落到 SYSTEM 页。 */
+    const int CX[3] = { 32, 280, 528 };
+    const int CY[3] = { 96, 223, 350 };
+
+    /* 第一行：监控 / 媒体 / 系统 */
+    make_card(scr, CX[0], CY[0], C_BLUE,   "\xEF\x8B\x9B", "PC MONITOR", to_monitor_cb, 0);
+    make_card(scr, CX[1], CY[0], C_ORANGE, "\xEF\x80\x81", "AUDIO",      to_audio_cb,   1);
+    make_card(scr, CX[2], CY[0], C_GREEN,  "\xEF\x80\x93", "SYSTEM",     to_system_cb,  2);
+
+    /* 第二行：三个榜单（信息类） */
+    make_card(scr, CX[0], CY[1], C_PURPLE, "\xEF\x81\xAD", "HF TREND",   to_hf_cb,      3);
+    make_card(scr, CX[1], CY[1], C_BLUE,   "\xEF\x82\x80", "AI RANK",    to_airank_cb,  4);
+    make_card(scr, CX[2], CY[1], C_ORANGE, "\xEF\x89\xAC", "BILI HOT",   to_bili_cb,    5);
+
+    /* 第三行：屏保 / 语音 / 配网（原来在 SYSTEM 页，搬过来） */
+    make_card(scr, CX[0], CY[2], C_PURPLE, "\xEF\x80\x97", "CLOCK",      to_clock_cb,   6);
+    make_card(scr, CX[1], CY[2], C_GREEN,  "\xEF\x84\xB0", "VOICE",      to_voice_cb,   7);
+    make_card(scr, CX[2], CY[2], C_BLUE,   "\xEF\x87\x9E", "CONFIG",     to_config_cb,  8);
 }
 
 /* 每 500ms 刷一次卡片数值（读各模块的真实/模拟状态） */
@@ -360,7 +384,9 @@ static void refresh_cards(void)
         {
             snprintf(b, sizeof(b), "%d", h.count);
             lv_label_set_text(s_val[3], b);
-            snprintf(b, sizeof(b), "MODELS   #1 %.14s", h.item[0].id);
+            /* 卡片说明区宽 204px（14px 字体约 26 字符）。模型名动辄 20+ 字符，
+             * 直接拼会截断；这里用与其它卡片一致的描述性文案。 */
+            snprintf(b, sizeof(b), "tap to view trend");
             lv_label_set_text(s_sub[3], b);
         }
         else if (h.state == HF_STATE_FAIL)
@@ -420,6 +446,21 @@ static void refresh_cards(void)
             lv_label_set_text(s_val[4], "..");
             lv_label_set_text(s_sub[4], "loading ranking");
         }
+    }
+
+    /* 7) CLOCK / VOICE / CONFIG：入口类卡片，显示状态 + 操作提示
+     *   ★ 卡片字体是 ASCII，故用英文（中文字库在 cn18，字号不一致会跳）。 */
+    lv_label_set_text(s_val[6], "READY");
+    lv_label_set_text(s_sub[6], "wallpaper + big clock");
+
+    lv_label_set_text(s_val[7], "TAP");
+    lv_label_set_text(s_sub[7], "speak a command");
+
+    {
+        char b[32];
+        snprintf(b, sizeof(b), "%s", wifi_sta_connected() ? "ONLINE" : "OFFLINE");
+        lv_label_set_text(s_val[8], b);
+        lv_label_set_text(s_sub[8], "wifi setup page");
     }
 }
 

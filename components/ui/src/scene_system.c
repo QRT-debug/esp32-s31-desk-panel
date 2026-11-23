@@ -68,7 +68,7 @@ static uint8_t   s_led_val = 128;
 static void home_cb(lv_event_t *e)
 {
     (void)e;
-    ui_goto_scene(UI_SCENE_HOME);
+    ui_goto_scene(UI_SCENE_APPS);
 }
 
 static void wifi_toggle_cb(lv_event_t *e)

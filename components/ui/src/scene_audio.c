@@ -79,7 +79,7 @@ static const char *k_diag_name[8] = { "DIAG: OFF", "DIAG: MUTE", "DIAG: PA OFF",
 static void home_cb(lv_event_t *e)
 {
     (void)e;
-    ui_goto_scene(UI_SCENE_HOME);
+    ui_goto_scene(UI_SCENE_APPS);
 }
 
 /* 把大圆播放键刷新成"播放中"外观 */

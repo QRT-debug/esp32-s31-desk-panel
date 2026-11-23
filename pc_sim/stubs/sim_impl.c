@@ -477,6 +477,8 @@ const char *wifi_prov_ssid(void)
 
 /* ---------------- 语音组件桩（模拟器只验证 UI 渲染） ---------------- */
 #include "voice.h"
+#include "ui_fonts.h"
+#include <time.h>
 
 static voice_cb_t s_sim_voice_cb = NULL;
 static bool       s_sim_listening = false;
@@ -511,5 +513,73 @@ bool voice_is_listening(void) { return s_sim_listening; }
 void scene_clock(uint16_t *fb, int frame)
 {
     (void)fb;
-    (void)frame;
+    static lv_obj_t *lbl_time = NULL;
+    static lv_obj_t *lbl_date = NULL;
+
+    if (frame == 0)
+    {
+        lv_obj_t *scr = lv_screen_active();
+        lv_obj_clean(scr);
+        lv_obj_set_style_bg_color(scr, lv_color_hex(0x0E1620), 0);
+        lv_obj_set_style_bg_grad_color(scr, lv_color_hex(0x1A2433), 0);
+        lv_obj_set_style_bg_grad_dir(scr, LV_GRAD_DIR_VER, 0);
+        lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+
+        lbl_time = lv_label_create(scr);
+        lv_obj_set_style_text_font(lbl_time, &ui_font_digit_48, 0);
+        lv_obj_set_style_text_color(lbl_time, lv_color_hex(0xFFFFFF), 0);
+        lv_label_set_text(lbl_time, "00:00:00");
+        lv_obj_align(lbl_time, LV_ALIGN_CENTER, 0, -40);
+
+        lbl_date = lv_label_create(scr);
+        lv_obj_set_style_text_font(lbl_date, &ui_font_cn18, 0);
+        lv_obj_set_style_text_color(lbl_date, lv_color_hex(0xB8C4D6), 0);
+        lv_obj_align_to(lbl_date, lbl_time, LV_ALIGN_OUT_BOTTOM_MID, 0, 8);
+
+        lv_obj_t *tip = lv_label_create(scr);
+        lv_obj_set_style_text_font(tip, &ui_font_cn18, 0);
+        lv_obj_set_style_text_color(tip, lv_color_hex(0x6B7A90), 0);
+        lv_label_set_text(tip, "模拟器：壁纸走硬件 JPEG 解码，此处只预览时间布局");
+        lv_obj_align(tip, LV_ALIGN_BOTTOM_MID, 0, -28);
+    }
+
+    /* 每秒刷新（与真机一致：只更新时间，不重建对象） */
+    if (lbl_time != NULL)
+    {
+        time_t t = time(NULL);
+        struct tm tm_now;
+        localtime_r(&t, &tm_now);
+        lv_label_set_text_fmt(lbl_time, "%02d:%02d:%02d",
+                              tm_now.tm_hour, tm_now.tm_min, tm_now.tm_sec);
+        static const char *WD[] = { "周日", "周一", "周二", "周三", "周四", "周五", "周六" };
+        lv_label_set_text_fmt(lbl_date, "%04d-%02d-%02d  %s",
+                              tm_now.tm_year + 1900, tm_now.tm_mon + 1, tm_now.tm_mday,
+                              WD[tm_now.tm_wday]);
+    }
+
+    /* ★★ 必须调：本项目的 LVGL 由「每个场景的 draw 自己驱动」
+     *   （scene_weather 等真机场景都有这一行）。漏了 ⇒ LVGL 从不被驱动
+     *   ⇒ 画什么都不显示，看起来就是"卡死/全黑"。 */
+    lvgl_port_task();
+}
+
+/* ---------------- app_cfg 最小桩（模拟器不跑 NVS） ----------------
+ * ui_voice_intent 的背光动作会写配置，这里给个内存版。 */
+#include "app_cfg.h"
+
+static app_cfg_t s_sim_cfg = { .backlight = 80, .tz = 8, .theme = 0 };
+
+const app_cfg_t *app_cfg_get(void)
+{
+    return &s_sim_cfg;
+}
+
+app_cfg_t *app_cfg_mut(void)
+{
+    return &s_sim_cfg;
+}
+
+esp_err_t app_cfg_save(void)
+{
+    return ESP_OK;
 }
