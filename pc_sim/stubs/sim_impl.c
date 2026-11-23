@@ -267,7 +267,7 @@ void weather_start(void)
     if (s_wx_inited) { return; }
     s_wx_inited = true;
     s_wx_fake.state     = WX_STATE_OK;
-    s_wx_fake.temp_c    = 23;
+    s_wx_fake.temp_c    = 8;
     s_wx_fake.feels_c   = 25;
     s_wx_fake.humidity  = 68;
     s_wx_fake.wind_kmph = 14;

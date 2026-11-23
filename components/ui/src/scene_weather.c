@@ -310,9 +310,10 @@ static void build_weather(void)
     s_city = lv_label_create(scr);
     /* ★ 城市名是中文：用 24px 专用中文小字库（含常见城市名字，体积 ~80KB） */
     lv_obj_set_style_text_font(s_city, &ui_font_city24, 0);
-    lv_obj_set_style_text_color(s_city, lv_color_hex(C_SUB), 0);
+    /* 城市名是主信息，用主色（此前用灰 sub，深色主题下白灰混杂显得乱） */
+    lv_obj_set_style_text_color(s_city, lv_color_hex(C_TITLE), 0);
     lv_label_set_text(s_city, "Locating...");
-    lv_obj_set_pos(s_city, 40, 48);
+    lv_obj_set_pos(s_city, 40, 48);   /* 与温度同 x：像素实测两者字形留白都是 1px，天然对齐 */
 
     s_temp = lv_label_create(scr);
     lv_obj_set_style_text_font(s_temp, &ui_font_32, 0);
