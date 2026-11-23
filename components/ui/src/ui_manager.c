@@ -37,9 +37,12 @@ const ui_scene_t g_scenes[] = {
     { "AUDIO",      scene_audio,   20, -1, false, true },
     { "SYSTEM",     scene_system,   20, -1, false, true },
     { "APPS",       scene_home,    20, -1, false, true },
-    { "HF TREND",   scene_hf,      50, -1, false, true },
-    { "AI RANK",    scene_ai_rank, 50, -1, false, true },
-    { "BILI HOT",   scene_bili,    50, -1, false, true },
+    /* ★ 三个榜单页原为 50ms（20 FPS 上限）：静态看没差别，但**滑动时明显发涩*
+     *   （用户反馈"AI RANK 滑动卡"）。改为 20ms 与其它页一致。
+     *   省 CPU 的考虑在这里不成立：内容不变时 LVGL 不重绘，空转几乎零开销。 */
+    { "HF TREND",   scene_hf,      20, -1, false, true },
+    { "AI RANK",    scene_ai_rank, 20, -1, false, true },
+    { "BILI HOT",   scene_bili,    20, -1, false, true },
     /* ★★ hold_ms 必须与其他页同量级（20~50ms）：LVGL 的触摸事件处理只在每帧
      *   draw() 里跑（lv_timer_handler 在其中），hold_ms=1000 ⇒ 时钟页每 1 秒才
      *   处理一次触摸——轻点 100ms 落在空窗必丢、长按 2s 必中（实测"长按灵轻点不灵"）。
