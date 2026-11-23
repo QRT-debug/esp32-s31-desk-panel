@@ -71,7 +71,8 @@ static void config_overlay_close(lv_event_t *e)
     (void)e;
     if (s_cfg_overlay != NULL)
     {
-        lv_obj_delete(s_cfg_overlay);
+        /* 异步删：在事件回调里同步删除自身对象，LVGL 内部删除链会踩到未完成的事件流 */
+        lv_obj_delete_async(s_cfg_overlay);
         s_cfg_overlay = NULL;
     }
 }
@@ -83,10 +84,13 @@ static void to_config_cb(lv_event_t *e)
     (void)e;
     wifi_prov_start();      /* 兜底：开热点，路由器不给 DHCP 时也能连 */
 
-    if (s_cfg_overlay != NULL)
+    /* ★ 必须用 lv_obj_is_valid：切场景时 lv_obj_clean 已经把弹层删了，
+     *   但静态指针还指着那块内存（悬空）——只判 != NULL 会导致"关一次后再也打不开"。 */
+    if (s_cfg_overlay != NULL && lv_obj_is_valid(s_cfg_overlay))
     {
         return;
     }
+    s_cfg_overlay = NULL;
 
     char ip[24] = { 0 };
     wifi_sta_get_ip(ip, sizeof(ip));
@@ -290,6 +294,7 @@ static void build_home(void)
 {
     lv_obj_t *scr = lv_screen_active();
     lv_obj_clean(scr);
+    s_cfg_overlay = NULL;   /* 上一轮的弹层已被 clean 删除，指针必须同步重置 */
     lv_obj_t *root = lv_obj_create(scr);
     lv_obj_set_size(root, 800, 480);
     lv_obj_set_pos(root, 0, 0);
