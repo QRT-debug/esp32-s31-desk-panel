@@ -26,6 +26,7 @@
 #include "bsp_led.h"
 #include "sd_card.h"
 #include "lcd.h"
+#include "mdns.h"
 #include "lvgl_port.h"
 #include "nvs_flash.h"
 #include "pc_monitor.h"
@@ -92,6 +93,35 @@ static void prov_watchdog_task(void *arg)
     {
         ESP_LOGW(TAG, "connect phone to \"%s\" (pass %s), open http://%s/",
                  wifi_prov_ssid(), PROV_AP_PASS, PROV_AP_IP);
+    }
+    vTaskDelete(NULL);
+}
+
+/* ★ mDNS：让设备在局域网里有固定名字 http://s31.local/ —— 不用再记会变的 IP。
+ *   等 WiFi 连上（拿到 IP）后初始化；失败不影响其他功能。 */
+static void mdns_boot_task(void *arg)
+{
+    (void)arg;
+    while (!wifi_sta_connected())
+    {
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
+    esp_err_t e = mdns_init();
+    if (e == ESP_OK)
+    {
+        mdns_hostname_set("s31");
+        mdns_instance_name_set("ESP32-S31 SmartPanel");
+        mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0);
+        ESP_LOGI(TAG, "mDNS ready: http://s31.local/");
+        /* ★ 配网页常驻：不用再点 WIFI 按钮（之前只在配网流程里启动） */
+        if (wifi_prov_httpd_start() == ESP_OK)
+        {
+            ESP_LOGI(TAG, "config page at http://<sta-ip>/");
+        }
+    }
+    else
+    {
+        ESP_LOGW(TAG, "mdns init failed: %s", esp_err_to_name(e));
     }
     vTaskDelete(NULL);
 }
@@ -170,6 +200,7 @@ void app_main(void)
     /* WiFi 异步连接，不阻塞；连上后 pc_monitor 自动开始拉数据 */
     if (wifi_sta_init() == ESP_OK)
     {
+        xTaskCreate(mdns_boot_task, "mdns", 3072, NULL, 3, NULL);
         pc_monitor_start();
         weather_start();          /* 天气：WiFi 就绪后首拉，之后 30 分钟一次 */
         hf_start();               /* HF 热榜：每小时一次 */

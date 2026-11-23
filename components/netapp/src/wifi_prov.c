@@ -602,6 +602,24 @@ esp_err_t wifi_prov_start(void)
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wc));
     ESP_ERROR_CHECK(esp_wifi_start());
 
+    /* ★ httpd 独立启动：STA 已联网时也常驻监听（配网页随时可访问），
+     *   见 main.c 里 WiFi 就绪后的调用 —— 不用再点 WIFI 按钮。 */
+    if (wifi_prov_httpd_start() != ESP_OK)
+    {
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "AP \"%s\" up, open http://%s/", s_ssid, PROV_AP_IP);
+    return ESP_OK;
+}
+
+esp_err_t wifi_prov_httpd_start(void)
+{
+    if (s_srv != NULL)
+    {
+        return ESP_OK;      /* 已启动 */
+    }
+
     httpd_config_t hc = HTTPD_DEFAULT_CONFIG();
     hc.max_uri_handlers = 6;
     hc.stack_size       = 6144;
@@ -631,7 +649,7 @@ esp_err_t wifi_prov_start(void)
     httpd_register_uri_handler(s_srv, &uri_upload);
     httpd_register_uri_handler(s_srv, &uri_clear);
 
-    ESP_LOGI(TAG, "AP \"%s\" up, open http://%s/", s_ssid, PROV_AP_IP);
+    ESP_LOGI(TAG, "config page ready (STA 也可访问)");
     return ESP_OK;
 }
 

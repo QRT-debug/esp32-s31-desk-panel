@@ -5,6 +5,16 @@ dependencies:
       path: components/esp_codec_dev
       type: local
     version: 1.6.2
+  espressif/mdns:
+    component_hash: 2fa43caa78cc170842255bc7bf71f306bc815cae12e9496bfb12372423019ac7
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.15.1
   espressif/zlib:
     component_hash: 93685dbbacd6fd620b2b7bcbfac628c4f1289e64f7a68fc7604e43dec517595e
     dependencies:
@@ -27,9 +37,10 @@ dependencies:
     version: 0.21.0~6
 direct_dependencies:
 - espressif/esp_codec_dev
+- espressif/mdns
 - espressif/tinyusb
 - espressif/zlib
 - idf
-manifest_hash: 88124f3c505bcf82e1d59640c20710c98effeded3d6d77c51f210d0ad00469ae
+manifest_hash: 70e8ffef3508ebe3f0b218a7c4e4b6be20b6bb6ec1795e4411b5d5865e51f527
 target: esp32s31
 version: 3.0.0

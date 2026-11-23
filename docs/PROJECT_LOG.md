@@ -719,3 +719,21 @@ open 时电平不变化 ⇒ 无复位脉冲。修复后实测：日志开头无 
 
 **配网页新增「语音服务」区块**：ASR 地址 / Key / VAD 灵敏度 / 最长录音秒数（含 HTML 转义
 和参数列表同步——snprintf 占位符与实参必须一一对应）。
+
+### 11-23 16:36 配网页常驻 + 找设备脚本（"IP 变了找不到"根本解决）
+
+**问题链**：设备 IP 被 DHCP 换掉（.3 → .12）→ 用户找不到；mDNS 试了 `s31.local`
+（设备端正常：mDNS 查询响应来自正确 STA IP 192.168.1.12），**但 Windows 系统级不解析
+.local（curl/ping 全失败，Chrome 普通导航也不查 mDNS，只有装 Bonjour 才行）** ⇒ mDNS 在 Windows 不可用。
+
+**★★ 真根因**：配网页 httpd 原本只在 `wifi_prov_start()`（点 WIFI 按钮 / 开机连不上）时启动，
+STA 在线时**根本不监听 80 端口** —— 所以扫不到、打不开。
+**修复**：拆出 `wifi_prov_httpd_start()`（只起 httpd 不碰 AP），main.c 的 mdns_boot_task 里
+WiFi 就绪后调用 ⇒ **配网页常驻**，随时可访问（实测 `curl 192.168.1.12` → 200）。
+
+**辅助工具**：`tools/find_s31.py` —— 并发扫 192.168.1.2-254 认 "SmartPanel" 页面，
+2 秒出结果，双击即用（不依赖 mDNS）。
+
+**顺手**：mDNS 保留（`s31.local`，设备端正常，将来装 Bonjour 或换 Mac 可用）。
+**构建踩坑**：两个 `idf.py build` 实例同时跑会互相抢 build 目录死锁（10 分钟 ninja 只烧 2.5s CPU）
+—— 排查时先看有没有重复实例。

@@ -26,6 +26,9 @@
  */
 esp_err_t wifi_prov_start(void);
 
+/** 只启动配置页 httpd（不开 AP）：WiFi 已联网时开机常驻，配网页随时可访问 */
+esp_err_t wifi_prov_httpd_start(void);
+
 /** 停止配网：关 HTTP 服务 + 切回纯 STA 模式 */
 esp_err_t wifi_prov_stop(void);
 
