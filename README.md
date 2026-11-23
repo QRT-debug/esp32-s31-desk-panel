@@ -77,9 +77,14 @@ LVGL 9.6 驱动 **800×480 RGB 屏**（66 fps），集成天气、榜单、音�
     <td align="center"><img src="docs/images/05-hf.jpg" alt="HuggingFace 趋势页"><br><sub>HuggingFace 趋势榜</sub></td>
     <td align="center"><img src="docs/images/06-bili.jpg" alt="B站热榜页"><br><sub>B 站热榜</sub></td>
   </tr>
+  <tr>
+    <td align="center"><img src="docs/images/08-system.jpg" alt="系统信息页"><br><sub>系统信息 · 芯片 / 内存 / 网络 / 背光</sub></td>
+    <td align="center"><img src="docs/images/09-voice.jpg" alt="语音页"><br><sub>语音助手 · 能量 VAD + ASR</sub></td>
+  </tr>
 </table>
 
 > 壁纸由使用者自行上传（设备不含内置图库），支持通过配网页上传 JPEG。
+> 系统页截图里的 SSID / IP 已打码。
 
 ---
 
