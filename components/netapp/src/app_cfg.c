@@ -41,6 +41,12 @@ static void cfg_defaults(app_cfg_t *c)
     c->backlight  = 75;
     c->tz         = 8;
     c->theme      = 0;
+
+    /* 语音：默认走 PC 中转（key 不出 PC），云端直连留空 */
+    c->asr_url[0]  = '\0';
+    c->asr_key[0]  = '\0';
+    c->vad_thresh  = 300;
+    c->rec_max_sec = 10;
 }
 
 esp_err_t app_cfg_init(void)
@@ -60,11 +66,16 @@ esp_err_t app_cfg_init(void)
         err = nvs_get_blob(h, CFG_KEY, &tmp, &len);
         nvs_close(h);
 
-        if (err == ESP_OK && len == sizeof(tmp) && tmp.ver == APP_CFG_VER)
+        /* ★ 向后兼容：ver 相同但 blob 较旧（结构体追加过字段）时，
+         *   先填默认值再按实际长度覆盖 —— 新字段保留默认，旧配置不丢。
+         *   （旧逻辑要求 len == sizeof 完全相等，加字段就会整套回落默认值 = WiFi 要重配。） */
+        if (err == ESP_OK && tmp.ver == APP_CFG_VER && len >= 8)
         {
-            memcpy(&s_cfg, &tmp, sizeof(s_cfg));
+            cfg_defaults(&s_cfg);
+            memcpy(&s_cfg, &tmp, len < sizeof(s_cfg) ? len : sizeof(s_cfg));
             s_ready = true;
-            ESP_LOGI(TAG, "loaded from NVS");
+            ESP_LOGI(TAG, "loaded from NVS (blob %u B, struct %u B)",
+                     (unsigned)len, (unsigned)sizeof(s_cfg));
             app_cfg_dump();
             return ESP_OK;
         }
@@ -138,4 +149,8 @@ void app_cfg_dump(void)
              (double)s_cfg.lat, (double)s_cfg.lon,
              s_cfg.pc_host, (unsigned)s_cfg.pc_port,
              (unsigned)s_cfg.backlight, (int)s_cfg.tz, (unsigned)s_cfg.theme);
+    ESP_LOGI(TAG, "voice: asr_url=\"%s\" key=%s vad=%u rec=%us",
+             s_cfg.asr_url[0] ? s_cfg.asr_url : "(PC relay)",
+             s_cfg.asr_key[0] ? "***" : "(empty)",
+             (unsigned)s_cfg.vad_thresh, (unsigned)s_cfg.rec_max_sec);
 }

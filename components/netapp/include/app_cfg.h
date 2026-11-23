@@ -44,6 +44,14 @@ typedef struct
     uint8_t  backlight;    /* 0~100，滑条同值 */
     int8_t   tz;           /* UTC 偏移小时，默认 +8 */
     uint8_t  theme;        /* 0=深色（默认） 1=浅色 */
+
+    /* ---- 语音服务（★ 只能追加在末尾：旧 blob 靠长度兼容，插入中间会字节错位）----
+     * asr_url 为空 = 用 PC 中转 http://pc_host:pc_port/api/asr（推荐，key 不出 PC）。
+     * 填了 = 直连云端 ASR（OpenAI 兼容 /v1/audio/transcriptions）。 */
+    char     asr_url[96];
+    char     asr_key[64];
+    uint16_t vad_thresh;   /* 能量 VAD 阈值（RMS），默认 300 */
+    uint8_t  rec_max_sec;  /* 最长录音秒数，默认 10 */
 } app_cfg_t;
 
 /** 初始化：读 NVS，没有/版本不符则写入编译期默认值。必须在 nvs_flash_init() 之后调用。 */

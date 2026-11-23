@@ -129,10 +129,12 @@ static char *build_page(void)
 {
     const app_cfg_t *c = app_cfg_get();
 
-    char esc_ssid[160], esc_city[80], esc_host[160];
+    char esc_ssid[160], esc_city[80], esc_host[160], esc_asr_url[200], esc_asr_key[140];
     html_esc(c->wifi_ssid, esc_ssid, sizeof(esc_ssid));
     html_esc(c->city, esc_city, sizeof(esc_city));
     html_esc(c->pc_host, esc_host, sizeof(esc_host));
+    html_esc(c->asr_url, esc_asr_url, sizeof(esc_asr_url));
+    html_esc(c->asr_key, esc_asr_key, sizeof(esc_asr_key));
 
     const size_t cap = 8192;
     char        *p   = malloc(cap);
@@ -212,6 +214,12 @@ static char *build_page(void)
         "<button type=button onclick=wpclr() style='margin-top:6px'>清空全部壁纸</button>"
         "<div id=ur style='margin-top:8px;color:#8a97ad;font-size:13px'></div>"
         "</fieldset>"
+        "<fieldset><legend>语音服务（录音识别）</legend>"
+        "<label>ASR 地址（留空 = PC 中转 /api/asr）<input name=asr_url value='%s' placeholder='https://api.openai.com/v1/audio/transcriptions'></label>"
+        "<label>ASR Key（PC 中转模式可留空）<input name=asr_key type=password value='%s' placeholder='sk-...'></label>"
+        "<label>VAD 灵敏度（越小越灵敏，50~20000）<input name=vad_thresh type=number value=%u></label>"
+        "<label>最长录音秒数（1~30）<input name=rec_max_sec type=number value=%u></label>"
+        "</fieldset>"
 
         "<button type=submit>保存并重启</button>"
         "</form>"
@@ -239,7 +247,9 @@ static char *build_page(void)
         s_ssid,
         esc_ssid, c->wifi_pass, esc_city, (double)c->lat, (double)c->lon,
         esc_host, (unsigned)c->pc_port,
-        (unsigned)c->backlight, (unsigned)c->backlight, (int)c->tz);
+        (unsigned)c->backlight, (unsigned)c->backlight, (int)c->tz,
+        esc_asr_url, esc_asr_key,
+        (unsigned)c->vad_thresh, (unsigned)c->rec_max_sec);
 
     if (n < 0 || (size_t)n >= cap)
     {
@@ -467,6 +477,25 @@ static esp_err_t h_save(httpd_req_t *req)
     {
         int tz = atoi(tmp);
         c->tz = (int8_t)((tz < -12) ? -12 : (tz > 14 ? 14 : tz));
+    }
+    /* 语音服务：asr_url 空 = 走 PC 中转（key 不出 PC） */
+    if (form_get(body, "asr_url", tmp, sizeof(tmp)))
+    {
+        strlcpy(c->asr_url, tmp, sizeof(c->asr_url));
+    }
+    if (form_get(body, "asr_key", tmp, sizeof(tmp)))
+    {
+        strlcpy(c->asr_key, tmp, sizeof(c->asr_key));
+    }
+    if (form_get(body, "vad_thresh", tmp, sizeof(tmp)))
+    {
+        int v = atoi(tmp);
+        c->vad_thresh = (uint16_t)((v < 50) ? 50 : (v > 20000 ? 20000 : v));
+    }
+    if (form_get(body, "rec_max_sec", tmp, sizeof(tmp)))
+    {
+        int r = atoi(tmp);
+        c->rec_max_sec = (uint8_t)((r < 1) ? 1 : (r > 30 ? 30 : r));
     }
 
     free(body);
