@@ -26,7 +26,6 @@
 #include "ui_anim.h"
 #include "ui_scenes.h"
 #include "ui_theme.h"
-#include "bsp_led.h"
 #include "wifi_config.h"
 #include "wifi_prov.h"
 #include "voice.h"
@@ -53,11 +52,6 @@ static lv_obj_t *s_bar_mic;
 /* ★ 语音识别结果桥：voice 回调在 voice_task 上下文，绝不能直接碰 LVGL
  *   （lv_async_call 也死锁过）——只写标志，由本场景 draw 里轮询消费。 */
 static lv_obj_t *s_lbl_mic;     /* 麦克风电平数值 */
-static lv_obj_t *s_slider_hue;  /* RGB 灯色相滑块 */
-static lv_obj_t *s_slider_val;  /* RGB 灯亮度滑块 */
-static lv_obj_t *s_led_swatch;  /* RGB 灯色块预览 */
-static uint16_t  s_led_hue = 0;   /* ★ 会话内保持：切页回来滑块恢复到灯的真实状态 */
-static uint8_t   s_led_val = 128;
 
 /* ---------------- 回调 ---------------- */
 
@@ -224,17 +218,7 @@ static void theme_cb(lv_event_t *e)
 /* ★★ 11-21 教训：滑条 VALUE_CHANGED 每帧几十次，若在事件回调里直接走 RMT
  *   发 WS2812 波形（led_strip_refresh），RMT 与 LCD 共用 DMA，
  *   高频抢占会崩溃（乱屏 + 重启）。现在事件里只记值，由场景周期限速发送。 */
-static volatile bool s_led_dirty;
 
-static void led_cb(lv_event_t *e)
-{
-    (void)e;
-    s_led_hue = (uint16_t)lv_slider_get_value(s_slider_hue);
-    s_led_val = (uint8_t)lv_slider_get_value(s_slider_val);
-    s_led_dirty = true;                     /* 交给 scene 周期发送 */
-    lv_obj_set_style_bg_color(s_led_swatch,
-                              lv_color_hsv_to_rgb(s_led_hue, 255, s_led_val), 0);
-}
 
 static lv_obj_t *s_root;   /* 整页容器：切页动画用 */
 
@@ -404,60 +388,10 @@ static void build_system(void)
         lv_obj_set_pos(s_lbl_mic, 548, 38);
     }
 
-    /* ---- 板载 RGB 灯调色（日志卡第三行）：HUE 滑块 + 亮度滑块 + 色块预览 ---- */
-    {
-        lv_obj_t *li = lv_label_create(p3);
-        lv_obj_set_style_text_font(li, &ui_font_14, 0);
-        lv_obj_set_style_text_color(li, lv_color_hex(COL_DIM), 0);
-        lv_label_set_text(li, "LED");
-        lv_obj_set_pos(li, 0, 76);
-
-        s_slider_hue = lv_slider_create(p3);
-        lv_obj_set_size(s_slider_hue, 300, 12);
-        lv_obj_set_pos(s_slider_hue, 96, 78);
-        lv_slider_set_range(s_slider_hue, 0, 359);
-        lv_slider_set_value(s_slider_hue, s_led_hue, LV_ANIM_OFF);   /* ★ 恢复上次状态 */
-        lv_obj_set_style_bg_color(s_slider_hue, lv_color_hex(ui_theme()->card_line), LV_PART_MAIN);
-        lv_obj_set_style_bg_opa(s_slider_hue, LV_OPA_COVER, LV_PART_MAIN);
-        lv_obj_set_style_radius(s_slider_hue, 6, LV_PART_MAIN);
-        lv_obj_set_style_bg_color(s_slider_hue, lv_color_hex(0xE8556D), LV_PART_INDICATOR);
-        lv_obj_set_style_radius(s_slider_hue, 6, LV_PART_INDICATOR);
-        lv_obj_set_style_pad_all(s_slider_hue, 3, LV_PART_KNOB);
-        lv_obj_add_event_cb(s_slider_hue, led_cb, LV_EVENT_VALUE_CHANGED, NULL);
-
-        lv_obj_t *vb = lv_label_create(p3);
-        lv_obj_set_style_text_font(vb, &ui_font_14, 0);
-        lv_obj_set_style_text_color(vb, lv_color_hex(COL_DIM), 0);
-        lv_label_set_text(vb, "VAL");
-        lv_obj_set_pos(vb, 410, 76);
-
-        s_slider_val = lv_slider_create(p3);
-        lv_obj_set_size(s_slider_val, 150, 12);
-        lv_obj_set_pos(s_slider_val, 450, 78);
-        lv_slider_set_range(s_slider_val, 0, 255);
-        lv_slider_set_value(s_slider_val, s_led_val, LV_ANIM_OFF);   /* ★ 恢复上次状态 */
-        lv_obj_set_style_bg_color(s_slider_val, lv_color_hex(ui_theme()->card_line), LV_PART_MAIN);
-        lv_obj_set_style_bg_opa(s_slider_val, LV_OPA_COVER, LV_PART_MAIN);
-        lv_obj_set_style_radius(s_slider_val, 6, LV_PART_MAIN);
-        lv_obj_set_style_bg_color(s_slider_val, lv_color_hex(0xE8556D), LV_PART_INDICATOR);
-        lv_obj_set_style_radius(s_slider_val, 6, LV_PART_INDICATOR);
-        lv_obj_set_style_pad_all(s_slider_val, 3, LV_PART_KNOB);
-        lv_obj_add_event_cb(s_slider_val, led_cb, LV_EVENT_VALUE_CHANGED, NULL);
-
-        s_led_swatch = lv_obj_create(p3);   /* 色块预览 */
-        lv_obj_set_size(s_led_swatch, 44, 20);
-        lv_obj_set_pos(s_led_swatch, 620, 74);
-        lv_obj_set_style_radius(s_led_swatch, 6, 0);
-        lv_obj_set_style_border_width(s_led_swatch, 0, 0);
-        lv_obj_clear_flag(s_led_swatch, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_set_style_bg_color(s_led_swatch,
-                                  lv_color_hsv_to_rgb(s_led_hue, 255, s_led_val), 0);
-    }
-
     /* 日志放进可滚动容器：内容超出可上下滑动，不会被裁掉半行 */
     lv_obj_t *logwrap = lv_obj_create(p3);
-    lv_obj_set_pos(logwrap, 0, 136);
-    lv_obj_set_size(logwrap, 744, 72);
+    lv_obj_set_pos(logwrap, 0, 96);
+    lv_obj_set_size(logwrap, 744, 112);
     lv_obj_set_style_bg_opa(logwrap, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(logwrap, 0, 0);
     lv_obj_set_style_pad_all(logwrap, 0, 0);
@@ -467,7 +401,7 @@ static void build_system(void)
     lv_obj_set_style_text_font(cap, &ui_font_14, 0);
     lv_obj_set_style_text_color(cap, lv_color_hex(COL_DIM), 0);
     lv_label_set_text(cap, "RECENT LOG  (latest at bottom)");
-    lv_obj_set_pos(cap, 0, 120);
+    lv_obj_set_pos(cap, 0, 78);
 
     s_lbl_log = lv_label_create(logwrap);
     lv_obj_set_style_text_font(s_lbl_log, &ui_font_14, 0);
@@ -498,13 +432,6 @@ void scene_system(uint16_t *fb, int frame)
     else if (frame % 25 == 0)     /* 约 500ms 刷新一次（原 1s，加快一倍） */
     {
         refresh_all();
-    }
-
-    /* 滑条 → WS2812：限速 ~16Hz，且只在 LVGL 场景循环里发（不在事件回调里） */
-    if (s_led_dirty && (frame % 3) == 0)
-    {
-        s_led_dirty = false;
-        bsp_led_set_hsv(s_led_hue, 255, s_led_val);
     }
 
     /* 麦克风电平单独快刷（100ms）：说话时条要跟得上，慢了像卡住 */

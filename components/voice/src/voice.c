@@ -23,6 +23,7 @@
 
 #include "app_cfg.h"
 #include "audio_player.h"
+#include "led_service.h"
 #include "voice.h"
 
 static const char *TAG = "voice";
@@ -204,6 +205,9 @@ static void voice_task(void *arg)
         ESP_LOGI(TAG, "listening (max %us, vad %u)", (unsigned)max_sec,
                  (unsigned)app_cfg_get()->vad_thresh);
 
+        /* ★ LED 服务用法示例：说话时蓝色呼吸（提示"正在听"），结束后自动恢复底色 */
+        led_breath(0, 120, 255, 1600);
+
         int  used       = 0;
         int  silence_ms = 0;
         int  voiced_ms  = 0;
@@ -257,6 +261,7 @@ static void voice_task(void *arg)
         }
 
         s_listening = false;
+        led_stop_effect();      /* 停止呼吸，回到常亮底色 */
 
         if (voiced_ms < MIN_SPEECH_MS)
         {

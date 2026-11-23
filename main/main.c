@@ -38,6 +38,7 @@
 #include "weather.h"
 #include "wifi_prov.h"
 #include "voice.h"
+#include "led_service.h"
 #include "hf_trend.h"
 #include "ai_rank.h"
 #include "bili_hot.h"
@@ -119,6 +120,9 @@ static void mdns_boot_task(void *arg)
         {
             ESP_LOGI(TAG, "config page at http://<sta-ip>/");
         }
+        /* LED 公共服务：任何上层都能调（底色 / 闪烁 / 呼吸） */
+        led_service_init();
+
         /* 语音服务：录音/VAD/ASR 上传（订阅式，暂无人订阅不产生副作用） */
         voice_init();
     }
