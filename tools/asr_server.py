@@ -332,6 +332,135 @@ def _local_opener():
     return urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
+# ---------------------------------------------------------------- 人设检索（RAG）
+# 人设分两层，解决"长 prompt 被稀释"的问题：
+#   ① tools/persona.txt   → 核心人设（性格 + 输出格式），每次都在，控制在 300 字内
+#   ② tools/persona/*.md  → 补充设定（背景、口癖、关系、世界观），**想写几万字都行**
+#      每次对话按话题检索，只把最相关的 3 条拼进去 ⇒ 不稀释、不失忆
+# 向量化用 LM Studio 里现成的 Qwen3-Embedding-0.6B（本地、零成本、约 50ms）。
+PERSONA_DIR   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "persona")
+EMBED_URL     = os.environ.get("EMBED_URL", "http://127.0.0.1:1234/v1/embeddings")
+EMBED_MODEL   = os.environ.get("EMBED_MODEL", "")      # 空 = 自动探测带 embed 的模型
+RETRIEVE_K    = int(os.environ.get("RETRIEVE_K", "3"))
+RETRIEVE_MIN  = float(os.environ.get("RETRIEVE_MIN", "0.38"))   # 宁缺毋滥：召回错的设定比不召回更伤
+
+_snippets = []                       # [(单位向量, 原文)]
+_embed_cache = {"id": None}
+
+
+def _pick_embed_model():
+    import json
+    if _embed_cache["id"]:
+        return _embed_cache["id"]
+    mid = EMBED_MODEL
+    if not mid:
+        try:
+            with _local_opener().open("http://127.0.0.1:1234/v1/models", timeout=10) as r:
+                ms = json.load(r).get("data") or []
+            cands = [m["id"] for m in ms if "embed" in m["id"].lower()]
+            mid = cands[0] if cands else ""
+        except Exception:
+            mid = ""
+    _embed_cache["id"] = mid
+    return mid
+
+
+def _embed(texts):
+    """调 LM Studio /v1/embeddings。失败返回 None（调用方降级处理）。"""
+    import json
+    import urllib.request
+
+    model = _pick_embed_model()
+    if not model:
+        return None
+    req = urllib.request.Request(
+        EMBED_URL,
+        data=json.dumps({"model": model, "input": texts},
+                        ensure_ascii=False).encode("utf-8"),
+        headers={"Content-Type": "application/json"})
+    try:
+        with _local_opener().open(req, timeout=60) as r:
+            d = json.load(r)
+        return [it["embedding"] for it in d["data"]]
+    except Exception as e:
+        print(f"[rag] embedding 失败: {e}", flush=True)
+        return None
+
+
+def _norm(v):
+    import math
+    n = math.sqrt(sum(x * x for x in v))
+    return [x / n for x in v] if n > 0 else v
+
+
+def _chunk(text, max_len=180):
+    """按行切片，过长再按句号切。
+    ★ 跳过标题行：markdown 的 "## 星炬学院" 去掉符号只剩 5 个字，
+      单独成片段会占掉检索名额却没有任何信息量。"""
+    out = []
+    for para in text.split("\n"):
+        raw = para.strip()
+        is_heading = raw.startswith("#")
+        para = raw.lstrip("-*# 0123456789.、").strip()
+        if not para:
+            continue
+        if is_heading or len(para) < 8:      # 标题 / 过短行 → 丢掉
+            continue
+        if len(para) <= max_len:
+            out.append(para)
+            continue
+        buf = ""
+        for seg in para.replace("。", "。|").replace("；", "；|").split("|"):
+            if buf and len(buf) + len(seg) > max_len:
+                out.append(buf)
+                buf = seg
+            else:
+                buf += seg
+        if buf:
+            out.append(buf)
+    return out
+
+
+def build_persona_index():
+    """读 tools/persona/*.md → 切片 → 算向量。启动时调一次，失败不影响对话。"""
+    global _snippets
+    _snippets = []
+    if not os.path.isdir(PERSONA_DIR):
+        return 0
+    chunks = []
+    for fn in sorted(os.listdir(PERSONA_DIR)):
+        if not fn.lower().endswith(".md"):
+            continue
+        try:
+            with open(os.path.join(PERSONA_DIR, fn), encoding="utf-8") as f:
+                chunks += _chunk(f.read())
+        except OSError:
+            continue
+    if not chunks:
+        return 0
+    vecs = _embed(chunks)
+    if not vecs:
+        print("[rag] 索引建立失败（embedding 不可用）→ 只用人设全文", flush=True)
+        return 0
+    _snippets = [(_norm(v), t) for v, t in zip(vecs, chunks)]
+    print(f"[rag] 人设索引就绪：{len(_snippets)} 条（来自 {PERSONA_DIR}）", flush=True)
+    return len(_snippets)
+
+
+def retrieve(query, k=None):
+    """返回与 query 最相关的 k 条设定。"""
+    if not _snippets:
+        return []
+    qv = _embed([query])
+    if not qv:
+        return []
+    q = _norm(qv[0])
+    scored = [(sum(a * b for a, b in zip(q, v)), t) for v, t in _snippets]
+    scored = [x for x in scored if x[0] >= RETRIEVE_MIN]
+    scored.sort(key=lambda x: -x[0])
+    return [t for _, t in scored[: (k or RETRIEVE_K)]]
+
+
 def fetch_chat(user_text):
     """调 LM Studio（OpenAI 兼容）→ (回复文本, 情绪)"""
     import json
@@ -347,9 +476,23 @@ def fetch_chat(user_text):
         except Exception:
             model = "local-model"
 
+    # 核心人设 + 按话题检索出的补充设定（没检索到就用纯核心人设）
+    system = PERSONA
+    try:
+        extra = retrieve(user_text)
+    except Exception:
+        extra = []
+    if extra:
+        system += (
+            "\n\n【角色设定 —— 描述她\"遇到什么会怎么反应\"，必须照着演】\n"
+            + "\n".join(f"- {x}" for x in extra)
+            + "\n★ 硬性规定：设定里写她会**回避 / 不说 / 否认 / 忽然安静 / 岔开话题**的，"
+              "就必须真的那样做——直接正面回答等于毁掉人设。"
+              "和当前话题无关的设定完全忽略，不要硬凑。")
+
     body = {
         "model": model,
-        "messages": [{"role": "system", "content": PERSONA},
+        "messages": [{"role": "system", "content": system},
                      {"role": "user", "content": user_text}],
         "temperature": 0.8,
         "max_tokens": 120,
@@ -439,6 +582,17 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_POST(self):
+        # ---------- 人设热重载：改完 tools/persona/*.md 不用重启服务 ----------
+        if self.path == "/api/persona/reload":
+            try:
+                import json
+                n = build_persona_index()
+                self._send_bytes(json.dumps({"count": n}).encode(),
+                                 "application/json; charset=utf-8")
+            except Exception as e:
+                self.send_error(500, str(e))
+            return
+
         # ---------- 新增：AI 对话 ----------
         if self.path == "/api/chat":
             d = self._json_body()
@@ -536,6 +690,10 @@ def main():
           + (f", voice={TTS_VOICE}" if TTS_BACKEND == "edge" else f", url={SOVITS_URL}")
           + ")", flush=True)
     print(f"  + /api/reply  POST {{text}}          -> WAV（对话+合成一次到位）", flush=True)
+    try:
+        build_persona_index()
+    except Exception as e:
+        print(f"[rag] 建索引异常（不影响对话）: {e}", flush=True)
     if BACKEND == "openai" and not os.environ.get("OPENAI_API_KEY"):
         print("警告：OPENAI_API_KEY 未设置，请求会失败", flush=True)
     if BACKEND == "whisper_cpp" and not os.environ.get("WHISPER_EXE"):
