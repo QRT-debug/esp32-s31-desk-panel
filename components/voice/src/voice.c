@@ -216,8 +216,23 @@ static asr_status_t asr_upload(const uint8_t *wav, int wav_len, char *out, size_
  * ★ 为什么播完要在这里阻塞等待：
  *   麦克风是常开的，喇叭一响就会被录进去 ⇒ 能量 VAD 立刻触发 ⇒ 又发一次请求
  *   ⇒ 自己跟自己无限对话。等播放结束再返回，可彻底避免这个自激。 */
+/* ★★ 2026-11-24：X-Reply-Text 必须在 HTTP_EVENT_ON_HEADER 里自己抓住，
+ *   不能用 esp_http_client_get_header() —— 实测 header 明明到了设备
+ *   （ON_HEADER 事件能打印出来），但 perform() 返回后调 get_header() 却返回
+ *   ESP_ERR_NOT_FOUND，导致回复文本凭空消失（不亮绿灯、界面无文字）。
+ *   全局变量在单语音任务里用是安全的（同一时刻只有一次 /api/reply）。 */
+static char s_reply_hdr[768];
+
 static esp_err_t reply_on_data(esp_http_client_event_t *e)
 {
+    if (e->event_id == HTTP_EVENT_ON_HEADER && e->header_key != NULL)
+    {
+        if (strcasecmp(e->header_key, "X-Reply-Text") == 0 && e->header_value != NULL)
+        {
+            strncpy(s_reply_hdr, e->header_value, sizeof(s_reply_hdr) - 1);
+            s_reply_hdr[sizeof(s_reply_hdr) - 1] = '\0';
+        }
+    }
     if (e->event_id == HTTP_EVENT_ON_DATA && e->user_data != NULL && e->data_len > 0)
     {
         FILE *f = (FILE *)e->user_data;
@@ -304,15 +319,16 @@ static void request_and_play_reply(const char *user_text)
     }
     esp_http_client_set_header(cli, "Content-Type", "application/json");
     esp_http_client_set_post_field(cli, body, (int)strlen(body));
+    s_reply_hdr[0] = '\0';       /* 每次请求前清空，避免上一次的残留被当成本次回复 */
 
     esp_err_t err  = esp_http_client_perform(cli);
     int       code = esp_http_client_get_status_code(cli);
 
-    char  reply[768] = { 0 };        /* percent-encode 后中文 9 字节/字，40 字需 360+ */
-    char *hval       = NULL;
-    if (esp_http_client_get_header(cli, "X-Reply-Text", &hval) == ESP_OK && hval != NULL)
+    /* reply 来自 ON_HEADER 事件里抓下的 s_reply_hdr（percent-encode 过） */
+    char  reply[768] = { 0 };
+    if (s_reply_hdr[0] != '\0')
     {
-        url_decode(hval, reply, sizeof(reply));
+        url_decode(s_reply_hdr, reply, sizeof(reply));
     }
     esp_http_client_cleanup(cli);
     fclose(f);
@@ -328,10 +344,16 @@ static void request_and_play_reply(const char *user_text)
     }
     if (reply[0] != '\0')
     {
+        ESP_LOGI(TAG, "reply text(%d B): %s", (int)strlen(reply), reply);
         emit(VOICE_EV_REPLY, reply);
         /* 收到回复、准备出声 → 灯转绿呼吸（= 她在说话） */
         led_set_rgb(LED_SPEAK_R, LED_SPEAK_G, LED_SPEAK_B);
         led_breath(LED_SPEAK_R, LED_SPEAK_G, LED_SPEAK_B, 900);
+        ESP_LOGI(TAG, "LED -> green breath");
+    }
+    else
+    {
+        ESP_LOGW(TAG, "X-Reply-Text 缺失或为空 ⇒ 绿灯不会亮、界面无文字");
     }
 
     /* "voice/reply.wav" 会被拼成 /sdcard/voice/reply.wav */
