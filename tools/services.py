@@ -89,6 +89,10 @@ SERVICES = {
             "LLM_URL":   _LLM_CFG.get("url", ""),
             "LLM_KEY":   _LLM_CFG.get("key", ""),
             "LLM_MODEL": _LLM_CFG.get("model", ""),
+            # ★ 显式指定 embedding 模型：不指定时 asr_server 会从 LM Studio 的
+            #   /v1/models 里挑"第一个含 embed 的"，顺序一变就换模型——
+            #   两个 embedding 的向量空间不兼容，人设索引会静默失效（检索出无关条目）。
+            "EMBED_MODEL": "text-embedding-qwen3-embedding-0.6b",
             # ====================================================
         },
     },
