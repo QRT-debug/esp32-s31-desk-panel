@@ -367,9 +367,9 @@ static void request_and_play_reply(const char *user_text)
      *   此刻 audio_player_is_playing() 还是 false ⇒ 下面"等播完"的循环 0 次退出
      *   ⇒ 立刻 led_idle() ⇒ 绿灯只亮 2ms（实测日志：speak(green) 后 2ms 就 idle）。
      *   所以要先等"开始"，再等"结束"。 */
-    for (int i = 0; i < 20 && !audio_player_is_playing(); i++)
+    for (int i = 0; i < 50 && !audio_player_is_playing(); i++)
     {
-        vTaskDelay(pdMS_TO_TICKS(100));      /* 最多等 2s 让它真正开播 */
+        vTaskDelay(pdMS_TO_TICKS(100));      /* 最多等 5s：SD 卡加载 200~400KB 要 1~3s */
     }
     /* ★ 等播完（最多 60s）：期间本任务阻塞，麦克风不会把喇叭声录回去 */
     for (int i = 0; i < 600 && audio_player_is_playing(); i++)

@@ -823,7 +823,12 @@ audio_player_state_t audio_player_state(void)
 
 bool audio_player_is_playing(void)
 {
-    return s_state == AUD_STATE_PLAYING;
+    /* ★★ 2026-11-24：LOADING 也必须算"忙"。
+     *   sd_play_task 会先把整个 WAV 读进 PSRAM（200~400KB，SD 卡上要 1~3 秒），
+     *   这段期间 s_state 是 AUD_STATE_LOADING。只看 PLAYING 的话，调用方会以为
+     *   "还没开始播"——实测 voice.c 的"等开始"循环等满 2s 超时后直接 led_idle()，
+     *   而那时音频才刚要开始，绿灯就提前灭了。 */
+    return s_state == AUD_STATE_PLAYING || s_state == AUD_STATE_LOADING;
 }
 
 esp_err_t audio_player_stop(void)
