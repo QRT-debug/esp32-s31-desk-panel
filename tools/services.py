@@ -50,8 +50,22 @@ SERVICES = {
         "port": 8081,
         "env": {
             "ASR_BACKEND": "sensevoice",
+            # ★ TTS 后端：sovits = GPT-SoVITS 爱弥斯音色（慢 1~2s）；edge = edge-tts（快、通用女声）
+            #   想切回 edge 就把它改成 "edge"，不用动设备端
+            "TTS_BACKEND": "sovits",
+            "SOVITS_ROOT": r"D:\GPT-SoVITS-v2pro-nvidia50\GPT-SoVITS-v2pro-20250604-nvidia50",
             "SV_DIR": os.path.join("models", "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"),
         },
+    },
+    # GPT-SoVITS 语音合成（爱弥斯音色）。启动慢（约 50s 加载模型）、吃 4~6GB 显存，
+    # 用它自带的便携 runtime（Python 3.9），不是系统的 3.13。
+    "sovits": {
+        "desc": "GPT-SoVITS 合成（爱弥斯音色）",
+        "script": r"D:\GPT-SoVITS-v2pro-nvidia50\GPT-SoVITS-v2pro-20250604-nvidia50\api_v2.py",
+        "cwd": r"D:\GPT-SoVITS-v2pro-nvidia50\GPT-SoVITS-v2pro-20250604-nvidia50",
+        "python": r"D:\GPT-SoVITS-v2pro-nvidia50\GPT-SoVITS-v2pro-20250604-nvidia50\runtime\python.exe",
+        "port": 9880,
+        "env": {},
     },
 }
 
@@ -139,9 +153,10 @@ def start_one(name, quiet=False):
     flags = 0
     if os.name == "nt":
         flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+    python_exe = svc.get("python") or PYTHON      # sovits 要用它自带的 3.9 runtime
     try:
         proc = subprocess.Popen(
-            [PYTHON, svc["script"]],
+            [python_exe, svc["script"]],
             cwd=svc["cwd"],
             env=env,
             stdout=logf,
@@ -152,8 +167,8 @@ def start_one(name, quiet=False):
         print(f"  {C_BAD}{name:8s} 启动失败：{e}{C_END}")
         return False
 
-    # 等端口起来（asr 要加载模型，可能 5~20 秒）
-    wait = 25 if name == "asr" else 8
+    # 等端口起来（sovits 要加载 BERT/HuBERT/权重约 50s，asr 加载 SenseVoice 约 5~20s）
+    wait = {"sovits": 120, "asr": 25}.get(name, 8)
     for _ in range(wait * 10):
         if port_open(svc["port"]):
             pids = load_pids()

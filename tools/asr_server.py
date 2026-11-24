@@ -216,6 +216,76 @@ EMOTION_MAP = {
     "中立": ("+0%", "+0Hz"),
 }
 
+# ---------------------------------------------------------------- TTS 后端选择
+# TTS_BACKEND=edge    → edge-tts（快、通用女声、情感靠语速近似）
+# TTS_BACKEND=sovits  → GPT-SoVITS（爱弥斯音色、情感由参考音频决定、慢 1~2s）
+TTS_BACKEND = os.environ.get("TTS_BACKEND", "edge").lower()
+SOVITS_URL = os.environ.get("SOVITS_URL", "http://127.0.0.1:9880/tts")
+SOVITS_ROOT = os.environ.get(
+    "SOVITS_ROOT",
+    r"D:\GPT-SoVITS-v2pro-nvidia50\GPT-SoVITS-v2pro-20250604-nvidia50")
+
+# 情绪 → (参考音频, 该音频的台词)。GPT-SoVITS 靠参考音频同时决定音色和情绪，
+# ★ prompt_text 必须与参考音频内容逐字一致，否则合成会跑偏甚至失败。
+SOVITS_REFS = {
+    "开心": ("ref/happy.wav",   "感受星炬学院，在那些麻烦事之外的青春气息,这十几年来，我随手搭来的发歌网站"),
+    "忧伤": ("ref/sad.wav",     "全员覆没，所以后来，我再没有在学院见过他们，我还以为只是错过了"),
+    "埋怨": ("ref/neutral.wav", "想要拯救的越多，付出的代价就越大，但有些事，必须去做"),
+    "温柔": ("ref/sad.wav",     "全员覆没，所以后来，我再没有在学院见过他们，我还以为只是错过了"),
+    "中立": ("ref/neutral.wav", "想要拯救的越多，付出的代价就越大，但有些事，必须去做"),
+}
+
+
+def _to_44k_mono(audio_bytes, suffix=".wav"):
+    """统一转成设备要的格式：44100Hz / 16bit / 单声道。
+    ★ edge-tts 出 24kHz、GPT-SoVITS 出 32kHz，而设备 I2S 固定按 44.1kHz 播，
+      不重采样就会变调（音调/速度都不对）。"""
+    import subprocess
+    import tempfile
+
+    import imageio_ffmpeg
+
+    src = tempfile.mktemp(suffix=suffix)
+    dst = tempfile.mktemp(suffix=".wav")
+    try:
+        with open(src, "wb") as f:
+            f.write(audio_bytes)
+        subprocess.run(
+            [imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-i", src,
+             "-ar", "44100", "-ac", "1", "-acodec", "pcm_s16le", dst],
+            capture_output=True, timeout=90, check=True)
+        with open(dst, "rb") as f:
+            return f.read()
+    finally:
+        for p in (src, dst):
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
+
+
+def synth_sovits(text, emotion="中立"):
+    """调 GPT-SoVITS api_v2（返回 32kHz WAV），再重采样到 44.1k。"""
+    import json
+    import urllib.request
+
+    ref, prompt = SOVITS_REFS.get(emotion, SOVITS_REFS["中立"])
+    body = {
+        "text": text,
+        "text_lang": "zh",
+        "ref_audio_path": os.path.join(SOVITS_ROOT, ref),
+        "prompt_text": prompt,
+        "prompt_lang": "zh",
+        "media_type": "wav",
+        "streaming_mode": False,
+    }
+    req = urllib.request.Request(
+        SOVITS_URL, data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+        headers={"Content-Type": "application/json"})
+    with _local_opener().open(req, timeout=180) as r:
+        raw = r.read()
+    return _to_44k_mono(raw, suffix=".wav")
+
 
 def _local_opener():
     """拒绝一切代理：本服务只连本机 LM Studio 和微软 TTS，代理只会添乱。"""
@@ -280,17 +350,16 @@ def fetch_chat(user_text):
 
 
 def synth_wav(text, emotion="中立"):
-    """edge-tts → mp3 → ffmpeg → WAV(44100/16bit/mono)。返回 WAV 字节。"""
+    """按 TTS_BACKEND 选引擎，统一返回 44100/16bit/mono 的 WAV 字节。"""
+    if TTS_BACKEND == "sovits":
+        return synth_sovits(text, emotion)
+
     import asyncio
-    import subprocess
-    import tempfile
 
     import edge_tts                      # 延迟导入：没装也不影响 /api/asr
-    import imageio_ffmpeg
 
     rate, pitch = EMOTION_MAP.get(emotion, EMOTION_MAP["中立"])
     tmp_mp3 = tempfile.mktemp(suffix=".mp3")
-    tmp_wav = tempfile.mktemp(suffix=".wav")
 
     async def _run():
         c = edge_tts.Communicate(text, TTS_VOICE, rate=rate, pitch=pitch)
@@ -298,19 +367,14 @@ def synth_wav(text, emotion="中立"):
 
     try:
         asyncio.run(_run())
-        # ★ 必须重采样：edge-tts 出 24kHz，设备 I2S 按 44.1kHz 播放，不转会变调
-        subprocess.run(
-            [imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-i", tmp_mp3,
-             "-ar", "44100", "-ac", "1", "-acodec", "pcm_s16le", tmp_wav],
-            capture_output=True, timeout=60, check=True)
-        with open(tmp_wav, "rb") as f:
-            return f.read()
+        with open(tmp_mp3, "rb") as f:
+            mp3 = f.read()
+        return _to_44k_mono(mp3, suffix=".mp3")   # edge 出 24kHz，必须重采样
     finally:
-        for p in (tmp_mp3, tmp_wav):
-            try:
-                os.unlink(p)
-            except OSError:
-                pass
+        try:
+            os.unlink(tmp_mp3)
+        except OSError:
+            pass
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -428,7 +492,10 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     print(f"ASR 中转启动: http://0.0.0.0:{PORT}/api/asr  (backend={BACKEND})", flush=True)
     print(f"  + /api/chat   POST {{text}}          -> {{reply, emotion}}   (LLM: {LLM_URL})", flush=True)
-    print(f"  + /api/tts    POST {{text, emotion}} -> WAV                  (voice: {TTS_VOICE})", flush=True)
+    print(f"  + /api/tts    POST {{text, emotion}} -> WAV                  "
+          f"(backend={TTS_BACKEND}"
+          + (f", voice={TTS_VOICE}" if TTS_BACKEND == "edge" else f", url={SOVITS_URL}")
+          + ")", flush=True)
     print(f"  + /api/reply  POST {{text}}          -> WAV（对话+合成一次到位）", flush=True)
     if BACKEND == "openai" and not os.environ.get("OPENAI_API_KEY"):
         print("警告：OPENAI_API_KEY 未设置，请求会失败", flush=True)
