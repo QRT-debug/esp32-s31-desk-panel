@@ -615,6 +615,13 @@ static esp_err_t aud_enter(aud_mode_t target)
         {
             esp_codec_dev_set_out_vol(s_codec, s_volume);
             pa_set(true);
+            /* ★ 2026-11-24：等功放稳定再喂数据。
+             *   原来 pa_set(true) 后立刻返回、马上开始推音频，NS4150C 从上电到
+             *   增益稳定要一两百毫秒，结果**开头的字被吞掉或声音很小**
+             *   （语音对话的第一句最明显，用户实测"第一个字没声音"）。
+             *   而 TTS（edge / SoVITS）输出的开头本来就有 100~200ms 静音，
+             *   这段等待正好被静音覆盖，用户听不出额外延迟。 */
+            vTaskDelay(pdMS_TO_TICKS(200));
             s_play_open = true;
             s_aud_mode  = AUD_MODE_PLAY;
             ESP_LOGI(TAG, "aud mode -> PLAY (PA on, vol %d)", s_volume);
