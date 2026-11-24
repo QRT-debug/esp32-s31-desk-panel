@@ -174,11 +174,192 @@ def asr_whisper_cpp(wav_path: str, lang: str = "zh") -> str:
     return " ".join(out.stdout.split())
 
 
+# ================================================================== AI 对话 + TTS
+# 2026-11-24 新增：让设备能"说话→回话"。
+#   POST /api/chat  {"text":"..."}                 -> {"reply":"...","emotion":"..."}
+#   POST /api/tts   {"text":"...","emotion":"..."}  -> 二进制 WAV
+#   POST /api/reply {"text":"..."}                  -> 二进制 WAV（内部 chat+tts，一次到位）
+#
+# ★ 延迟构成：LLM 0.7~2s + edge-tts 0.5~1s + ffmpeg 0.2s ≈ 1.5~3s
+# ★ 情感控制是"近似"的：edge-tts 不支持 style/emotion，只能用 rate/pitch 微调。
+#   真情感要等 CosyVoice2 / GPT-SoVITS 那一步。
+
+LLM_URL   = os.environ.get("LLM_URL", "http://127.0.0.1:1234/v1/chat/completions")
+LLM_MODEL = os.environ.get("LLM_MODEL", "")          # 空 = 问 /v1/models 拿第一个
+TTS_VOICE = os.environ.get("TTS_VOICE", "zh-CN-XiaoxiaoNeural")
+
+# 人设：爱弥斯（Aemeath），星炬学院学生，自称"救世主"
+# 素材来自参考音频的台词：活泼自信、偶尔中二、重感情
+PERSONA = os.environ.get("PERSONA", """你是爱弥斯（Aemeath），星炬学院的学生，自称"救世主"。
+性格：活泼自信，说话带点调侃和中二，但内心重感情、在意身边的人。
+回复硬性要求：
+1. 口语化，1~2 句，40 字以内。这是语音对话，说长了对方听不完。
+2. 开头必须用方括号标一个情绪，只能从这几个里选：开心 / 忧伤 / 埋怨 / 温柔 / 中立。
+3. 不要书面语，不要罗列要点，不要写括号里的动作或表情。""")
+
+# 情绪 → (语速, 音高)。edge-tts 只认这种近似控制，不是真情感模型。
+EMOTION_MAP = {
+    "开心": ("+14%", "+30Hz"),
+    "忧伤": ("-10%", "-25Hz"),
+    "埋怨": ("+6%", "+10Hz"),
+    "温柔": ("-6%", "-10Hz"),
+    "中立": ("+0%", "+0Hz"),
+}
+
+
+def _local_opener():
+    """拒绝一切代理：本服务只连本机 LM Studio 和微软 TTS，代理只会添乱。"""
+    import urllib.request
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+def fetch_chat(user_text):
+    """调 LM Studio（OpenAI 兼容）→ (回复文本, 情绪)"""
+    import json
+    import re as _re
+    import urllib.request
+
+    model = LLM_MODEL
+    if not model:
+        try:
+            with _local_opener().open("http://127.0.0.1:1234/v1/models", timeout=10) as r:
+                ms = json.load(r).get("data") or []
+            model = ms[0]["id"] if ms else "local-model"
+        except Exception:
+            model = "local-model"
+
+    body = {
+        "model": model,
+        "messages": [{"role": "system", "content": PERSONA},
+                     {"role": "user", "content": user_text}],
+        "temperature": 0.8,
+        "max_tokens": 120,
+        "stream": False,
+    }
+    req = urllib.request.Request(
+        LLM_URL, data=json.dumps(body).encode("utf-8"),
+        headers={"Content-Type": "application/json"})
+    with _local_opener().open(req, timeout=90) as r:
+        d = json.load(r)
+    content = (d["choices"][0]["message"]["content"] or "").strip()
+
+    emo = "中立"
+    m = _re.match(r"^\s*[\[【]([^\]】]{1,6})[\]】]\s*", content)
+    if m:
+        cand = m.group(1).strip()
+        if cand in EMOTION_MAP:
+            emo = cand
+            content = content[m.end():]
+    return content.strip(), emo
+
+
+def synth_wav(text, emotion="中立"):
+    """edge-tts → mp3 → ffmpeg → WAV(44100/16bit/mono)。返回 WAV 字节。"""
+    import asyncio
+    import subprocess
+    import tempfile
+
+    import edge_tts                      # 延迟导入：没装也不影响 /api/asr
+    import imageio_ffmpeg
+
+    rate, pitch = EMOTION_MAP.get(emotion, EMOTION_MAP["中立"])
+    tmp_mp3 = tempfile.mktemp(suffix=".mp3")
+    tmp_wav = tempfile.mktemp(suffix=".wav")
+
+    async def _run():
+        c = edge_tts.Communicate(text, TTS_VOICE, rate=rate, pitch=pitch)
+        await c.save(tmp_mp3)
+
+    try:
+        asyncio.run(_run())
+        # ★ 必须重采样：edge-tts 出 24kHz，设备 I2S 按 44.1kHz 播放，不转会变调
+        subprocess.run(
+            [imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-i", tmp_mp3,
+             "-ar", "44100", "-ac", "1", "-acodec", "pcm_s16le", tmp_wav],
+            capture_output=True, timeout=60, check=True)
+        with open(tmp_wav, "rb") as f:
+            return f.read()
+    finally:
+        for p in (tmp_mp3, tmp_wav):
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         print("[asr]", fmt % args, flush=True)
 
+    def _json_body(self):
+        import json
+        n = int(self.headers.get("Content-Length", "0"))
+        raw = self.rfile.read(n) if n > 0 else b"{}"
+        try:
+            return json.loads(raw.decode("utf-8") or "{}")
+        except Exception:
+            return {}
+
+    def _send_bytes(self, data, ctype, extra=None):
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        for k, v in (extra or {}).items():
+            self.send_header(k, v)
+        self.end_headers()
+        self.wfile.write(data)
+
     def do_POST(self):
+        # ---------- 新增：AI 对话 ----------
+        if self.path == "/api/chat":
+            d = self._json_body()
+            text = (d.get("text") or "").strip()
+            if not text:
+                self.send_error(400, "empty text")
+                return
+            try:
+                reply, emo = fetch_chat(text)
+            except Exception as e:
+                print(f"[chat] failed: {e}", flush=True)
+                self.send_error(503, str(e))
+                return
+            print(f"[chat] \"{text}\" -> [{emo}] {reply}", flush=True)
+            import json as _j
+            body = _j.dumps({"reply": reply, "emotion": emo},
+                            ensure_ascii=False).encode("utf-8")
+            self._send_bytes(body, "application/json; charset=utf-8")
+            return
+
+        # ---------- 新增：TTS / 一次到位 ----------
+        if self.path in ("/api/tts", "/api/reply"):
+            d = self._json_body()
+            text = (d.get("text") or "").strip()
+            emo = (d.get("emotion") or "中立").strip()
+            if not text:
+                self.send_error(400, "empty text")
+                return
+            reply = text
+            if self.path == "/api/reply":          # 先对话，再合成，一次请求拿到音频
+                try:
+                    reply, emo = fetch_chat(text)
+                except Exception as e:
+                    print(f"[reply] chat failed: {e}", flush=True)
+                    self.send_error(503, f"chat failed: {e}")
+                    return
+            try:
+                wav = synth_wav(reply, emo)
+            except Exception as e:
+                print(f"[tts] failed: {e}", flush=True)
+                self.send_error(500, str(e))
+                return
+            import urllib.parse as _up
+            print(f"[tts] [{emo}] {reply[:30]} -> {len(wav)}B", flush=True)
+            self._send_bytes(wav, "audio/wav",
+                             {"X-Reply-Text": _up.quote(reply),
+                              "X-Emotion": _up.quote(emo)})
+            return
+
+        # ---------- 原有：ASR ----------
         if self.path != "/api/asr":
             self.send_error(404)
             return
@@ -220,6 +401,9 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     print(f"ASR 中转启动: http://0.0.0.0:{PORT}/api/asr  (backend={BACKEND})", flush=True)
+    print(f"  + /api/chat   POST {{text}}          -> {{reply, emotion}}   (LLM: {LLM_URL})", flush=True)
+    print(f"  + /api/tts    POST {{text, emotion}} -> WAV                  (voice: {TTS_VOICE})", flush=True)
+    print(f"  + /api/reply  POST {{text}}          -> WAV（对话+合成一次到位）", flush=True)
     if BACKEND == "openai" and not os.environ.get("OPENAI_API_KEY"):
         print("警告：OPENAI_API_KEY 未设置，请求会失败", flush=True)
     if BACKEND == "whisper_cpp" and not os.environ.get("WHISPER_EXE"):
