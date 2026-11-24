@@ -111,7 +111,10 @@ static volatile uint32_t s_pos_ms;             /* 播放位置（毫秒） */
 static volatile uint32_t s_dur_ms;             /* 当前曲目总时长（毫秒） */
 static volatile int  s_diag  = 0;              /* 诊断模式（0=正常） */
 static TaskHandle_t  s_diag_task;              /* 诊断音源任务（数字静音/正弦） */
-static volatile int  s_volume = 40;            /* 试听期默认 40（防止异常噪声炸耳） */
+static volatile int  s_volume = 70;            /* ★ 2026-11-24：原 40 是"试听期防炸耳"设的，
+                                                * 但语音对话时 40% 听不清（加上 SoVITS 输出电平低
+                                                * 更是雪上加霜）。提到 70，AUDIO 页滑块的调整
+                                                * 仍可覆盖，只是不会持久化到下次开机。 */
 static TaskHandle_t  s_task;
 static char s_cur_file[32] = "NEWSONG.WAV";    /* 当前曲目文件名（UI 可切换） */
 static char s_file_path[80];                   /* 完整路径（任务用） */
