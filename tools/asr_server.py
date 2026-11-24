@@ -605,9 +605,13 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/persona/reload":
             try:
                 import json
+                # ★ 顺带重读 persona.txt（核心人设），这样改人设也不用重启服务
+                global PERSONA
+                PERSONA = os.environ.get("PERSONA") or _load_persona()
                 n = build_persona_index()
-                self._send_bytes(json.dumps({"count": n}).encode(),
-                                 "application/json; charset=utf-8")
+                self._send_bytes(
+                    json.dumps({"count": n, "persona_chars": len(PERSONA)}).encode(),
+                    "application/json; charset=utf-8")
             except Exception as e:
                 self.send_error(500, str(e))
             return
