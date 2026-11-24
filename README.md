@@ -50,7 +50,7 @@ LVGL 9.6 驱动 **800×480 RGB 屏**（66 fps），集成天气、榜单、音�
 | **AI RANK** | AI 模型排行榜（多榜切换） |
 | **BILI HOT** | B 站热榜 |
 | **CLOCK** | 时钟壁纸：随机壁纸 + **硬件 JPEG 解码** + 96 px 等宽数字 + 遮罩防烧屏 |
-| **VOICE** | 语音助手：能量 VAD → WAV 打包 → 上传 PC 侧 ASR（SenseVoice）→ 屏上出字 |
+| **VOICE** | **语音对话**：KEY0 / 触屏触发 → 能量 VAD 断句 → PC 侧 ASR（SenseVoice）→ 云端大模型生成回复 → GPT-SoVITS 合成**爱弥斯音色** → 设备播放，配四色状态灯（详见[语音对话](#语音对话voice)） |
 | **SYSTEM** | 背光、麦克风电平、运行日志、WiFi 配网入口 |
 | **APPS** | 九宫格应用页 |
 
@@ -85,6 +85,62 @@ LVGL 9.6 驱动 **800×480 RGB 屏**（66 fps），集成天气、榜单、音�
 
 > 图中壁纸均为**使用者自行上传**的内容：本仓库与固件都不包含任何壁纸素材，设备也不内置图库。
 > 系统页截图里的 SSID / IP 已打码。
+
+---
+
+## 语音对话（VOICE）
+
+**说一句话 → 她听懂 → 她用爱弥斯的声音回答**，全链路：
+
+```
+按 KEY0 / 点屏上 TALK
+   │
+   ├─ 设备：I2S 录音 16 kHz，能量 VAD 断句（静音 800 ms 结束，最长 10 s）
+   │
+   ├─ → POST /api/asr      设备把 WAV 上传，PC 侧 SenseVoice-Small 识别（本地 CPU，约 0.3 s）
+   │
+   ├─ → POST /api/reply    一次调用完成"对话 + 合成"：
+   │       ├─ 人设 RAG：597 条设定向量检索 + 常驻的关系/场景说明
+   │       ├─ DeepSeek（云端，约 0.9 s）生成回复文本 + 情绪标签
+   │       └─ GPT-SoVITS（本地 GPU，约 3 s）按情绪选参考音频合成爱弥斯音色
+   │
+   └─ WAV 边收边写 SD 卡 → 播放（44.1 kHz 单声道）
+```
+
+端到端约 **6~10 秒**（TTS 合成是主要耗时），识别、对话、合成都发生在 PC 侧，设备只负责录音、上传、播放。
+
+### 状态灯（板载 WS2812，IO37）
+
+四色语义，"现在什么状态"用余光就能看出来，不需要记：
+
+| 时刻 | 灯 |
+|---|---|
+| 待机 | **灭** |
+| 聆听中 | 蓝色呼吸（1.2 s） |
+| 等回复 | 黄色快闪（0.5 s） |
+| 她说话 | 绿色呼吸（0.9 s） |
+| 出错 | 红色闪 3 下 → 回灭 |
+
+### 物理按键 KEY0（IO61）
+
+**注意**：KEY0 接的是原理图上的 `BOOT` 网络，即 **IO61**（ESP32-S31 的 strapping 脚，**不是** ESP32-S3 的 IO0）。因此它与 I2C0（IO0/IO1，触摸 + codec 共用）**不冲突**。
+
+| 动作 | 效果 |
+|---|---|
+| 空闲时按一下 | 开始听（等价于屏上 TALK；说完 VAD 自动结束，**不用再按**） |
+| 她说话时按一下 | **立刻打断** |
+| 开机瞬间按住 | 会进 ROM 下载模式（strapping 特性，正常运行时无影响） |
+
+### 配置
+
+| 文件 | 说明 |
+|---|---|
+| `tools/persona.txt` | 核心人设（290 字：性格、说话方式、输出格式），**进仓库** |
+| `tools/persona/*.md` | 4.1 万字详细设定（背景/关系/语料），**不进仓库**（个人内容） |
+| `tools/llm.json` | 大模型地址 / 模型名 / API key，**不进仓库**。复制 `llm.example.json` 后填自己的值 |
+| `tools/检查key.py` | 填完 key 跑一遍自检：可用 / 401 / 404 / 429 会给不同提示 |
+
+启动 / 重启见下方 **PC 侧辅助服务**。
 
 ---
 
@@ -132,7 +188,7 @@ components/
   BSP/        板级驱动：LCD / TOUCH / AUDIO / STORAGE / I2C / LED
   ui/         LVGL 界面：10 个场景 + 主题 + 字体
   netapp/     网络：WiFi STA/AP 配网、天气、榜单、PC 监控、数据缓存
-  voice/      语音服务：VAD、录音、WAV 打包、ASR 上传
+  voice/      语音服务：KEY0 物理按键、能量 VAD 断句、录音、WAV 打包、ASR 上传、四色状态灯
 main/         启动与初始化
 pc_sim/       Windows 上的 LVGL 模拟器（改界面时用）
 tools/        PC 侧脚本：主机监控、ASR 中转、串口监听、镜像打包
@@ -172,12 +228,21 @@ idf.py -p COM5 -b 1500000 flash monitor
 
 | 脚本 | 作用 |
 |---|---|
+| `tools/services.py` | **服务总控**：一次启动/停止/查看 monitor、asr、sovits 三个服务（`start` / `stop` / `restart` / `status`） |
+| `tools/asr_server.py` | **语音中转**：`/api/asr` 识别、`/api/chat` 纯对话、`/api/tts` 纯合成、`/api/reply` 对话+合成一次到位；含人设 RAG（597 条） |
 | `tools/pc_monitor_server.py` | 采集主机 CPU/内存/网络，供 PC MONITOR 场景拉取 |
-| `tools/asr_server.py` | 语音识别中继：接收设备上传的 WAV → 本地 SenseVoice 或云端 API → 返回文本 |
 | `tools/watch_log.py` | 串口日志监听（带过滤） |
+| `tools/检查key.py` | 自检 `llm.json` 里的 API key 是否可用 |
 
-ASR 走本地 SenseVoice-Small（中文 CER 约 7.8%，CPU 上非自回归推理，速度很快）。
-密钥从环境变量读，**不写在代码里**。
+**一键启动**：双击 `启动服务.bat`（首次）或 `重启服务.bat`（改过代码后 —— `启动服务.bat` 是幂等的，已在跑就跳过，不会重载新代码）。
+
+**依赖**：
+- ASR：本地 SenseVoice-Small（sherpa-onnx，CPU，中文 CER 约 7.8%，非自回归，很快）
+- 对话：云端 API（DeepSeek 等，OpenAI 兼容格式，默认）或本地 LM Studio（`LLM_URL` 为空时回落到 `127.0.0.1:1234`）
+- TTS：GPT-SoVITS（本地 GPU，爱弥斯音色；`TTS_BACKEND=edge` 可退回免费 edge-tts）
+- 人设检索：LM Studio 的 embedding 模型（`text-embedding-qwen3-embedding-0.6b`）
+
+密钥从 `tools/llm.json` 读，**不写在代码里、不进仓库**。
 
 ---
 
@@ -187,6 +252,8 @@ ASR 走本地 SenseVoice-Small（中文 CER 约 7.8%，CPU 上非自回归推理
 - 40 MHz PCLK 超商家验证值 60%，属"实测可用但余量薄"，出现竖纹应退回 32 MHz
 - 面板 VCOM 出厂未校准 ⇒ 冷启动前几分钟可能有轻微 flicker，属物理特性（断电充分后消失）
 - 语音识别依赖 PC 侧服务，设备本身不做离线 ASR（ESP-SR 唤醒词需要 2 MB 模型分区，尚未启用）
+- **语音对话是全链路在线的**：ASR、大模型、TTS 都跑在 PC 上，PC 关机或离开同一局域网即不可用（设备端会红闪报错）
+- 端到端延迟约 6~10 s，其中 TTS 合成占 3~5 s；未做流式合成
 
 ---
 
