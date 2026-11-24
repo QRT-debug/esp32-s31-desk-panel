@@ -180,6 +180,134 @@ static asr_status_t asr_upload(const uint8_t *wav, int wav_len, char *out, size_
     return st;
 }
 
+/* ---------------- AI 回复：文本 → PC 合成 → 播回（2026-11-24） ----------------
+ * ★ 为什么落盘到 SD 而不是内存：
+ *   audio_player 只能从 /music(vfs) 或 /sdcard 读文件，没有内存播放接口；
+ *   而写 vfs 就是写 flash —— flash 写入期间禁 i-cache，LVGL 会卡住、画面撕裂（已知坑）。
+ *   所以走 SD 卡，并且放在 voice/ 子目录：AUDIO 页只扫根目录，不会把它列成曲目。
+ *
+ * ★ 为什么播完要在这里阻塞等待：
+ *   麦克风是常开的，喇叭一响就会被录进去 ⇒ 能量 VAD 立刻触发 ⇒ 又发一次请求
+ *   ⇒ 自己跟自己无限对话。等播放结束再返回，可彻底避免这个自激。 */
+static esp_err_t reply_on_data(esp_http_client_event_t *e)
+{
+    if (e->event_id == HTTP_EVENT_ON_DATA && e->user_data != NULL && e->data_len > 0)
+    {
+        FILE *f = (FILE *)e->user_data;
+        if (fwrite(e->data, 1, (size_t)e->data_len, f) != (size_t)e->data_len)
+        {
+            return ESP_FAIL;
+        }
+    }
+    return ESP_OK;
+}
+
+/* 服务端把回复文本放在 X-Reply-Text 头里并做了 percent-encode */
+static void url_decode(const char *src, char *dst, size_t dst_sz)
+{
+    size_t o = 0;
+    for (size_t i = 0; src[i] != '\0' && o + 1 < dst_sz; i++)
+    {
+        if (src[i] == '%' && src[i + 1] != '\0' && src[i + 2] != '\0')
+        {
+            char hex[3] = { src[i + 1], src[i + 2], '\0' };
+            dst[o++] = (char)strtol(hex, NULL, 16);
+            i += 2;
+        }
+        else if (src[i] == '+')
+        {
+            dst[o++] = ' ';
+        }
+        else
+        {
+            dst[o++] = src[i];
+        }
+    }
+    dst[o] = '\0';
+}
+
+static void request_and_play_reply(const char *user_text)
+{
+    const app_cfg_t *c = app_cfg_get();
+    char             url[160];
+    snprintf(url, sizeof(url), "http://%s:8081/api/reply", c->pc_host);
+
+    mkdir("/sdcard/voice", 0777);            /* 已存在返回 EEXIST，无害 */
+    FILE *f = fopen("/sdcard/voice/reply.wav", "wb");
+    if (f == NULL)
+    {
+        emit(VOICE_EV_ERROR, "打不开 SD 卡");
+        return;
+    }
+
+    /* JSON body：手写转义，只处理 " 和 \ 两种（够用，且不引入 cJSON 依赖） */
+    char   body[600];
+    size_t o = 0;
+    o += (size_t)snprintf(body + o, sizeof(body) - o, "{\"text\":\"");
+    for (const char *p = user_text; *p != '\0' && o + 4 < sizeof(body); p++)
+    {
+        if (*p == '"' || *p == '\\')
+        {
+            body[o++] = '\\';
+        }
+        body[o++] = *p;
+    }
+    snprintf(body + o, sizeof(body) - o, "\"}");
+
+    esp_http_client_config_t cfg = {
+        .url           = url,
+        .method        = HTTP_METHOD_POST,
+        .timeout_ms    = 20000,      /* 对话+合成 2~3s，20s 足够且不会让人等太久 */
+        .event_handler = reply_on_data,
+        .user_data     = f,
+    };
+    esp_http_client_handle_t cli = esp_http_client_init(&cfg);
+    if (cli == NULL)
+    {
+        fclose(f);
+        emit(VOICE_EV_ERROR, "http 初始化失败");
+        return;
+    }
+    esp_http_client_set_header(cli, "Content-Type", "application/json");
+    esp_http_client_set_post_field(cli, body, (int)strlen(body));
+
+    esp_err_t err  = esp_http_client_perform(cli);
+    int       code = esp_http_client_get_status_code(cli);
+
+    char  reply[256] = { 0 };
+    char *hval       = NULL;
+    if (esp_http_client_get_header(cli, "X-Reply-Text", &hval) == ESP_OK && hval != NULL)
+    {
+        url_decode(hval, reply, sizeof(reply));
+    }
+    esp_http_client_cleanup(cli);
+    fclose(f);
+
+    if (err != ESP_OK || code != 200)
+    {
+        ESP_LOGW(TAG, "reply http %d err %s", code, esp_err_to_name(err));
+        emit(VOICE_EV_ERROR, (code == 0) ? "连不上 PC（服务没开？）" : "AI 回复失败");
+        return;
+    }
+    if (reply[0] != '\0')
+    {
+        emit(VOICE_EV_REPLY, reply);
+    }
+
+    /* "voice/reply.wav" 会被拼成 /sdcard/voice/reply.wav */
+    if (audio_player_play_sd_by_name("voice/reply.wav") != ESP_OK)
+    {
+        emit(VOICE_EV_ERROR, "播放失败");
+        return;
+    }
+
+    /* ★ 等播完（最多 60s）：期间本任务阻塞，麦克风不会把喇叭声录回去 */
+    for (int i = 0; i < 600 && audio_player_is_playing(); i++)
+    {
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+}
+
 /* ---------------- 录音 + VAD ---------------- */
 
 static void voice_task(void *arg)
@@ -328,6 +456,11 @@ static void voice_task(void *arg)
                 ESP_LOGI(TAG, "asr bytes(%d): %s", ln, hx);
             }
             emit(VOICE_EV_TEXT, text);
+
+            /* ★ 2026-11-24：识别成功 → 交给 PC 生成回复并合成语音，拿回来播放。
+             *   本调用会阻塞到播放结束（防自激），期间不监听麦克风。 */
+            emit(VOICE_EV_THINKING, NULL);
+            request_and_play_reply(text);
         }
         else
         {

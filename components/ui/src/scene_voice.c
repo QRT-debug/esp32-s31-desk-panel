@@ -27,6 +27,7 @@ static lv_obj_t *s_lbl_result;
 
 static char          s_buf[256];
 static volatile bool s_ready;
+static volatile bool s_thinking;   /* AI 正在生成回复/合成语音（2026-11-24） */
 static bool          s_subscribed;
 
 /* ★ 意图动作桥：回调（voice_task）只写，draw（LVGL 上下文）执行。
@@ -40,8 +41,23 @@ static volatile int       s_act_arg = 0;
 
 static void on_voice_evt(const voice_evt_t *e)
 {
+    /* 已把文本发给 PC，等回复+合成（2~3s），状态行显示"正在想" */
+    if (e->type == VOICE_EV_THINKING)
+    {
+        s_thinking = true;
+        return;
+    }
+    /* AI 的回复文本：覆盖结果标签（用户说的话已经被它替换，听感上更连贯） */
+    if (e->type == VOICE_EV_REPLY)
+    {
+        s_thinking = false;
+        snprintf(s_buf, sizeof(s_buf), "%s", e->text ? e->text : "(空)");
+        s_ready = true;
+        return;
+    }
     if (e->type == VOICE_EV_TEXT || e->type == VOICE_EV_ERROR)
     {
+        s_thinking = false;
         snprintf(s_buf, sizeof(s_buf), "%s", e->text ? e->text : "(空)");
         s_ready = true;
 
@@ -189,7 +205,7 @@ void scene_voice(uint16_t *fb, int frame)
         }
         else if (busy)
         {
-            st = "正在识别…请稍候";
+            st = s_thinking ? "正在想…（AI 生成与合成语音）" : "正在识别…请稍候";
         }
         else if (hinted)
         {

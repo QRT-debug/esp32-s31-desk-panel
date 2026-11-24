@@ -27,6 +27,8 @@ typedef enum
     VOICE_EV_SPEECH_END,     /* 一句话结束（静音超时/达到上限），随后开始上传 */
     VOICE_EV_TEXT,           /* ASR 返回文本（evt->text 有效） */
     VOICE_EV_ERROR,          /* 上传/识别失败（evt->text 是原因） */
+    VOICE_EV_THINKING,       /* 2026-11-24：已把文本发给 PC，正在等回复+合成 */
+    VOICE_EV_REPLY,          /* 2026-11-24：AI 的回复文本（evt->text），随后自动播语音 */
 } voice_ev_t;
 
 typedef struct
