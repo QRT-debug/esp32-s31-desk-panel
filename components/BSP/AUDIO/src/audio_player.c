@@ -1241,13 +1241,21 @@ static void sd_task(void *arg)
         remain        -= (uint32_t)want;
     }
 
-    /* 收尾：补静音 + mute */
+    /* 收尾：补一帧静音（★ 先别 mute！见下） */
     memset(s_frame_st, 0, sizeof(s_frame_st));
     esp_codec_dev_write(s_codec, s_frame_st, AUD_FRAMES * 2 * sizeof(int16_t));
-    esp_codec_dev_set_out_mute(s_codec, true);
 
     fclose(f);
     ESP_LOGI(TAG, "sd play done (%u frames)", (unsigned)played_frames);
+
+    /* ★★ 2026-11-24 修：写完最后一块 ≠ 已经播完。
+     *   AUD_FRAMES = 4096 帧 ≈ 93ms，写进 DMA 时缓冲里还有 1~2 块没放出去。
+     *   原来紧接着就 set_out_mute(true) ⇒ 尾音被切掉（实测"话没说完就断"）；
+     *   同时 s_state 立刻变 IDLE ⇒ 上层"等播完"的循环提前退出 ⇒ 绿灯提前灭。
+     *   等 DMA 把尾巴放完（≈250ms，覆盖 2 个缓冲块）再静音、再置 IDLE。 */
+    vTaskDelay(pdMS_TO_TICKS(250));
+
+    esp_codec_dev_set_out_mute(s_codec, true);
 
     s_pos_ms  = 0;
     s_playing = false;
