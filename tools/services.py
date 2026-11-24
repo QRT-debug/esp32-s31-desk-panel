@@ -191,7 +191,11 @@ def start_one(name, quiet=False):
     python_exe = svc.get("python") or PYTHON      # sovits 要用它自带的 3.9 runtime
     try:
         proc = subprocess.Popen(
-            [python_exe, svc["script"]],
+            # ★★ 2026-11-24：必须加 -u（无缓冲）。子进程 stdout 重定向到文件时，
+            #   Python 默认用块缓冲（几 KB 才刷一次），日志会滞后十几秒甚至更久 ——
+            #   现象是"服务看着卡在'模型目录'"，实际它早就跑起来了，
+            #   白白让人以为启动失败（今天因为这个误判排查了半天）。
+            [python_exe, "-u", svc["script"]],
             cwd=svc["cwd"],
             env=env,
             stdout=logf,
