@@ -170,6 +170,8 @@ def asr_whisper_cpp(wav_path: str, lang: str = "zh") -> str:
     out = subprocess.run(
         [exe, "-m", model, "-f", wav_path, "-l", lang, "-nt", "-np"],
         capture_output=True, text=True, timeout=120,
+        # ★ Windows 上不加这个会弹一下黑窗口（父进程无控制台时默认新开一个）
+        creationflags=(subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0),
     )
     if out.returncode != 0:
         raise RuntimeError(out.stderr[-300:])
@@ -292,7 +294,11 @@ def _to_44k_mono(audio_bytes, suffix=".wav"):
              #   在这里补静音，被切掉的就只是静音，语音本身完整。
              "-af", "loudnorm=I=-16:TP=-1.5:LRA=11,apad=pad_dur=0.35",
              "-ar", "44100", "-ac", "1", "-acodec", "pcm_s16le", dst],
-            capture_output=True, timeout=90, check=True)
+            capture_output=True, timeout=90, check=True,
+            # ★★★ Windows 上必须加：asr 服务是后台进程（无控制台），
+            #   每次 subprocess 调 ffmpeg 都会新弹一个黑窗口一闪而过
+            #   （用户实测"思考回复时电脑会谈一下黑窗口"）。
+            creationflags=(subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0))
         with open(dst, "rb") as f:
             return f.read()
     finally:
