@@ -286,7 +286,11 @@ def _to_44k_mono(audio_bytes, suffix=".wav"):
             f.write(audio_bytes)
         subprocess.run(
             [imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-i", src,
-             "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
+             # loudnorm 先做（只按真实语音算响度），apad 在末尾补 350ms 静音。
+             # ★★ 2026-11-24：设备端播完会切 I2S 时钟回 16k / 关 PA，而 DMA 里
+             #   还有几十~两百 ms 音频没放出去 ⇒ 最后一个字被截断（"话没说完"）。
+             #   在这里补静音，被切掉的就只是静音，语音本身完整。
+             "-af", "loudnorm=I=-16:TP=-1.5:LRA=11,apad=pad_dur=0.35",
              "-ar", "44100", "-ac", "1", "-acodec", "pcm_s16le", dst],
             capture_output=True, timeout=90, check=True)
         with open(dst, "rb") as f:
