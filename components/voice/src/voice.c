@@ -26,6 +26,33 @@
 #include "audio_player.h"
 #include "audio_rec.h"
 #include "led_service.h"
+#include "driver/gpio.h"
+
+/* ---- 语音状态灯（板载 WS2812）：让"现在什么状态"不用记，余光就能看出来 ----
+ *   待机 暗白（不抢注意力）｜ 听 蓝色呼吸 ｜ 等 黄色快呼吸 ｜ 说 绿色呼吸 ｜ 错 红闪
+ *   颜色取通用直觉：蓝=麦克风/听，黄=等待，绿=输出，红=失败。 */
+#define LED_IDLE_R   18
+#define LED_IDLE_G   18
+#define LED_IDLE_B   24
+#define LED_LISTEN_R 0
+#define LED_LISTEN_G 110
+#define LED_LISTEN_B 255
+#define LED_THINK_R  255
+#define LED_THINK_G  165
+#define LED_THINK_B  0
+#define LED_SPEAK_R  0
+#define LED_SPEAK_G  200
+#define LED_SPEAK_B  90
+#define LED_ERR_R    255
+#define LED_ERR_G    0
+#define LED_ERR_B    0
+
+/* 回到待机底色（暗白常亮） */
+static void led_idle(void)
+{
+    led_stop_effect();
+    led_set_rgb(LED_IDLE_R, LED_IDLE_G, LED_IDLE_B);
+}
 #include "voice.h"
 
 static const char *TAG = "voice";
@@ -287,11 +314,17 @@ static void request_and_play_reply(const char *user_text)
     {
         ESP_LOGW(TAG, "reply http %d err %s", code, esp_err_to_name(err));
         emit(VOICE_EV_ERROR, (code == 0) ? "连不上 PC（服务没开？）" : "AI 回复失败");
+        /* 失败 → 红闪 3 下，然后回待机 */
+        led_set_rgb(LED_IDLE_R, LED_IDLE_G, LED_IDLE_B);
+        led_flash(LED_ERR_R, LED_ERR_G, LED_ERR_B, 120, 120, 3);
         return;
     }
     if (reply[0] != '\0')
     {
         emit(VOICE_EV_REPLY, reply);
+        /* 收到回复、准备出声 → 灯转绿呼吸（= 她在说话） */
+        led_set_rgb(LED_SPEAK_R, LED_SPEAK_G, LED_SPEAK_B);
+        led_breath(LED_SPEAK_R, LED_SPEAK_G, LED_SPEAK_B, 900);
     }
 
     /* "voice/reply.wav" 会被拼成 /sdcard/voice/reply.wav */
@@ -306,6 +339,7 @@ static void request_and_play_reply(const char *user_text)
     {
         vTaskDelay(pdMS_TO_TICKS(100));
     }
+    led_idle();     /* 播完 → 灯回待机（暗白） */
 }
 
 /* ---------------- 录音 + VAD ---------------- */
@@ -348,9 +382,9 @@ static void voice_task(void *arg)
         ESP_LOGI(TAG, "listening (max %us, vad %u)", (unsigned)max_sec,
                  (unsigned)app_cfg_get()->vad_thresh);
 
-        /* ★ LED 服务用法示例：说话时彩虹渐变（提示"正在听"），结束后自动恢复底色。
-         *   3600ms 走完一圈色相（≈100°/s）——太快会有"跳色"感，太慢又看不出在动。 */
-        led_rainbow(3600);
+        /* ★ 状态灯：听 = 蓝色呼吸（1200ms 一个来回，呼吸比彩虹更容易一眼看出"在听"） */
+        led_set_rgb(LED_LISTEN_R, LED_LISTEN_G, LED_LISTEN_B);
+        led_breath(LED_LISTEN_R, LED_LISTEN_G, LED_LISTEN_B, 1200);
 
         int  used       = 0;
         int  silence_ms = 0;
@@ -413,12 +447,15 @@ static void voice_task(void *arg)
         }
 
         s_listening = false;
-        led_stop_effect();      /* 录音结束即停呼吸（上传阶段不再占着灯） */
+        /* 录音结束 → 上传 + 等回复：灯转黄，500ms 快呼吸（近似"闪"，表示有事在发生） */
+        led_set_rgb(LED_THINK_R, LED_THINK_G, LED_THINK_B);
+        led_breath(LED_THINK_R, LED_THINK_G, LED_THINK_B, 500);
 
         if (voiced_ms < MIN_SPEECH_MS)
         {
             ESP_LOGI(TAG, "too short (%dms), discard", voiced_ms);
             s_busy = false;     /* ★ 提前退出也必须释放，否则此后永远"设备忙" */
+            led_idle();         /* 没听到内容 → 灯回待机 */
             continue;
         }
 
@@ -494,6 +531,59 @@ static void voice_task(void *arg)
 
 /* ---------------- 对外接口 ---------------- */
 
+/* ---------------- 物理按键 KEY0（IO61）= 原理图上的 BOOT 网络 ----------------
+ * 单击语义（只有一个动作，不用记状态）：
+ *   她正在说话 → 立刻打断（比等它说完自然得多）
+ *   空闲       → 开始听（和屏幕 TALK 按钮完全等价；说完由 VAD 自动结束，不用按第二次）
+ * ★ IO61 是 ESP32-S31 的 BOOT strapping 脚：开机瞬间按住会进下载模式，
+ *   运行中读取无副作用（按下 = 低电平）。R7=NC ⇒ 无外部上拉，用芯片内部上拉。 */
+#define KEY_GPIO         GPIO_NUM_61
+#define KEY_DEBOUNCE_MS  20
+
+static void key_task(void *arg)
+{
+    gpio_config_t cfg = {
+        .pin_bit_mask = 1ULL << KEY_GPIO,
+        .mode         = GPIO_MODE_INPUT,
+        .pull_up_en   = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type    = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&cfg);
+
+    int stable = 1, last = 1, cnt = 0;
+    while (1)
+    {
+        int now = gpio_get_level(KEY_GPIO);
+        if (now != last)
+        {
+            cnt  = 0;                      /* 有跳变 → 重新计时（消抖） */
+            last = now;
+        }
+        else if (++cnt * 10 >= KEY_DEBOUNCE_MS && now != stable)
+        {
+            stable = now;
+            if (stable == 0)               /* 按下（低电平）才动作，松开不做事 */
+            {
+                if (audio_player_is_playing())
+                {
+                    audio_player_stop();
+                    ESP_LOGI(TAG, "KEY0: 打断播放");
+                }
+                else if (voice_listen())
+                {
+                    ESP_LOGI(TAG, "KEY0: 开始听");
+                }
+                else
+                {
+                    ESP_LOGI(TAG, "KEY0: 忙，忽略本次");
+                }
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
+
 esp_err_t voice_init(void)
 {
     if (s_lock == NULL)
@@ -504,6 +594,9 @@ esp_err_t voice_init(void)
     {
         return ESP_FAIL;
     }
+    /* ★ 物理按键 KEY0（IO61）：单击 = 开始听 / 说话时打断。详见 key_task 注释 */
+    xTaskCreate(key_task, "key0", 3072, NULL, 3, NULL);
+
     ESP_LOGI(TAG, "voice service ready (PC relay: http://%s:%u/api/asr)",
              app_cfg_get()->pc_host, (unsigned)app_cfg_get()->pc_port);
     return ESP_OK;
