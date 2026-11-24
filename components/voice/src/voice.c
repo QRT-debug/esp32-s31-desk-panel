@@ -349,7 +349,7 @@ static void request_and_play_reply(const char *user_text)
         /* 收到回复、准备出声 → 灯转绿呼吸（= 她在说话） */
         led_set_rgb(LED_SPEAK_R, LED_SPEAK_G, LED_SPEAK_B);
         led_breath(LED_SPEAK_R, LED_SPEAK_G, LED_SPEAK_B, 900);
-        ESP_LOGI(TAG, "LED -> green breath");
+        ESP_LOGI(TAG, "LED: speak(green)");
     }
     else
     {
@@ -363,12 +363,21 @@ static void request_and_play_reply(const char *user_text)
         return;
     }
 
+    /* ★★ 2026-11-24 修：play_sd_by_name() 是**异步**的（发命令给播放任务就返回），
+     *   此刻 audio_player_is_playing() 还是 false ⇒ 下面"等播完"的循环 0 次退出
+     *   ⇒ 立刻 led_idle() ⇒ 绿灯只亮 2ms（实测日志：speak(green) 后 2ms 就 idle）。
+     *   所以要先等"开始"，再等"结束"。 */
+    for (int i = 0; i < 20 && !audio_player_is_playing(); i++)
+    {
+        vTaskDelay(pdMS_TO_TICKS(100));      /* 最多等 2s 让它真正开播 */
+    }
     /* ★ 等播完（最多 60s）：期间本任务阻塞，麦克风不会把喇叭声录回去 */
     for (int i = 0; i < 600 && audio_player_is_playing(); i++)
     {
         vTaskDelay(pdMS_TO_TICKS(100));
     }
     led_idle();     /* 播完 → 灯回待机（暗白） */
+    ESP_LOGI(TAG, "LED: idle(dim)");
 }
 
 /* ---------------- 录音 + VAD ---------------- */
@@ -414,6 +423,7 @@ static void voice_task(void *arg)
         /* ★ 状态灯：听 = 蓝色呼吸（1200ms 一个来回，呼吸比彩虹更容易一眼看出"在听"） */
         led_set_rgb(LED_LISTEN_R, LED_LISTEN_G, LED_LISTEN_B);
         led_breath(LED_LISTEN_R, LED_LISTEN_G, LED_LISTEN_B, 1200);
+        ESP_LOGI(TAG, "LED: listen(blue)");
 
         int  used       = 0;
         int  silence_ms = 0;
@@ -479,6 +489,7 @@ static void voice_task(void *arg)
         /* 录音结束 → 上传 + 等回复：灯转黄，500ms 快呼吸（近似"闪"，表示有事在发生） */
         led_set_rgb(LED_THINK_R, LED_THINK_G, LED_THINK_B);
         led_breath(LED_THINK_R, LED_THINK_G, LED_THINK_B, 500);
+        ESP_LOGI(TAG, "LED: think(yellow)");
 
         if (voiced_ms < MIN_SPEECH_MS)
         {
