@@ -31,9 +31,11 @@
 /* ---- 语音状态灯（板载 WS2812）：让"现在什么状态"不用记，余光就能看出来 ----
  *   待机 暗白（不抢注意力）｜ 听 蓝色呼吸 ｜ 等 黄色快呼吸 ｜ 说 绿色呼吸 ｜ 错 红闪
  *   颜色取通用直觉：蓝=麦克风/听，黄=等待，绿=输出，红=失败。 */
-#define LED_IDLE_R   90
-#define LED_IDLE_G   90
-#define LED_IDLE_B   115
+/* 待机 = 全灭（用户 2026-11-24 定案）：设备安静时不亮，只有按键/说话/回话时才亮灯。
+ * 注意底色必须是 (0,0,0)：led_breath 结束后会"恢复底色"，底色非黑就会停在那颜色上。 */
+#define LED_IDLE_R   0
+#define LED_IDLE_G   0
+#define LED_IDLE_B   0
 #define LED_LISTEN_R 0
 #define LED_LISTEN_G 110
 #define LED_LISTEN_B 255
