@@ -347,7 +347,7 @@ static void request_and_play_reply(const char *user_text)
         ESP_LOGI(TAG, "reply text(%d B): %s", (int)strlen(reply), reply);
         emit(VOICE_EV_REPLY, reply);
         /* 收到回复、准备出声 → 灯转绿呼吸（= 她在说话） */
-        led_set_rgb(LED_SPEAK_R, LED_SPEAK_G, LED_SPEAK_B);
+        led_set_rgb(LED_IDLE_R, LED_IDLE_G, LED_IDLE_B);   /* 底色恒为待机色 */
         led_breath(LED_SPEAK_R, LED_SPEAK_G, LED_SPEAK_B, 900);
         ESP_LOGI(TAG, "LED: speak(green)");
     }
@@ -421,7 +421,7 @@ static void voice_task(void *arg)
                  (unsigned)app_cfg_get()->vad_thresh);
 
         /* ★ 状态灯：听 = 蓝色呼吸（1200ms 一个来回，呼吸比彩虹更容易一眼看出"在听"） */
-        led_set_rgb(LED_LISTEN_R, LED_LISTEN_G, LED_LISTEN_B);
+        led_set_rgb(LED_IDLE_R, LED_IDLE_G, LED_IDLE_B);   /* 底色恒为待机色 */
         led_breath(LED_LISTEN_R, LED_LISTEN_G, LED_LISTEN_B, 1200);
         ESP_LOGI(TAG, "LED: listen(blue)");
 
@@ -487,7 +487,7 @@ static void voice_task(void *arg)
 
         s_listening = false;
         /* 录音结束 → 上传 + 等回复：灯转黄，500ms 快呼吸（近似"闪"，表示有事在发生） */
-        led_set_rgb(LED_THINK_R, LED_THINK_G, LED_THINK_B);
+        led_set_rgb(LED_IDLE_R, LED_IDLE_G, LED_IDLE_B);   /* 底色恒为待机色 */
         led_breath(LED_THINK_R, LED_THINK_G, LED_THINK_B, 500);
         ESP_LOGI(TAG, "LED: think(yellow)");
 
@@ -630,6 +630,10 @@ esp_err_t voice_init(void)
     {
         s_lock = xSemaphoreCreateMutex();
     }
+    /* 开机就把灯设成待机色：WS2812 上电后保持上一次的颜色，
+     * 不主动设会让它停在上次熄屏前的状态（实测"莫名一直亮蓝"）。 */
+    led_idle();
+
     if (xTaskCreate(voice_task, "voice", 6144, NULL, 4, NULL) != pdPASS)
     {
         return ESP_FAIL;
