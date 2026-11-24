@@ -101,5 +101,5 @@ tools/fat_root/*.mp3
 # ===== 本地密钥（绝不提交）=====
 tools/llm.json
 
-# ===== 个人角色设定 / 语料（按需决定是否公开）=====
-# tools/persona/
+# ===== 个人角色设定 / 语料（不公开）=====
+tools/persona/
