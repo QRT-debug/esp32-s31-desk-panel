@@ -284,7 +284,14 @@ static void request_and_play_reply(const char *user_text)
     esp_http_client_config_t cfg = {
         .url           = url,
         .method        = HTTP_METHOD_POST,
-        .timeout_ms    = 20000,      /* 对话+合成 2~3s，20s 足够且不会让人等太久 */
+        .timeout_ms    = 25000,      /* 对话+合成现在要 5~6s，留足 */
+        /* ★★ 2026-11-24：原来没设 buffer_size，ESP-IDF 默认只有 **512 字节**。
+         *   X-Reply-Text 里的中文经过 percent-encode：一个字 3 字节 → 编码后 9 字节，
+         *   40 字的回复 ≈ 360 字节，加上 Content-Length/X-Emotion 等响应头轻松超过 512
+         *   ⇒ 响应头被截断 ⇒ esp_http_client_get_header 返回失败 ⇒ reply 为空
+         *   ⇒ 不点亮绿灯、界面也不显示回复文字（用户实测"黄灯灭了没绿灯"）。 */
+        .buffer_size    = 4096,
+        .buffer_size_tx = 1024,
         .event_handler = reply_on_data,
         .user_data     = f,
     };
@@ -301,7 +308,7 @@ static void request_and_play_reply(const char *user_text)
     esp_err_t err  = esp_http_client_perform(cli);
     int       code = esp_http_client_get_status_code(cli);
 
-    char  reply[256] = { 0 };
+    char  reply[768] = { 0 };        /* percent-encode 后中文 9 字节/字，40 字需 360+ */
     char *hval       = NULL;
     if (esp_http_client_get_header(cli, "X-Reply-Text", &hval) == ESP_OK && hval != NULL)
     {
