@@ -29,6 +29,7 @@
 
 不装任何第三方库：标准库 http.server + urllib（openai 后端用 requests 风格手写）。
 """
+import collections
 import json
 import os
 import subprocess
@@ -525,6 +526,30 @@ def retrieve(query, k=None):
     return [t for _, t in scored[: (k or RETRIEVE_K)]]
 
 
+# ---------------------------------------------------------------- 对话记忆
+# ★ 语音对话必须记住上文，否则"她刚才说什么"这类指代全失效，
+#   关系也无法自然推进（用户 2026-11-24：'从家人聊到更亲密' 需要连续上下文）。
+#   存在内存里：重启即清空（故意如此——设备每次开机是"重新见面"）。
+#   ★ 10 分钟没说话就自动清空，避免昨天的半截话影响今天。
+_CHAT_HIST = collections.deque(maxlen=12)      # 12 条 = 6 轮
+_LAST_TS = [0.0]
+_HIST_IDLE_CLEAR = 600                          # 秒
+
+
+def _hist_prepare():
+    """超过空闲时间就清空历史。"""
+    import time as _t
+    now = _t.time()
+    if now - _LAST_TS[0] > _HIST_IDLE_CLEAR:
+        _CHAT_HIST.clear()
+    _LAST_TS[0] = now
+
+
+def _hist_push(user_text, reply):
+    _CHAT_HIST.append({"role": "user", "content": user_text})
+    _CHAT_HIST.append({"role": "assistant", "content": reply})
+
+
 def fetch_chat(user_text):
     """调 LM Studio（OpenAI 兼容）→ (回复文本, 情绪)"""
     import json
@@ -557,10 +582,12 @@ def fetch_chat(user_text):
               "就必须真的那样做——直接正面回答等于毁掉人设。"
               "和当前话题无关的设定完全忽略，不要硬凑。")
 
+    _hist_prepare()
     body = {
         "model": model,
-        "messages": [{"role": "system", "content": system},
-                     {"role": "user", "content": user_text}],
+        "messages": ([{"role": "system", "content": system}]
+                     + list(_CHAT_HIST)
+                     + [{"role": "user", "content": user_text}]),
         "temperature": 0.8,
         "max_tokens": 120,
         "stream": False,
@@ -595,6 +622,7 @@ def fetch_chat(user_text):
         if not hit:
             break
     content = content.strip().strip("[]【】").strip()
+    _hist_push(user_text, content)      # 记入上下文（存纯台词，不带情绪标签）
     return content, emo
 
 
