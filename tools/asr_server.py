@@ -186,6 +186,7 @@ def asr_whisper_cpp(wav_path: str, lang: str = "zh") -> str:
 #   真情感要等 CosyVoice2 / GPT-SoVITS 那一步。
 
 LLM_URL   = os.environ.get("LLM_URL", "http://127.0.0.1:1234/v1/chat/completions")
+LLM_KEY   = os.environ.get("LLM_KEY", "")            # 云端 API 的 key（本地 LM Studio 留空）
 LLM_MODEL = os.environ.get("LLM_MODEL", "")          # 空 = 问 /v1/models 拿第一个
 TTS_VOICE = os.environ.get("TTS_VOICE", "zh-CN-XiaoxiaoNeural")
 
@@ -592,9 +593,11 @@ def fetch_chat(user_text):
         "max_tokens": 120,
         "stream": False,
     }
+    hdrs = {"Content-Type": "application/json"}
+    if LLM_KEY:
+        hdrs["Authorization"] = f"Bearer {LLM_KEY}"     # 云端 API 鉴权
     req = urllib.request.Request(
-        LLM_URL, data=json.dumps(body).encode("utf-8"),
-        headers={"Content-Type": "application/json"})
+        LLM_URL, data=json.dumps(body).encode("utf-8"), headers=hdrs)
     with _local_opener().open(req, timeout=90) as r:
         d = json.load(r)
     content = (d["choices"][0]["message"]["content"] or "").strip()

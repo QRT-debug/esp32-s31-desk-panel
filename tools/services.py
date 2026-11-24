@@ -55,6 +55,29 @@ SERVICES = {
             "TTS_BACKEND": "sovits",
             "SOVITS_ROOT": r"D:\GPT-SoVITS-v2pro-nvidia50\GPT-SoVITS-v2pro-20250604-nvidia50",
             "SV_DIR": os.path.join("models", "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"),
+
+            # ==================== 大模型配置 ====================
+            # 【默认】用本地 LM Studio：下面三行保持注释即可，
+            #         自动走 http://127.0.0.1:1234（需要 LM Studio 开着并加载了模型）
+            #
+            # 【要用云端 API】把下面三行的 # 去掉，填上你的平台和 key。
+            #   各平台的地址和模型名：
+            #
+            #   阿里百炼   LLM_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+            #              LLM_MODEL = "qwen-plus"（便宜）或 "qwen-max"（更强）
+            #   DeepSeek   LLM_URL = "https://api.deepseek.com/v1/chat/completions"
+            #              LLM_MODEL = "deepseek-chat"
+            #   智谱       LLM_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+            #              LLM_MODEL = "glm-4-plus"
+            #   硅基流动   LLM_URL = "https://api.siliconflow.cn/v1/chat/completions"
+            #              LLM_MODEL = "Qwen/Qwen2.5-72B-Instruct"
+            #
+            # ★ key 填在下面 LLM_KEY 里，注意别把这个文件传到公开仓库。
+            #
+            "LLM_URL":   "https://api.deepseek.com/v1/chat/completions",
+             "LLM_KEY":   "***REDACTED-REVOKED-KEY***",
+            "LLM_MODEL": "deepseek-chat",
+            # ====================================================
         },
     },
     # GPT-SoVITS 语音合成（爱弥斯音色）。启动慢（约 50s 加载模型）、吃 4~6GB 显存，
