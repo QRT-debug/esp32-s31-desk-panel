@@ -35,6 +35,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -598,8 +599,29 @@ def fetch_chat(user_text):
         hdrs["Authorization"] = f"Bearer {LLM_KEY}"     # 云端 API 鉴权
     req = urllib.request.Request(
         LLM_URL, data=json.dumps(body).encode("utf-8"), headers=hdrs)
-    with _local_opener().open(req, timeout=90) as r:
-        d = json.load(r)
+    try:
+        with _local_opener().open(req, timeout=90) as r:
+            d = json.load(r)
+    except urllib.error.HTTPError as ex:
+        detail = ""
+        try:
+            detail = ex.read().decode("utf-8", "replace")[:400]
+        except Exception:
+            pass
+        print(f"[chat] HTTP {ex.code}: {detail}", flush=True)
+        # ★ 云端 API 的 400 常见于上下文里某条触发内容审核。
+        #   清掉历史、只带当前这一句重试一次，能救回大部分情况。
+        if ex.code == 400 and len(_CHAT_HIST) > 0:
+            print("[chat] 400 且有历史 → 清空历史重试", flush=True)
+            _CHAT_HIST.clear()
+            body["messages"] = [{"role": "system", "content": system},
+                                {"role": "user", "content": user_text}]
+            req = urllib.request.Request(
+                LLM_URL, data=json.dumps(body).encode("utf-8"), headers=hdrs)
+            with _local_opener().open(req, timeout=90) as r:
+                d = json.load(r)
+        else:
+            raise
     content = (d["choices"][0]["message"]["content"] or "").strip()
 
     emo = "中立"
