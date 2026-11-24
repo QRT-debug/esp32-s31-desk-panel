@@ -344,6 +344,16 @@ EMBED_MODEL   = os.environ.get("EMBED_MODEL", "")      # 空 = 自动探测带 e
 RETRIEVE_K    = int(os.environ.get("RETRIEVE_K", "3"))
 RETRIEVE_MIN  = float(os.environ.get("RETRIEVE_MIN", "0.38"))   # 宁缺毋滥：召回错的设定比不召回更伤
 
+# ★ NSFW 隔离：人设文档里混有大量露骨语料，导致"抱一下"这类普通问句也会检索到
+#   色情片段并注入 prompt（2026-11-24 实测命中）。这里把含敏感词的片段**排除出索引**：
+#   文件原样保留，只是不参与检索，避免日常对话被污染。
+#   需要关闭就设 SKIP_NSFW=0。
+SKIP_NSFW = os.environ.get("SKIP_NSFW", "1") == "1"
+SENSITIVE_WORDS = (
+    "乳房", "下体", "口交", "乳交", "性器", "肉棒", "小穴", "淫水", "射精",
+    "奶子", "做爱", "性爱", "裸体", "全裸", "插入", "抽插", "高潮", "淫", "骚",
+)
+
 _snippets = []                       # [(单位向量, 原文)]
 _embed_cache = {"id": None}
 
@@ -470,6 +480,17 @@ def build_persona_index():
                 chunks += _chunk(f.read())
         except OSError:
             continue
+    if not chunks:
+        return 0
+
+    # 排除露骨片段（文件不动，只是不参与检索）
+    dropped = 0
+    if SKIP_NSFW:
+        kept = [c for c in chunks if not any(w in c for w in SENSITIVE_WORDS)]
+        dropped = len(chunks) - len(kept)
+        chunks = kept
+        if dropped:
+            print(f"[rag] 已排除 {dropped} 条露骨片段（SKIP_NSFW=1，可用环境变量关闭）", flush=True)
     if not chunks:
         return 0
     # 分批做 embedding：人设可能有几百条，一次全塞进去请求体过大容易超时
