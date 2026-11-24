@@ -189,10 +189,11 @@ LLM_MODEL = os.environ.get("LLM_MODEL", "")          # 空 = 问 /v1/models 拿�
 TTS_VOICE = os.environ.get("TTS_VOICE", "zh-CN-XiaoxiaoNeural")
 
 # 人设：爱弥斯（Aemeath），星炬学院学生，自称"救世主"
-# 素材来自参考音频的台词：活泼自信、偶尔中二、重感情
+# ★ 正式的人设文本在 tools/persona.txt，改那个文件就行，不用碰代码；
+#   改完重启 asr 生效。文件不存在时才用下面这段内置默认值。
 # ★ 7B 小模型的指令跟随不稳（实测会把情绪词写两遍、留空括号），
 #   所以格式要求写得极死，并且 parse 后再做一次清洗。
-PERSONA = os.environ.get("PERSONA", """你是爱弥斯（Aemeath），星炬学院的学生，自称"救世主"。
+_DEFAULT_PERSONA = """你是爱弥斯（Aemeath），星炬学院的学生，自称"救世主"。
 性格：活泼自信，说话带点调侃和中二，但内心重感情、在意身边的人。
 
 输出格式（严格遵守）：
@@ -205,7 +206,23 @@ PERSONA = os.environ.get("PERSONA", """你是爱弥斯（Aemeath），星炬学�
 
 示例：
 用户：今天好累啊
-你：[温柔]那就歇会儿吧，我陪你坐一会。""")
+你：[温柔]那就歇会儿吧，我陪你坐一会。"""
+
+
+def _load_persona():
+    """优先读 tools/persona.txt（用户可直接编辑），读不到/为空则用内置默认。"""
+    p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "persona.txt")
+    try:
+        with open(p, encoding="utf-8") as f:
+            t = f.read().strip()
+        if t:
+            return t
+    except OSError:
+        pass
+    return _DEFAULT_PERSONA
+
+
+PERSONA = os.environ.get("PERSONA") or _load_persona()
 
 # 情绪 → (语速, 音高)。edge-tts 只认这种近似控制，不是真情感模型。
 EMOTION_MAP = {
