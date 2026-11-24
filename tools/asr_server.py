@@ -394,30 +394,43 @@ def _norm(v):
 
 
 def _chunk(text, max_len=180):
-    """按行切片，过长再按句号切。
-    ★ 跳过标题行：markdown 的 "## 星炬学院" 去掉符号只剩 5 个字，
-      单独成片段会占掉检索名额却没有任何信息量。"""
+    """按行切片，**保留标题作为上下文前缀**，过长再按句号切。
+
+    ★ 标题不能丢：像 "## 5. 情感表达铁律：坦率，不傲娇" 本身就是一条规则，
+      只留正文"我说话不绕弯子"的话，模型（和检索）不知道这属于哪一条。
+      所以把最近两级标题拼成前缀：`[情感表达铁律 · 核心原则] 我说话不绕弯子。`"""
+    import re as _re
+
     out = []
+    stack = []                                  # 标题栈（按层级截断）
     for para in text.split("\n"):
         raw = para.strip()
-        is_heading = raw.startswith("#")
-        para = raw.lstrip("-*# 0123456789.、").strip()
-        if not para:
+        if not raw or raw.startswith("prompt:"):    # 跳过 YAML 外壳
             continue
-        if is_heading or len(para) < 8:      # 标题 / 过短行 → 丢掉
+
+        m = _re.match(r"^(#{1,6})\s+(.+)$", raw)
+        if m:
+            lvl = len(m.group(1))
+            stack = stack[: lvl - 1] + [m.group(2).strip()]
             continue
-        if len(para) <= max_len:
-            out.append(para)
+
+        body = raw.lstrip("-*0123456789.、 ").strip()
+        if len(body) < 8:                        # 过短行（纯编号/符号）丢掉
+            continue
+        prefix = f"[{' · '.join(stack[-2:])}] " if stack else ""
+
+        if len(body) <= max_len:
+            out.append(prefix + body)
             continue
         buf = ""
-        for seg in para.replace("。", "。|").replace("；", "；|").split("|"):
+        for seg in body.replace("。", "。|").replace("；", "；|").split("|"):
             if buf and len(buf) + len(seg) > max_len:
-                out.append(buf)
+                out.append(prefix + buf)
                 buf = seg
             else:
                 buf += seg
         if buf:
-            out.append(buf)
+            out.append(prefix + buf)
     return out
 
 
@@ -438,9 +451,15 @@ def build_persona_index():
             continue
     if not chunks:
         return 0
-    vecs = _embed(chunks)
-    if not vecs:
-        print("[rag] 索引建立失败（embedding 不可用）→ 只用人设全文", flush=True)
+    # 分批做 embedding：人设可能有几百条，一次全塞进去请求体过大容易超时
+    vecs = []
+    for i in range(0, len(chunks), 32):
+        part = _embed(chunks[i: i + 32])
+        if not part:
+            print("[rag] 索引建立失败（embedding 不可用）→ 只用人设全文", flush=True)
+            return 0
+        vecs += part
+    if len(vecs) != len(chunks):
         return 0
     _snippets = [(_norm(v), t) for v, t in zip(vecs, chunks)]
     print(f"[rag] 人设索引就绪：{len(_snippets)} 条（来自 {PERSONA_DIR}）", flush=True)
