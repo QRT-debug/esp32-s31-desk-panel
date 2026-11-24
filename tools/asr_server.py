@@ -247,9 +247,13 @@ SOVITS_REFS = {k: _LIGHT for k in ("开心", "忧伤", "埋怨", "温柔", "中�
 
 
 def _to_44k_mono(audio_bytes, suffix=".wav"):
-    """统一转成设备要的格式：44100Hz / 16bit / 单声道。
+    """统一转成设备要的格式：44100Hz / 16bit / 单声道，并做响度归一化。
     ★ edge-tts 出 24kHz、GPT-SoVITS 出 32kHz，而设备 I2S 固定按 44.1kHz 播，
-      不重采样就会变调（音调/速度都不对）。"""
+      不重采样就会变调（音调/速度都不对）。
+    ★★ 响度：SoVITS 合成结果直接跟着**参考音频的音量**走。素材里 light.wav 峰值只有
+      -27 dBFS，导致合成出来 -21.5 dB，而 edge 是 -5 dB —— 差 16~20 dB，听着就是
+      '声音好小'。用 EBU R128（loudnorm I=-16 LUFS，真峰值 -1.5 dB）统一拉到广播级，
+      两种引擎的音量就一致了。"""
     import subprocess
     import tempfile
 
@@ -262,6 +266,7 @@ def _to_44k_mono(audio_bytes, suffix=".wav"):
             f.write(audio_bytes)
         subprocess.run(
             [imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-i", src,
+             "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
              "-ar", "44100", "-ac", "1", "-acodec", "pcm_s16le", dst],
             capture_output=True, timeout=90, check=True)
         with open(dst, "rb") as f:
