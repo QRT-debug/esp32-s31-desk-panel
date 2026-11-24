@@ -12,8 +12,8 @@ echo ============================================================
 echo   RESTART all services  (reload modified code)
 echo ------------------------------------------------------------
 echo   Use this after editing persona / asr_server / services.py.
-echo   Plain 启动服务.bat only STARTS what is not running yet,
-echo   so it will NOT pick up code changes while asr is alive.
+echo   The plain start script only STARTS services that are not
+echo   running yet, so it will NOT pick up code changes.
 echo ============================================================
 echo.
 
