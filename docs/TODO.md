@@ -48,11 +48,22 @@
 
 ## 工程
 
-### 语音对话链路（ASR → LLM → TTS）
-现状：只做到 ASR 出字，**没有 LLM 和 TTS**。
-- 计划：`asr_server.py` 扩 `/api/chat`（人设放 system prompt）+ `/api/tts`（先 Edge TTS）
-- 已有素材：爱弥斯 GPT-SoVITS v2 模型 + 中立/开心/忧伤三组参考音频（`D:\BaiduNetdiskDownload\ai配音模型爱弥斯\`）
-- 缺：GPT-SoVITS v2 整合包（未安装，需 5~8 GB）
+### 语音对话链路
+**v1 已打通（2026-11-24）**：设备说话 → ASR → LLM → TTS → 喇叭回话，端到端 3~4 秒。
+
+后续可优化（按收益排序）：
+
+| 优化 | 收益 | 代价 |
+|---|---|---|
+| **流式 TTS** | 首字延迟从 1.9 s 降到 0.5 s | 要改 edge-tts 用法 + 设备边收边播 |
+| **换爱弥斯音色**（GPT-SoVITS v2） | 音色从通用女声变成角色本人 | 装 v2 整合包 5~8 GB，推理 +1~2 s |
+| **真情感**（CosyVoice2 参考音频） | rate/pitch 近似 → 真情绪迁移 | 部署模型，需准备三类参考音频（已有） |
+| **多轮上下文** | 现在每轮独立，记不住上一句 | asr_server 加会话历史 |
+| **播放中可打断** | 现在播完才能再说话 | 要处理 I2S 抢占 + VAD 恢复 |
+| 唤醒词 | 替代手动点 TALK | ESP-SR 加 wake word |
+
+已有素材：`D:\BaiduNetdiskDownload\ai配音模型爱弥斯\`（GPT-SoVITS v2 权重 + 中立/开心/忧伤参考音频）
+缺：GPT-SoVITS v2 整合包（未安装，5~8 GB）
 
 ### 开机自启服务
 把 `tools\启动服务.bat` 的快捷方式放进 `shell:startup`，开机自动起 monitor + asr。
