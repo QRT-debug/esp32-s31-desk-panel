@@ -434,15 +434,36 @@ def _chunk(text, max_len=180):
     return out
 
 
+ALWAYS_FILE = os.path.join(PERSONA_DIR, "_always.md")
+_always_cache = {"text": None}
+
+
+def _load_always():
+    """常驻设定：文件名以 `_` 开头，不切片、不检索，每次对话都直接拼进 system。
+    用于"必须 100% 在场"的底色设定（关系、称呼等），避免靠检索碰运气。"""
+    if _always_cache["text"] is None:
+        try:
+            with open(ALWAYS_FILE, encoding="utf-8") as f:
+                _always_cache["text"] = f.read().strip()
+        except OSError:
+            _always_cache["text"] = ""
+    return _always_cache["text"]
+
+
 def build_persona_index():
-    """读 tools/persona/*.md → 切片 → 算向量。启动时调一次，失败不影响对话。"""
+    """读 tools/persona/*.md → 切片 → 算向量。启动时调一次，失败不影响对话。
+
+    ★ 文件名以 `_` 开头的**不参与索引**，而是作为"常驻设定"直接拼进 system（见
+      _load_always）。这样做是因为有些设定必须 100% 在场、不能靠检索碰运气：
+      比如"我和你的关系"——问"我是谁"时语义太模糊，检索会命中群聊身份解析那类
+      元规则，真正的家人关系反而被挤掉（2026-11-24 实测：回答说"你是朋友"）。"""
     global _snippets
     _snippets = []
     if not os.path.isdir(PERSONA_DIR):
         return 0
     chunks = []
     for fn in sorted(os.listdir(PERSONA_DIR)):
-        if not fn.lower().endswith(".md"):
+        if not fn.lower().endswith(".md") or fn.startswith("_"):
             continue
         try:
             with open(os.path.join(PERSONA_DIR, fn), encoding="utf-8") as f:
@@ -495,8 +516,11 @@ def fetch_chat(user_text):
         except Exception:
             model = "local-model"
 
-    # 核心人设 + 按话题检索出的补充设定（没检索到就用纯核心人设）
+    # 核心人设 + 常驻底色设定 + 按话题检索出的补充设定
     system = PERSONA
+    always = _load_always()
+    if always:
+        system += "\n\n" + always
     try:
         extra = retrieve(user_text)
     except Exception:
@@ -608,6 +632,7 @@ class Handler(BaseHTTPRequestHandler):
                 # ★ 顺带重读 persona.txt（核心人设），这样改人设也不用重启服务
                 global PERSONA
                 PERSONA = os.environ.get("PERSONA") or _load_persona()
+                _always_cache["text"] = None          # 常驻设定也要重读
                 n = build_persona_index()
                 self._send_bytes(
                     json.dumps({"count": n, "persona_chars": len(PERSONA)}).encode(),
