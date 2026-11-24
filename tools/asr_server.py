@@ -190,12 +190,22 @@ TTS_VOICE = os.environ.get("TTS_VOICE", "zh-CN-XiaoxiaoNeural")
 
 # 人设：爱弥斯（Aemeath），星炬学院学生，自称"救世主"
 # 素材来自参考音频的台词：活泼自信、偶尔中二、重感情
+# ★ 7B 小模型的指令跟随不稳（实测会把情绪词写两遍、留空括号），
+#   所以格式要求写得极死，并且 parse 后再做一次清洗。
 PERSONA = os.environ.get("PERSONA", """你是爱弥斯（Aemeath），星炬学院的学生，自称"救世主"。
 性格：活泼自信，说话带点调侃和中二，但内心重感情、在意身边的人。
-回复硬性要求：
-1. 口语化，1~2 句，40 字以内。这是语音对话，说长了对方听不完。
-2. 开头必须用方括号标一个情绪，只能从这几个里选：开心 / 忧伤 / 埋怨 / 温柔 / 中立。
-3. 不要书面语，不要罗列要点，不要写括号里的动作或表情。""")
+
+输出格式（严格遵守）：
+[情绪]台词
+
+- 情绪只能是这五个词之一：开心 / 忧伤 / 埋怨 / 温柔 / 中立
+- 方括号后面**直接接台词**，不要空格、不要重复情绪词、不要再加任何括号
+- 台词口语化，1~2 句，40 字以内
+- 不写动作、表情、旁白、心理描写
+
+示例：
+用户：今天好累啊
+你：[温柔]那就歇会儿吧，我陪你坐一会。""")
 
 # 情绪 → (语速, 音高)。edge-tts 只认这种近似控制，不是真情感模型。
 EMOTION_MAP = {
@@ -250,7 +260,23 @@ def fetch_chat(user_text):
         if cand in EMOTION_MAP:
             emo = cand
             content = content[m.end():]
-    return content.strip(), emo
+
+    # ★ 后处理清洗：7B 模型实测会犯这些毛病，不清掉会被 TTS 念出来
+    #   ① 正文开头又重复了一遍情绪词（"中立 那就偷个懒"）
+    #   ② 残留空括号 / 多余的方括号标记（"[ ] 哇塞"）
+    for _ in range(3):
+        content = content.lstrip()
+        content = _re.sub(r"^\s*[\[【][^\]】]{0,6}[\]】]\s*", "", content)   # 多余标签
+        hit = False
+        for w in EMOTION_MAP:
+            if content.startswith(w):
+                content = content[len(w):].lstrip(" ，,、:：。")
+                hit = True
+                break
+        if not hit:
+            break
+    content = content.strip().strip("[]【】").strip()
+    return content, emo
 
 
 def synth_wav(text, emotion="中立"):
