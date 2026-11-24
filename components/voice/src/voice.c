@@ -626,6 +626,31 @@ static void key_task(void *arg)
     }
 }
 
+/* ---------------- 双核占用统计（临时观测） ----------------
+ * vTaskGetRunTimeStats 会列出每个任务的累计运行时间与占比，其中
+ *   IDLE0 / IDLE1 = 两个核的空闲任务
+ * ⇒ 核 N 的占用 = 100% − IDLE_N 的占比。
+ * 需要 sdkconfig 里开启：
+ *   CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
+ *   CONFIG_FREERTOS_RUN_TIME_STATS_USING_ESP_TIMER=y
+ * 观测完可以注释掉这个任务的创建（开销很小，但日志会刷屏）。 */
+/* 统计先关掉：vTaskGetRunTimeStats 需要 sdkconfig 开
+ * CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y，而改 sdkconfig 会触发全量重编译。
+ * 需要时再开（连同下面 voice_init 里的创建一起）。 */
+#if 0
+static void cpu_stats_task(void *arg)
+{
+    static char buf[3072];
+    while (1)
+    {
+        vTaskDelay(pdMS_TO_TICKS(15000));
+        buf[0] = '\0';
+        vTaskGetRunTimeStats(buf);
+        ESP_LOGI(TAG, "===== CPU stats (累计) =====\n%s", buf);
+    }
+}
+#endif
+
 esp_err_t voice_init(void)
 {
     if (s_lock == NULL)
@@ -636,12 +661,21 @@ esp_err_t voice_init(void)
      * 不主动设会让它停在上次熄屏前的状态（实测"莫名一直亮蓝"）。 */
     led_idle();
 
-    if (xTaskCreate(voice_task, "voice", 6144, NULL, 4, NULL) != pdPASS)
+    /* ★ 绑死 core 1：core 0 已经有 LVGL 渲染 + 音频播放 + USB 三件重活，
+     *   voice 任务（录音/VAD/HTTP）若被调度到 core 0 会和它们抢，
+     *   表现是录音丢样本（VAD 断句飘）或屏幕掉帧。原来是 xTaskCreate，
+     *   日志里 aff=pin1 只是恰好被分到 core 1，不保证。 */
+    if (xTaskCreatePinnedToCore(voice_task, "voice", 6144, NULL, 4, NULL, 1) != pdPASS)
     {
         return ESP_FAIL;
     }
     /* ★ 物理按键 KEY0（IO61）：单击 = 开始听 / 说话时打断。详见 key_task 注释 */
     xTaskCreate(key_task, "key0", 3072, NULL, 3, NULL);
+
+    /* 双核占用统计：见 cpu_stats_task 上方说明，需先开 sdkconfig 选项 */
+#if 0
+    xTaskCreate(cpu_stats_task, "cpustat", 4096, NULL, 1, NULL);
+#endif
 
     ESP_LOGI(TAG, "voice service ready (PC relay: http://%s:%u/api/asr)",
              app_cfg_get()->pc_host, (unsigned)app_cfg_get()->pc_port);
