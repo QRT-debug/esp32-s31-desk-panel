@@ -597,31 +597,43 @@ def fetch_chat(user_text):
     hdrs = {"Content-Type": "application/json"}
     if LLM_KEY:
         hdrs["Authorization"] = f"Bearer {LLM_KEY}"     # 云端 API 鉴权
-    req = urllib.request.Request(
-        LLM_URL, data=json.dumps(body).encode("utf-8"), headers=hdrs)
-    try:
-        with _local_opener().open(req, timeout=90) as r:
-            d = json.load(r)
-    except urllib.error.HTTPError as ex:
-        detail = ""
+    # ★ 失败自动重试一次：首次 TLS 握手、云端抖动、审核误判都可能一次不成功
+    #   （用户实测"第一次对话失败、之后都正常"，这个重试就是为那种情况兜底）
+    import time as _time
+
+    d = None
+    for attempt in (1, 2):
+        req = urllib.request.Request(
+            LLM_URL, data=json.dumps(body).encode("utf-8"), headers=hdrs)
         try:
-            detail = ex.read().decode("utf-8", "replace")[:400]
-        except Exception:
-            pass
-        print(f"[chat] HTTP {ex.code}: {detail}", flush=True)
-        # ★ 云端 API 的 400 常见于上下文里某条触发内容审核。
-        #   清掉历史、只带当前这一句重试一次，能救回大部分情况。
-        if ex.code == 400 and len(_CHAT_HIST) > 0:
-            print("[chat] 400 且有历史 → 清空历史重试", flush=True)
-            _CHAT_HIST.clear()
-            body["messages"] = [{"role": "system", "content": system},
-                                {"role": "user", "content": user_text}]
-            req = urllib.request.Request(
-                LLM_URL, data=json.dumps(body).encode("utf-8"), headers=hdrs)
             with _local_opener().open(req, timeout=90) as r:
                 d = json.load(r)
-        else:
-            raise
+            break
+        except urllib.error.HTTPError as ex:
+            detail = ""
+            try:
+                detail = ex.read().decode("utf-8", "replace")[:400]
+            except Exception:
+                pass
+            print(f"[chat] 第{attempt}次 HTTP {ex.code}: {detail}", flush=True)
+            if ex.code == 400 and len(_CHAT_HIST) > 0:
+                # 400 多半是历史里某条触发审核 ⇒ 清历史、只带当前句
+                print("[chat] 400 且有历史 → 清空历史后重试", flush=True)
+                _CHAT_HIST.clear()
+                body["messages"] = [{"role": "system", "content": system},
+                                    {"role": "user", "content": user_text}]
+            elif attempt == 1:
+                _time.sleep(0.6)          # 网络/服务抖动，歇一下再试
+            else:
+                raise
+        except Exception as ex:
+            print(f"[chat] 第{attempt}次失败: {type(ex).__name__}", flush=True)
+            if attempt == 1:
+                _time.sleep(0.6)
+            else:
+                raise
+    if d is None:
+        raise RuntimeError("chat failed twice")
     content = (d["choices"][0]["message"]["content"] or "").strip()
 
     emo = "中立"
