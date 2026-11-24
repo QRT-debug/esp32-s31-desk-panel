@@ -226,13 +226,23 @@ SOVITS_ROOT = os.environ.get(
     r"D:\GPT-SoVITS-v2pro-nvidia50\GPT-SoVITS-v2pro-20250604-nvidia50")
 
 # 情绪 → (参考音频, 该音频的台词)。GPT-SoVITS 靠参考音频同时决定音色和情绪，
-# ★ prompt_text 必须与参考音频内容逐字一致，否则合成会跑偏甚至失败。
+# ★★★ prompt_text 必须与参考音频**逐字一致**，否则模型对不齐 ⇒ 吞字、韵律乱跑、
+#     重音位置错（2026-11-24 实测：neutral.wav 的文件名少了"这点我早就知道"一整句，
+#     导致合成时句尾"了"被吞、"终于/好久"被顶重音）。
+#     这些台词是用 SenseVoice 识别 + 人工修正错字得到的，以音频实际内容为准，不信文件名。
 SOVITS_REFS = {
-    "开心": ("ref/happy.wav",   "感受星炬学院，在那些麻烦事之外的青春气息,这十几年来，我随手搭来的发歌网站"),
-    "忧伤": ("ref/sad.wav",     "全员覆没，所以后来，我再没有在学院见过他们，我还以为只是错过了"),
-    "埋怨": ("ref/neutral.wav", "想要拯救的越多，付出的代价就越大，但有些事，必须去做"),
-    "温柔": ("ref/sad.wav",     "全员覆没，所以后来，我再没有在学院见过他们，我还以为只是错过了"),
-    "中立": ("ref/neutral.wav", "想要拯救的越多，付出的代价就越大，但有些事，必须去做"),
+    "开心": ("ref/happy.wav",
+             "感受星炬学院，在那些麻烦事之外的青春气息。这十几年来，我随手搭来的发歌网站。"),
+    "忧伤": ("ref/sad.wav",
+             "全员覆没，所以后来我再没有在学院见过他们，我还以为只是错过了。"),
+    # ★ neutral.wav 弃用（2026-11-24 实测）：同一条修正过的 prompt_text，
+    #   用 neutral 合成句尾"了"被吞，换 light 就正常 ⇒ 是那条音频本身与模型对不齐。
+    "埋怨": ("ref/light.wav",
+             "虽然付出了点代价，但我觉得自己在救世主这行干的挺不错的呢。"),
+    "温柔": ("ref/light.wav",
+             "虽然付出了点代价，但我觉得自己在救世主这行干的挺不错的呢。"),
+    "中立": ("ref/light.wav",
+             "虽然付出了点代价，但我觉得自己在救世主这行干的挺不错的呢。"),
 }
 
 
@@ -270,6 +280,12 @@ def synth_sovits(text, emotion="中立"):
     import urllib.request
 
     ref, prompt = SOVITS_REFS.get(emotion, SOVITS_REFS["中立"])
+    # ★ text_split_method 必须用 cut0（整句不切）：
+    #   默认的 cut5 按标点切段，段间加 0.3s 间隔 ⇒ 短句听起来一顿一顿，
+    #   而且每段独立做韵律预测，重音会落在每个短语上（"终于""好久"被顶出来）。
+    #   整句一次生成则韵律连贯。回复本身 ≤40 字，不会超模型上限。
+    #   ★ 万一将来放开长度限制，超过 60 字自动退回 cut3（按句号切，不会碎到逗号）。
+    split = "cut0" if len(text) <= 60 else "cut3"
     body = {
         "text": text,
         "text_lang": "zh",
@@ -277,6 +293,7 @@ def synth_sovits(text, emotion="中立"):
         "prompt_text": prompt,
         "prompt_lang": "zh",
         "media_type": "wav",
+        "text_split_method": split,
         "streaming_mode": False,
     }
     req = urllib.request.Request(
