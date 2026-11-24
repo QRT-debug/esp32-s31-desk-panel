@@ -369,11 +369,19 @@ static void voice_task(void *arg)
                 continue;
             }
 
-            /* 能量（RMS）判断 */
-            long acc = 0;
+            /* 能量（RMS）判断
+             * ★★ 2026-11-24 修：acc 原来用 long —— ESP32 的 long 是 32 位，
+             *   32767² × BLOCK_SAMPLES 轻松超过 2^31 必然溢出，溢出后
+             *   sqrt(负数) = NaN，(int) 转换后变成 2147483647（INT32_MAX）。
+             *   实测日志里 "peak rms 2147483647" 就是它。
+             *   后果：VAD 判据彻底失真 ⇒ 录音提前截断 / 混入静音 ⇒ ASR 识别不准。
+             *   （表现是同一句话一会儿识别对、一会儿识别成同音怪词）
+             *   改用 int64_t 累加。 */
+            int64_t acc = 0;
             for (int i = 0; i < n; i++)
             {
-                acc += (long)pcm[used + i] * pcm[used + i];
+                int32_t v = pcm[used + i];
+                acc += (int64_t)v * v;
             }
             int rms = (int)sqrt((double)acc / n);
 
