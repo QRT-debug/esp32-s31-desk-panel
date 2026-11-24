@@ -33,6 +33,18 @@ TOOLS = os.path.dirname(os.path.abspath(__file__))
 LOG_DIR = os.path.join(ROOT, "logs")
 PID_FILE = os.path.join(ROOT, "Temp", "services.pid")
 
+# ---------------------------------------------------------------- 本地密钥
+# ★★★ API key 不写在代码里（会被 git 记录，一旦推公开仓库就泄露）。
+#   放到 tools/llm.json，该文件已加入 .gitignore；模板见 tools/llm.example.json。
+#   文件不存在 ⇒ 三项全空 ⇒ asr_server 自动回落到本地 LM Studio。
+_LLM_CFG = {}
+try:
+    import json as _json
+    with open(os.path.join(TOOLS, "llm.json"), encoding="utf-8") as _f:
+        _LLM_CFG = _json.load(_f)
+except Exception:
+    _LLM_CFG = {}
+
 # ---------------------------------------------------------------- 服务清单
 # cwd 很重要：asr_server 要在工程根目录找 models/，monitor 在 tools/ 里跑
 SERVICES = {
@@ -74,9 +86,9 @@ SERVICES = {
             #
             # ★ key 填在下面 LLM_KEY 里，注意别把这个文件传到公开仓库。
             #
-            "LLM_URL":   "https://api.deepseek.com/v1/chat/completions",
-             "LLM_KEY":   "***REDACTED-REVOKED-KEY***",
-            "LLM_MODEL": "deepseek-chat",
+            "LLM_URL":   _LLM_CFG.get("url", ""),
+            "LLM_KEY":   _LLM_CFG.get("key", ""),
+            "LLM_MODEL": _LLM_CFG.get("model", ""),
             # ====================================================
         },
     },

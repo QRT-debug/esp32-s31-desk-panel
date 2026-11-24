@@ -1,0 +1,6 @@
+{
+  "_说明": "把本文件复制成 llm.json 并填上自己的值。llm.json 已被 .gitignore 排除，不会进仓库。",
+  "url": "https://api.deepseek.com/v1/chat/completions",
+  "key": "sk-你的key",
+  "model": "deepseek-chat"
+}

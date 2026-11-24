@@ -97,3 +97,9 @@ tools/music_src/
 tools/fat_root/*.WAV
 tools/fat_root/*.wav
 tools/fat_root/*.mp3
+
+# ===== 本地密钥（绝不提交）=====
+tools/llm.json
+
+# ===== 个人角色设定 / 语料（按需决定是否公开）=====
+# tools/persona/
