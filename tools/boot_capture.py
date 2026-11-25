@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 # 复位 ESP32-S31 并抓取启动日志，确认 PSRAM/内存初始化信息
-import serial, time
+# 用法: python tools/boot_capture.py [秒数，默认 20]
+import serial, sys, time
+
+SECS = float(sys.argv[1]) if len(sys.argv) > 1 else 20.0
 
 s = serial.Serial('COM5', 115200, timeout=0.5)
 s.reset_input_buffer()
@@ -14,7 +17,7 @@ time.sleep(0.05)
 
 buf = b''
 t0 = time.time()
-while time.time() - t0 < 10:
+while time.time() - t0 < SECS:
     buf += s.read(4096)
 s.close()
 
