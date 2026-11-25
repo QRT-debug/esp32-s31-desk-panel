@@ -120,23 +120,6 @@ static uint32_t level_color(float pct, uint32_t normal)
     return normal;
 }
 
-/* ---------------- 科技风仪表盘（2026-11-26 重做） ----------------
- * 参考 IQON / Eclipse 这类系统监控面板的共性：
- *   近黑底 + 单色霓虹强调 + 270° 环形仪表 + 大数字嵌在环内。
- * 刻意不做：渐变背景、大面积阴影、位移动画 —— 它们都在吃渲染预算，
- *   而这页要的是"信息密度高、静止时 0 重绘"。
- */
-
-#define COL_PAGE   0x070B14
-#define COL_PANEL_ 0x0E1522
-#define COL_EDGE   0x1B2638
-#define COL_TRACK  0x18202E
-#define COL_TEXT_  0xE2E8F0
-#define COL_MUTE   0x64748B
-#define COL_CYAN   0x22D3EE
-#define COL_VIOLET 0x8B5CF6
-#define COL_AMBER  0xFB923C
-
 /* ---------------- 监控页 v2：对齐 IQON 参考的排版精度（2026-11-26） ----------------
  * 和 v1 的差别（都是"廉价感"的来源）：
  *   1. 数值和单位用**同一个字体、同一个 label** —— v1 把 '%' 单独用 20px 塞在右下，
@@ -148,7 +131,8 @@ static uint32_t level_color(float pct, uint32_t normal)
  */
 
 #define COL_PAGE   0x0A0C10
-#define COL_CARD   0x14171E
+#define COL_CARD_TOP 0x191D26   /* 卡片渐变：顶部 */
+#define COL_CARD_BOT 0x101319   /*          底部 */
 #define COL_TRACK  0x1E232D
 #define COL_TXT    0xECEEF2
 #define COL_SUB    0x8A93A3
@@ -177,7 +161,9 @@ static lv_obj_t *mk_card(lv_obj_t *p, int x, int y, int w, int h)
     lv_obj_t *c = lv_obj_create(p);
     lv_obj_set_pos(c, x, y);
     lv_obj_set_size(c, w, h);
-    lv_obj_set_style_bg_color(c, lv_color_hex(COL_CARD), 0);
+    lv_obj_set_style_bg_color(c, lv_color_hex(COL_CARD_TOP), 0);
+    lv_obj_set_style_bg_grad_color(c, lv_color_hex(COL_CARD_BOT), 0);
+    lv_obj_set_style_bg_grad_dir(c, LV_GRAD_DIR_VER, 0);   /* 顶部略亮：玻璃感 */
     lv_obj_set_style_bg_opa(c, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(c, 0, 0);          /* ★ 无边框 */
     lv_obj_set_style_radius(c, 16, 0);
@@ -257,6 +243,7 @@ static void mk_stat_card(lv_obj_t *p, int x, int y, const char *title, card_t *c
     lv_obj_set_pos(arc, 254, 15);
     lv_arc_set_range(arc, 0, 100);
     lv_arc_set_bg_angles(arc, -45, 225);
+    lv_arc_set_rotation(arc, 180);       /* ★ 缺口默认落在正上方，转 180° 才是正下方（参考图那样） */
     lv_obj_set_style_arc_width(arc, 9, LV_PART_MAIN);
     lv_obj_set_style_arc_color(arc, lv_color_hex(COL_TRACK), LV_PART_MAIN);
     lv_obj_set_style_arc_rounded(arc, true, LV_PART_MAIN);
@@ -308,7 +295,7 @@ static void build_monitor(void)
     lv_obj_set_size(back, 32, 32);
     lv_obj_set_pos(back, 752, 10);
     lv_obj_set_style_radius(back, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_bg_color(back, lv_color_hex(COL_CARD), 0);
+    lv_obj_set_style_bg_color(back, lv_color_hex(COL_CARD_TOP), 0);
     lv_obj_set_style_border_width(back, 0, 0);
     lv_obj_set_style_shadow_width(back, 0, 0);
     lv_obj_add_event_cb(back, home_cb, LV_EVENT_CLICKED, NULL);
