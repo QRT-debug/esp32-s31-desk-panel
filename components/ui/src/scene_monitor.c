@@ -313,13 +313,13 @@ static void build_monitor(void)
     s_root = root;
 
     /* 顶栏 */
-    mk_lbl(root, 16, 8, &ui_font_28, COL_TXT, "My PC");
-    s_lbl_host = mk_lbl(root, 108, 18, &ui_font_14, COL_SUB, "—");
+    mk_lbl(root, 58, 8, &ui_font_28, COL_TXT, "My PC");
+    s_lbl_host = mk_lbl(root, 150, 18, &ui_font_14, COL_SUB, "—");
 
     /* 返回 */
     lv_obj_t *back = lv_button_create(root);
     lv_obj_set_size(back, 32, 32);
-    lv_obj_set_pos(back, 752, 10);
+    lv_obj_set_pos(back, 16, 10);   /* 与其他页一致：左上角返回 */
     lv_obj_set_style_radius(back, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(back, lv_color_hex(COL_CARD_TOP), 0);
     lv_obj_set_style_border_width(back, 0, 0);
