@@ -137,6 +137,62 @@ static void to_config_cb(lv_event_t *e)
     lv_obj_set_pos(lt, 26, 20);
 }
 
+/* ---------------- 手机风图标块（2026-11-25） ----------------
+ * 参考用户给的截图：96×96 圆角渐变色块 + 白色图标 + 下方 18px 文字。
+ * 和 make_card 的区别：卡片是"信息面板"（带数值），图标块是"入口"（只有名字）。
+ */
+static lv_obj_t *make_icon_tile(lv_obj_t *parent, int x, int y,
+                                uint32_t c1, uint32_t c2,
+                                const char *icon, const char *label,
+                                lv_event_cb_t cb)
+{
+    lv_obj_t *wrap = lv_obj_create(parent);
+    lv_obj_set_size(wrap, 116, 130);
+    lv_obj_set_pos(wrap, x, y);
+    lv_obj_set_style_bg_opa(wrap, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(wrap, 0, 0);
+    lv_obj_set_style_pad_all(wrap, 0, 0);
+    lv_obj_clear_flag(wrap, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(wrap, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(wrap, cb, LV_EVENT_CLICKED, NULL);
+
+    /* 色块：96×96、圆角 24、上浅下深渐变、轻阴影（阴影 8 已比卡片的 6 更省，
+     * 因为图标块数量虽多但面积小） */
+    lv_obj_t *tile = lv_obj_create(wrap);
+    lv_obj_set_size(tile, 96, 96);
+    lv_obj_set_pos(tile, 10, 0);
+    lv_obj_set_style_radius(tile, 24, 0);
+    lv_obj_set_style_bg_color(tile, lv_color_hex(c1), 0);
+    lv_obj_set_style_bg_grad_color(tile, lv_color_hex(c2), 0);
+    lv_obj_set_style_bg_grad_dir(tile, LV_GRAD_DIR_VER, 0);
+    lv_obj_set_style_border_width(tile, 0, 0);
+    lv_obj_set_style_pad_all(tile, 0, 0);
+    lv_obj_set_style_shadow_width(tile, 8, 0);
+    lv_obj_set_style_shadow_opa(tile, LV_OPA_20, 0);
+    lv_obj_set_style_shadow_color(tile, lv_color_hex(0x202030), 0);
+    lv_obj_set_style_shadow_offset_y(tile, 3, 0);
+    lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+
+    /* 白色图标（居中）。ui_font_hw48 是 48px 版（24px 版在 96 方块里空太多） */
+    lv_obj_t *ic = lv_label_create(tile);
+    lv_obj_set_style_text_font(ic, &ui_font_hw48, 0);
+    lv_obj_set_style_text_color(ic, lv_color_hex(0xFFFFFF), 0);
+    lv_label_set_text(ic, icon);
+    lv_obj_center(ic);
+
+    /* 下方文字：★ 用深色（C_TITLE）。第一版用白色，在浅色渐变背景上几乎看不清
+     * （截图确认：白字 + 浅蓝紫背景 = 对比度不足）。将来换深色壁纸时再改回白色。 */
+    lv_obj_t *txt = lv_label_create(wrap);
+    lv_obj_set_style_text_font(txt, &ui_font_cn18, 0);
+    lv_obj_set_style_text_color(txt, lv_color_hex(C_TITLE), 0);
+    lv_obj_set_style_text_align(txt, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_width(txt, 116);
+    lv_obj_set_pos(txt, 0, 100);
+    lv_label_set_text(txt, label);
+
+    return wrap;
+}
+
 /* 一张卡片：图标圆 + 标题 + 大数值 + 说明 */
 static lv_obj_t *make_card(lv_obj_t *parent, int x, int y,
                            uint32_t accent, const char *icon, const char *title,
@@ -331,24 +387,15 @@ static void build_home(void)
     lv_obj_set_style_border_width(scr, 0, 0);
     lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* 顶部产品名 */
-    lv_obj_t *title = lv_label_create(root);
-    lv_obj_set_style_text_font(title, &ui_font_28, 0);
-    lv_obj_set_style_text_color(title, lv_color_hex(C_TITLE), 0);
-    lv_label_set_text(title, "ESP32-S31");
-    lv_obj_set_pos(title, 32, 26);
-
-    lv_obj_t *sub = lv_label_create(root);
-    lv_obj_set_style_text_font(sub, &ui_font_14, 0);
-    lv_obj_set_style_text_color(sub, lv_color_hex(C_SUB), 0);
-    lv_label_set_text(sub, "desktop terminal");
-    lv_obj_set_pos(sub, 34, 62);
+    /* ★ 2026-11-25 手机风：删掉"ESP32-S31 / desktop terminal"产品名。
+     *   截图确认它和新图标网格风格冲突，且把 WEATHER 返回按钮挤到了右上角、
+     *   正好压住"系统"图标。现在左上角留给 WEATHER 按钮。 */
 
     /* ★ 11-20：本页降级为"应用页"，右上角返回天气主页 */
     {
         lv_obj_t *back = lv_button_create(root);
-        lv_obj_set_size(back, 120, 32);
-        lv_obj_set_pos(back, 648, 58);   /* 状态栏本体到 y32、阴影到 y46，再留 12px 间隙 */
+        lv_obj_set_size(back, 92, 28);   /* 缩小到 92 宽，避免和 x=113 起的"监控"图标重叠 */
+        lv_obj_set_pos(back, 16, 12);    /* ★ 挪到左上角：原来在 (648,58) 会压住"系统"图标 */
         lv_obj_set_style_radius(back, 17, 0);
         lv_obj_set_style_bg_color(back, lv_color_hex(C_CARD), 0);
         lv_obj_set_style_bg_opa(back, LV_OPA_COVER, 0);
@@ -365,30 +412,49 @@ static void build_home(void)
         lv_obj_center(bl);
     }
 
-    /* ★ 3x3 九宫格（232x113，列间距 16、行间距 14）
-     *   统一布局：所有功能入口都在这张网格里，不再散落到 SYSTEM 页。 */
-    const int CX[3] = { 32, 280, 528 };
-    const int CY[3] = { 96, 223, 350 };
+    /* ★ 2026-11-25 手机风图标网格（分支 feature/mobile-ui 实验）
+     *   3 列 × 3 行，每格 116×130（96 色块 + 下方文字）
+     *   x 均分：800 = 113 + 116 + 113 + 116 + 113 + 116 + 113
+     *   y：顶部留 24，行距 14 */
+    const int TX[3] = { 113, 342, 571 };
+    const int TY[3] = { 24, 168, 312 };
 
-    /* 第一行：监控 / 媒体 / 系统 */
-    make_card(scr, CX[0], CY[0], C_BLUE,   "\xEF\x8B\x9B", "PC MONITOR", to_monitor_cb, 0);
-    make_card(scr, CX[1], CY[0], C_ORANGE, "\xEF\x80\x81", "AUDIO",      to_audio_cb,   1);
-    make_card(scr, CX[2], CY[0], C_GREEN,  "\xEF\x80\x93", "SYSTEM",     to_system_cb,  2);
+    /* 第一行：监控 / 音乐 / 系统 */
+    make_icon_tile(scr, TX[0], TY[0], 0x4C9AFF, 0x2F6FD0, "\xEF\x8B\x9B", "监控",
+                   to_monitor_cb);
+    make_icon_tile(scr, TX[1], TY[0], 0xFFC94D, 0xF2A03D, "\xEF\x80\x81", "音乐",
+                   to_audio_cb);
+    make_icon_tile(scr, TX[2], TY[0], 0x9BE15D, 0x35D07F, "\xEF\x80\x93", "系统",
+                   to_system_cb);
 
-    /* 第二行：三个榜单（信息类） */
-    make_card(scr, CX[0], CY[1], C_PURPLE, "\xEF\x81\xAD", "HF TREND",   to_hf_cb,      3);
-    make_card(scr, CX[1], CY[1], C_BLUE,   "\xEF\x82\x80", "AI RANK",    to_airank_cb,  4);
-    make_card(scr, CX[2], CY[1], C_ORANGE, "\xEF\x89\xAC", "BILI HOT",   to_bili_cb,    5);
+    /* 第二行：三个榜单 */
+    make_icon_tile(scr, TX[0], TY[1], 0xB48CFF, 0x7E57C2, "\xEF\x81\xAD", "热榜",
+                   to_hf_cb);
+    make_icon_tile(scr, TX[1], TY[1], 0x64B5F6, 0x4C9AFF, "\xEF\x82\x80", "AI榜",
+                   to_airank_cb);
+    make_icon_tile(scr, TX[2], TY[1], 0xFF8A80, 0xF2A03D, "\xEF\x89\xAC", "B站",
+                   to_bili_cb);
 
-    /* 第三行：屏保 / 语音 / 配网（原来在 SYSTEM 页，搬过来） */
-    make_card(scr, CX[0], CY[2], C_PURPLE, "\xEF\x80\x97", "CLOCK",      to_clock_cb,   6);
-    make_card(scr, CX[1], CY[2], C_GREEN,  "\xEF\x84\xB0", "VOICE",      to_voice_cb,   7);
-    make_card(scr, CX[2], CY[2], C_BLUE,   "\xEF\x87\x9E", "CONFIG",     to_config_cb,  8);
+    /* 第三行：屏保 / 语音 / 配网 */
+    make_icon_tile(scr, TX[0], TY[2], 0x9FA8DA, 0x5C6BC0, "\xEF\x80\x97", "时钟",
+                   to_clock_cb);
+    make_icon_tile(scr, TX[1], TY[2], 0x80CBC4, 0x35D07F, "\xEF\x84\xB0", "语音",
+                   to_voice_cb);
+    make_icon_tile(scr, TX[2], TY[2], 0x90CAF9, 0x2F6FD0, "\xEF\x87\x9E", "配网",
+                   to_config_cb);
 }
 
 /* 每 500ms 刷一次卡片数值（读各模块的真实/模拟状态） */
 static void refresh_cards(void)
 {
+    /* ★ 手机风图标块（make_icon_tile）没有数值标签，s_val[] 全为 NULL。
+     *   这里必须早退，否则 lv_label_set_text(NULL, ...) 会解引用空指针崩掉
+     *   （LVGL 内部不做判空）。旧卡片版 s_val[0] 非空，照常执行。 */
+    if (s_val[0] == NULL)
+    {
+        return;
+    }
+
     /* 1) PC MONITOR */
     {
         pc_stats_t st;
