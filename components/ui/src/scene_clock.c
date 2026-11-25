@@ -323,13 +323,26 @@ static void update_clock(bool force)
         }
     }
 
-    /* ★ 临时心跳：每 5 秒打一条。用于定位"屏幕冻结但芯片活着"时 ui 循环死没死——
-     *   如果日志停了 = ui_manager 卡死在场景代码里；一直打 = 循环活着，是渲染/flush 的问题。 */
+    /* ★ 心跳降频（2026-11-25）：原每 5 帧一条 —— 时钟页跑 50 FPS 时**每秒 10 条**，
+     *   串口被刷爆、还会拖慢 BT/日志缓冲。本场景每帧调一次（20ms），
+     *   3000 次 ≈ 60 秒一条，保留"屏幕冻结但芯片活着"的诊断能力，又不刷屏。 */
     static int s_beat = 0;
-    if (++s_beat % 5 == 0)
+    if (++s_beat % 3000 == 0)
     {
         ESP_LOGI(TAG, "alive t=%02d:%02d:%02d frame_ok", tm_now.tm_hour, tm_now.tm_min, tm_now.tm_sec);
     }
+
+    /* ★★ 2026-11-25：**秒没变就不画**。
+     *   本函数每帧被调用（20ms），原来只要"分钟没变"就无条件重设时间字符串 ——
+     *   而 LVGL 的 lv_label_set_text 不比较内容，同一串也照样标脏重绘 ⇒
+     *   50 FPS 里有 49 帧在重画一模一样的秒数，render 17~22ms 白烧。
+     *   加这一道判断后：只有秒真的跳了才刷新，等价降到 1 FPS。 */
+    static int s_last_sec = -1;
+    if (!force && tm_now.tm_min == s_last_min && tm_now.tm_sec == s_last_sec)
+    {
+        return;
+    }
+    s_last_sec = tm_now.tm_sec;
 
     if (!force && tm_now.tm_min == s_last_min)
     {
