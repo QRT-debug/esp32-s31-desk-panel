@@ -174,6 +174,8 @@ esp_err_t pc_monitor_start(void)
     s_stats.valid       = true;
     s_stats.cpu_cores   = 16;
     s_stats.cpu_mhz     = 4200;
+    snprintf(s_stats.cpu_name, sizeof(s_stats.cpu_name), "i5-14600K");
+    snprintf(s_stats.host, sizeof(s_stats.host), "DESKTOP-4F2A");
     s_stats.mem_total_gb = 32.0f;
     s_stats.gpu_ok      = true;
     snprintf(s_stats.gpu_name, sizeof(s_stats.gpu_name), "RTX 4070");
@@ -202,6 +204,8 @@ void pc_monitor_get(pc_stats_t *out)
     s_stats.disks[0].free_gb = 320.0f;
     s_stats.disks[1].percent = 41.0f;
     s_stats.disks[1].free_gb = 1180.0f;
+    s_stats.net_up_kbps   = 1200.0f + 800.0f * (float)sin(t * 0.9);
+    s_stats.net_down_kbps = 8400.0f + 3000.0f * (float)sin(t * 0.6 + 2.0);
     s_stats.uptime_s    += 1;
     *out = s_stats;
 }
