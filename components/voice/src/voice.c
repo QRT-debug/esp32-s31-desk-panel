@@ -55,6 +55,23 @@ static void led_idle(void)
     led_stop_effect();
     led_set_rgb(LED_IDLE_R, LED_IDLE_G, LED_IDLE_B);
 }
+
+/* ---------------- VAD 阈值取用（统一入口） ----------------
+ * 用户 2026-11-25 反馈"说话声音比较小"，原默认 300 有时收不到（只有按键机械声被计入）。
+ * ★ 坑：vad_thresh 存在 NVS，改 app_cfg.c 里的默认值只对**没配过网的设备**有效；
+ *   已有 NVS 的设备仍然读旧值 300 ⇒ 必须在运行时钳位才能立刻生效。
+ * 220 的依据：安静房间底噪约 50~150，轻声说话约 300~800，正常 1000~3000。
+ * 取 220 能收轻声，又留出底噪余量（再低容易被环境噪声误触发）。
+ * 以后想恢复原行为：删掉这个 clamp，或在配网页把"VAD 灵敏度"填回 300+。 */
+#define VAD_THRESH_MAX 220
+
+static int vad_thresh_get(void)
+{
+    int t = (int)app_cfg_get()->vad_thresh;
+    if (t > VAD_THRESH_MAX) t = VAD_THRESH_MAX;
+    if (t < 50) t = 50;
+    return t;
+}
 #include "voice.h"
 
 static const char *TAG = "voice";
@@ -422,8 +439,8 @@ static void voice_task(void *arg)
         s_listening = true;      /* 真正开始录音 */
         audio_rec_begin();      /* 重置通道判定，本次录音重新锁定 */
         s_peak_rms = 0;         /* ★ 每次清零：static 累计会让日志数据完全失真 */
-        ESP_LOGI(TAG, "listening (max %us, vad %u)", (unsigned)max_sec,
-                 (unsigned)app_cfg_get()->vad_thresh);
+        ESP_LOGI(TAG, "listening (max %us, vad %d)", (unsigned)max_sec,
+                 vad_thresh_get());
 
         /* ★ 状态灯：听 = 蓝色呼吸（1200ms 一个来回，呼吸比彩虹更容易一眼看出"在听"）
          *   持续对话模式下改用青色，和单次区分开——用户能一眼看出"还在连续模式"。 */
@@ -481,7 +498,7 @@ static void voice_task(void *arg)
             {
                 s_peak_rms = rms;
             }
-            if (rms > (int)app_cfg_get()->vad_thresh)
+            if (rms > vad_thresh_get())
             {
                 if (!started)
                 {

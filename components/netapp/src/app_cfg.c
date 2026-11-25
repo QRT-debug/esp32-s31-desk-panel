@@ -45,7 +45,7 @@ static void cfg_defaults(app_cfg_t *c)
     /* 语音：默认走 PC 中转（key 不出 PC），云端直连留空 */
     c->asr_url[0]  = '\0';
     c->asr_key[0]  = '\0';
-    c->vad_thresh  = 300;
+    c->vad_thresh  = 220;   /* 2026-11-25：300 → 220（用户反馈说话声小时收不到）*/
     c->rec_max_sec = 10;
 }
 
