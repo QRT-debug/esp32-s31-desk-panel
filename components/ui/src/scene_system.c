@@ -46,7 +46,6 @@
 /* ---- 手机风设置页：每个列表行一个值 label（2026-11-26 重做） ---- */
 static lv_obj_t *s_v_wifi;       /* 网络：连接状态 */
 static lv_obj_t *s_v_ip;         /* 网络：IP */
-static lv_obj_t *s_v_cfg;        /* 网络：配网行右侧提示 */
 static lv_obj_t *s_v_chip;       /* 设备：芯片 */
 static lv_obj_t *s_v_mhz;        /* 设备：主频 */
 static lv_obj_t *s_v_ram;        /* 设备：SRAM */
@@ -58,6 +57,8 @@ static lv_obj_t *s_lbl_log;      /* 日志 */
 static lv_obj_t *s_lbl_bl;       /* 亮度百分比 */
 static lv_obj_t *s_bar_mic;      /* 麦克风电平 */
 static lv_obj_t *s_lbl_mic;      /* 麦克风数值 */
+static lv_obj_t *s_btn_wifi;     /* WiFi 断开/连接 按钮本体 */
+static lv_obj_t *s_btn_wifi_lbl; /*   └ 按钮文字 */
 
 /* ★ 语音识别结果桥：voice 回调在 voice_task 上下文，绝不能直接碰 LVGL
  *   （lv_async_call 也死锁过）——只写标志，由本场景 draw 里轮询消费。 */
@@ -239,7 +240,10 @@ static void refresh_all(void)
     lv_obj_set_style_text_color(s_v_wifi, lv_color_hex(conn ? COL_GREEN : COL_RED), 0);
 
     set_text_if_changed(s_v_ip, ip[0] ? ip : "\u2014");
-    set_text_if_changed(s_v_cfg, conn ? "\u66f4\u6362\u7f51\u7edc >" : "\u53bb\u914d\u7f51 >");
+    /* 按钮：连着就显示「断开」（红），断了显示「连接」（绿） */
+    set_text_if_changed(s_btn_wifi_lbl, conn ? "\u65ad\u5f00" : "\u8fde\u63a5");
+    lv_obj_set_style_bg_color(s_btn_wifi,
+                              lv_color_hex(conn ? COL_RED : COL_GREEN), 0);
 
     /* ---- 底部：最近日志（8 行） ---- */
     static char lines[7][96];
@@ -404,18 +408,33 @@ static lv_obj_t *setting_row(lv_obj_t *card, int y, int row_h, uint32_t dot,
     return v;
 }
 
-/** 整行可点：透明命中层盖在该行上（不挡视觉，只接点击） */
-static void row_clickable(lv_obj_t *card, int y, int row_h, int w, lv_event_cb_t cb)
+/** 行右侧胶囊按钮；返回其文字 label（便于改文案），out_btn 拿按钮本体（便于改颜色）
+ *  ★ 2026-11-26：一开始用的是"整行盖一层透明命中层"，**真机上点了没反应**
+ *    （串口没有任何回调日志）。改成真按钮 —— 既能点，用户也看得见能点。 */
+static lv_obj_t *row_button(lv_obj_t *card, int y, int row_h, int w,
+                            const char *txt, uint32_t bg, lv_event_cb_t cb,
+                            lv_obj_t **out_btn)
 {
-    lv_obj_t *hit = lv_obj_create(card);
-    lv_obj_set_pos(hit, 0, y);
-    lv_obj_set_size(hit, w, row_h);
-    lv_obj_set_style_bg_opa(hit, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(hit, 0, 0);
-    lv_obj_set_style_pad_all(hit, 0, 0);
-    lv_obj_add_flag(hit, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_clear_flag(hit, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_event_cb(hit, cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *btn = lv_button_create(card);
+    lv_obj_set_size(btn, w, 28);
+    lv_obj_set_pos(btn, 376 - 16 - w, y + (row_h - 28) / 2);
+    lv_obj_set_style_radius(btn, 14, 0);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(bg), 0);
+    lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
+    lv_obj_set_style_shadow_width(btn, 0, 0);
+    lv_obj_set_style_border_width(btn, 0, 0);
+    lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, NULL);
+    if (out_btn != NULL)
+    {
+        *out_btn = btn;
+    }
+
+    lv_obj_t *l = lv_label_create(btn);
+    lv_obj_set_style_text_font(l, &ui_font_cn18, 0);
+    lv_obj_set_style_text_color(l, lv_color_hex(0xFFFFFF), 0);
+    lv_label_set_text(l, txt);
+    lv_obj_center(l);
+    return l;
 }
 
 /** 打开配网热点（SoftAP + 网页表单，用手机连） */
@@ -470,13 +489,31 @@ static void build_system(void)
     /* ================= 左列 ================= */
     group_caption(scr, 16, 52, "网络");
     lv_obj_t *c_net = group_card(scr, 16, 76, 376, 132);
-    s_v_wifi = setting_row(c_net, 0, 44, COL_BLUE, "WiFi", "未连接");
+
+    /* 行1：WiFi 状态 + 断开/连接按钮 */
+    row_dot(c_net, 0, 44, COL_BLUE);
+    row_title(c_net, 0, 44, "WiFi");
+    s_v_wifi = lv_label_create(c_net);
+    lv_obj_set_style_text_font(s_v_wifi, &ui_font_cn18, 0);
+    lv_obj_set_style_text_color(s_v_wifi, lv_color_hex(COL_DIM), 0);
+    lv_obj_set_width(s_v_wifi, 110);
+    lv_obj_set_style_text_align(s_v_wifi, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_set_pos(s_v_wifi, 130, 10);
+    lv_label_set_text(s_v_wifi, "未连接");
+    s_btn_wifi_lbl = row_button(c_net, 0, 44, 84, "连接", COL_GREEN,
+                                wifi_toggle_cb, &s_btn_wifi);
+
     row_sep(c_net, 44, 36, 324);
+
+    /* 行2：IP 地址 */
     s_v_ip = setting_row(c_net, 44, 44, COL_BLUE, "IP 地址", "—");
+
     row_sep(c_net, 88, 36, 324);
-    s_v_cfg = setting_row(c_net, 88, 44, COL_BLUE, "重新配网", "打开热点 >");
-    row_clickable(c_net, 0, 44, 376, wifi_toggle_cb);   /* 第一行：断开 / 重连 */
-    row_clickable(c_net, 88, 44, 376, prov_cb);         /* 第三行：开热点配网 */
+
+    /* 行3：重新配网（明确的按钮，原来那层透明命中层真机没反应） */
+    row_dot(c_net, 88, 44, COL_BLUE);
+    row_title(c_net, 88, 44, "重新配网");
+    row_button(c_net, 88, 44, 84, "配网", COL_BLUE, prov_cb, NULL);
 
     group_caption(scr, 16, 218, "显示");
     lv_obj_t *c_disp = group_card(scr, 16, 242, 376, 100);
@@ -486,7 +523,7 @@ static void build_system(void)
     row_title(c_disp, 0, 50, "亮度");
     {
         lv_obj_t *sl = lv_slider_create(c_disp);
-        lv_obj_set_size(sl, 140, 10);
+        lv_obj_set_size(sl, 110, 10);   /* 原来 140，右端顶到百分比 */
         lv_obj_set_pos(sl, 110, 20);
         lv_slider_set_range(sl, 10, 100);
         lv_slider_set_value(sl, backlight_get(), LV_ANIM_OFF);
