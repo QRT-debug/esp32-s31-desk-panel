@@ -99,6 +99,74 @@ static void wifi_toggle_cb(lv_event_t *e)
 
 /* ---------------- 刷新 ---------------- */
 
+/**
+ * ★ 每核 CPU 占用（2026-11-25）。
+ *
+ * `CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS` + `..._USING_ESP_TIMER` **本来就开着**，
+ * 所以不需要改 sdkconfig（也就避开了全量重编 + `x509_crt.c` 僵死那个坑）。
+ *
+ * 算法：每核的占用 = 100% − 该核 IDLE 任务的占比。
+ * 用两次采样求差（`ulRunTimeCounter` 是累计值），分母用 `esp_timer` 的墙钟差 ——
+ * **不能**用 `uxTaskGetSystemState` 返回的总时间，那是"所有任务时间之和"（≈2×墙钟）。
+ * 任务名兼容 "IDLE0"/"IDLE1" 与 "IDLE<0>"/"IDLE<1>"（SMP 下带核号）。
+ */
+static void core_usage(int *u0, int *u1)
+{
+#ifdef ESP_PLATFORM
+    static int64_t  s_last_us;
+    static uint32_t s_last_idle[2];
+
+    TaskStatus_t arr[40];
+    uint32_t     total_rt = 0;
+    UBaseType_t  n = uxTaskGetSystemState(arr, 40, &total_rt);
+
+    uint32_t idle[2] = { 0, 0 };
+    for (UBaseType_t i = 0; i < n; i++)
+    {
+        const char *nm = arr[i].pcTaskName;
+        if (nm == NULL || strncmp(nm, "IDLE", 4) != 0)
+        {
+            continue;
+        }
+        const char *p = nm + 4;
+        while (*p != '\0' && (*p < '0' || *p > '9'))
+        {
+            p++;                        /* 跳过 '<' 之类的分隔符 */
+        }
+        if (*p == '0')
+        {
+            idle[0] = arr[i].ulRunTimeCounter;
+        }
+        else if (*p == '1')
+        {
+            idle[1] = arr[i].ulRunTimeCounter;
+        }
+    }
+
+    int64_t now = esp_timer_get_time();
+    int64_t dt  = now - s_last_us;
+    if (s_last_us != 0 && dt > 0)
+    {
+        for (int c = 0; c < 2; c++)
+        {
+            int64_t idle_d = (int64_t)idle[c] - (int64_t)s_last_idle[c];
+            int     u      = 100 - (int)(idle_d * 100 / dt);
+            if (u < 0)   { u = 0; }
+            if (u > 100) { u = 100; }
+            if (c == 0)  { *u0 = u; } else { *u1 = u; }
+        }
+    }
+    s_last_us      = now;
+    s_last_idle[0] = idle[0];
+    s_last_idle[1] = idle[1];
+#else
+    /* PC 模拟器的 FreeRTOS stub 没有 TaskStatus_t / uxTaskGetSystemState / ulRunTimeCounter，
+     * 这里给 0 即可 —— 模拟器只用来验 UI 布局，不看真实核占用。 */
+    *u0 = 0;
+    *u1 = 0;
+#endif
+}
+
 static void refresh_all(void)
 {
     char b[512];
@@ -120,18 +188,23 @@ static void refresh_all(void)
     int      up_sec = (int)(up_s % 60);
     uint32_t tasks = (uint32_t)uxTaskGetNumberOfTasks();
 
+    int c0 = 0, c1 = 0;
+    core_usage(&c0, &c1);
+
     snprintf(b, sizeof(b),
              "CHIP      ESP32-S31  %d core(s) @ %u MHz\n"
              "FLASH     16 MB\n"
              "PSRAM     %u KB free / %u KB\n"
              "SRAM      %u KB free / %u KB  (min %u KB)\n"
              "UPTIME    %02d:%02d:%02d      TASKS %u\n"
+             "CORE      c0 %d%%   c1 %d%%\n"
              "IDF       %s",
              chip.cores, (unsigned)cpu_mhz,
              (unsigned)(ps_free / 1024), (unsigned)(ps_total / 1024),
              (unsigned)(ram_free / 1024), (unsigned)(ram_total / 1024),
              (unsigned)(ram_min / 1024),
              up_h, up_m, up_sec, (unsigned)tasks,
+             c0, c1,
              esp_get_idf_version());
     set_text_if_changed(s_lbl_sys, b);
 
