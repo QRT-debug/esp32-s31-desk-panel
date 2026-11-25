@@ -35,6 +35,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -769,6 +770,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_error(400, "empty text")
                 return
             reply = text
+            t_llm = time.time()
             if self.path == "/api/reply":          # 先对话，再合成，一次请求拿到音频
                 try:
                     reply, emo = fetch_chat(text)
@@ -776,14 +778,20 @@ class Handler(BaseHTTPRequestHandler):
                     print(f"[reply] chat failed: {e}", flush=True)
                     self.send_error(503, f"chat failed: {e}")
                     return
+            dt_llm = time.time() - t_llm
+            t_tts = time.time()
             try:
                 wav = synth_wav(reply, emo)
             except Exception as e:
                 print(f"[tts] failed: {e}", flush=True)
                 self.send_error(500, str(e))
                 return
+            dt_tts = time.time() - t_tts
             import urllib.parse as _up
             print(f"[tts] [{emo}] {reply[:30]} -> {len(wav)}B", flush=True)
+            # ★ 分段计时：定位延迟瓶颈（llm = DeepSeek，tts = GPT-SoVITS 合成+重采样）
+            print(f"[timing] llm {dt_llm:.2f}s | tts {dt_tts:.2f}s | server {dt_llm + dt_tts:.2f}s",
+                  flush=True)
             self._send_bytes(wav, "audio/wav",
                              {"X-Reply-Text": _up.quote(reply),
                               "X-Emotion": _up.quote(emo)})
