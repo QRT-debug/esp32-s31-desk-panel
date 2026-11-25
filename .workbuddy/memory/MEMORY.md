@@ -48,6 +48,14 @@
 12. ★ **三个 Type-C 分工**：PWR(纯供电) / **COM(CH343P，烧录+日志 COM5)** / USB-A(原生 Host，接电脑会倒灌)。
     **只插 PWR 时设备能跑但没 COM5**，别以为是串口坏了。
 
+13. ★★★ **碰串口只用 `tools/watch_log.py`，禁止手写 SerialPort**（2026-11-25 再次复发）：
+    auto-download 电路靠 DTR/RTS 翻转，`SerialPort.Open()` 瞬间 Windows 驱动默认拉高两线
+    ⇒ **打开串口 = 复位设备**。正确做法：`DtrEnable=false; RtsEnable=false` 必须放在 `Open()` **之前**，
+    open 之后再设已晚。2026-11-23 已记录并修好 `watch_log.py`（零扰动）；
+    **11-25 我又手写 PowerShell SerialPort 读 15 秒，把用户正要拍的"画面错位"现场复位掉了**。
+    ⇒ 用户正在观察某现象时**碰串口先问**；要主动复位抓启动日志用 `catch_boot`，两者分工不同。
+    **教训：观察工具不能扰动被观察对象——这条 11-23 就写过，我 11-25 又犯。**
+
 ## 硬件要点（详见 docs/HARDWARE.md）
 
 - 屏：800×480 RGB，**PCLK 40MHz / 总时序 1120×541 / 66.02fps / `.pclk_active_neg = true`**

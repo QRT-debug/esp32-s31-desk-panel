@@ -14,6 +14,7 @@
  */
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "audio_player.h"
 #include "lvgl.h"
@@ -308,6 +309,24 @@ static lv_obj_t *make_card(lv_obj_t *parent, int x, int y,
 }
 
 static lv_obj_t *s_root;   /* 整页容器：切页动画用 */
+static lv_obj_t *s_clock_lbl;   /* 顶部大时钟（手机风改造，2026-11-25） */
+
+/* 每秒刷新一次时钟。注意 s_clock_lbl 可能因切页被 lv_obj_clean 删除，
+ * 所以 cb 里判空——已删除的对象指针会变成悬空，但 build_home 会重置它。 */
+static void clock_tick_cb(lv_timer_t *t)
+{
+    (void)t;
+    if (s_clock_lbl == NULL)
+    {
+        return;
+    }
+    time_t    now = time(NULL);
+    struct tm tmv;
+    localtime_r(&now, &tmv);
+    char buf[16];
+    strftime(buf, sizeof(buf), "%H:%M:%S", &tmv);
+    lv_label_set_text(s_clock_lbl, buf);
+}
 
 static void build_home(void)
 {
@@ -331,18 +350,35 @@ static void build_home(void)
     lv_obj_set_style_border_width(scr, 0, 0);
     lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* 顶部产品名 */
-    lv_obj_t *title = lv_label_create(root);
-    lv_obj_set_style_text_font(title, &ui_font_28, 0);
-    lv_obj_set_style_text_color(title, lv_color_hex(C_TITLE), 0);
-    lv_label_set_text(title, "ESP32-S31");
-    lv_obj_set_pos(title, 32, 26);
+    /* ★ 2026-11-25 手机风改造：顶部产品名 → 大时钟 + 日期
+     *   参考用户给的截图（ESP32 桌面跑网易云那台）：顶部是 时:分:秒，下面一行日期。
+     *   图标网格位置不变（y 从 96 开始），时钟占原来 title/sub 的位置。 */
+    s_clock_lbl = lv_label_create(root);
+    lv_obj_set_style_text_font(s_clock_lbl, &ui_font_digit_48, 0);
+    lv_obj_set_style_text_color(s_clock_lbl, lv_color_hex(C_TITLE), 0);
+    {
+        time_t    now = time(NULL);
+        struct tm tmv;
+        localtime_r(&now, &tmv);
+        char buf[16];
+        strftime(buf, sizeof(buf), "%H:%M:%S", &tmv);
+        lv_label_set_text(s_clock_lbl, buf);
+    }
+    lv_obj_set_pos(s_clock_lbl, 32, 10);
+    lv_timer_create(clock_tick_cb, 1000, NULL);
 
-    lv_obj_t *sub = lv_label_create(root);
-    lv_obj_set_style_text_font(sub, &ui_font_14, 0);
-    lv_obj_set_style_text_color(sub, lv_color_hex(C_SUB), 0);
-    lv_label_set_text(sub, "desktop terminal");
-    lv_obj_set_pos(sub, 34, 62);
+    lv_obj_t *date_lbl = lv_label_create(root);
+    lv_obj_set_style_text_font(date_lbl, &ui_font_cn18, 0);
+    lv_obj_set_style_text_color(date_lbl, lv_color_hex(C_SUB), 0);
+    {
+        time_t    now = time(NULL);
+        struct tm tmv;
+        localtime_r(&now, &tmv);
+        char buf[32];
+        strftime(buf, sizeof(buf), "%m月%d日", &tmv);
+        lv_label_set_text(date_lbl, buf);
+    }
+    lv_obj_set_pos(date_lbl, 34, 64);
 
     /* ★ 11-20：本页降级为"应用页"，右上角返回天气主页 */
     {
