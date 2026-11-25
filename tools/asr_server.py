@@ -865,6 +865,21 @@ def main():
     if BACKEND == "local":
         print(f"本地模型: {os.environ.get('WHISPER_SIZE', 'base')} "
               f"(HF_ENDPOINT={os.environ.get('HF_ENDPOINT', 'https://hf-mirror.com')})", flush=True)
+
+    # ★★★ 预热 SoVITS（2026-11-25 实测发现）：首次合成要 **9 秒**，之后只要 **2 秒**。
+    #   原因是首句要编译 GPU kernel + 分配缓存。用户重启服务后说的第一句话就吃这 9 秒，
+    #   体感就是"第一句特别慢，后面正常"。
+    #   这里在启动期先合成一句极短的，把这段开销挪到"还没人说话"的时候。
+    #   ⚠️ 会阻塞启动约 9 秒（服务晚 9 秒可用），换来每轮对话都稳定在 2 秒。
+    if TTS_BACKEND == "sovits":
+        try:
+            _t = time.time()
+            synth_wav("嗯。", "中立")
+            print(f"[warmup] SoVITS 预热完成 {time.time() - _t:.2f}s（冷启动开销已提前消化）",
+                  flush=True)
+        except Exception as _e:
+            print(f"[warmup] 预热失败（不影响使用，只是第一句会慢）: {_e}", flush=True)
+
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
 
 
