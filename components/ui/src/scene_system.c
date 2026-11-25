@@ -453,6 +453,8 @@ static void prov_card_close_cb(lv_event_t *e)
     /* 注意：只关卡片，不停热点 —— 用户可能还没在手机上输完密码 */
 }
 
+static void prov_show_card(void);
+
 static void prov_cb(lv_event_t *e)
 {
     (void)e;
@@ -460,7 +462,16 @@ static void prov_cb(lv_event_t *e)
     esp_err_t err = wifi_prov_start();
     ESP_LOGI("system", "prov start: %s", esp_err_to_name(err));
 
-    if (err != ESP_OK || s_prov_card != NULL)
+    if (err == ESP_OK)
+    {
+        prov_show_card();
+    }
+}
+
+/** 建立配网指引卡（与 wifi_prov_start 解耦：模拟器里也能单独调出来看布局） */
+static void prov_show_card(void)
+{
+    if (s_prov_card != NULL)
     {
         return;
     }
@@ -496,7 +507,7 @@ static void prov_cb(lv_event_t *e)
     char b[320];
     snprintf(b, sizeof(b),
              "1. 手机连热点\n     %s\n     密码 %s\n\n"
-             "2. 浏览器打开\n     http://%s\n\n"
+             "2. 手机打开\n     http://%s\n\n"
              "3. 选家里 WiFi 并输入密码",
              wifi_prov_ssid(), PROV_AP_PASS, PROV_AP_IP);
 
@@ -602,7 +613,7 @@ static void build_system(void)
     row_title(c_disp, 0, 50, "亮度");
     {
         lv_obj_t *sl = lv_slider_create(c_disp);
-        lv_obj_set_size(sl, 140, 10);   /* 加长到紧贴百分比右侧（间距 5px） */
+        lv_obj_set_size(sl, 215, 10);   /* 右端 325，百分比从 330 起（5px） */
         lv_obj_set_pos(sl, 110, 20);
         lv_slider_set_range(sl, 10, 100);
         lv_slider_set_value(sl, backlight_get(), LV_ANIM_OFF);
@@ -689,6 +700,7 @@ static void build_system(void)
     set_text_if_changed(s_lbl_log, "(no log yet)");
 
     refresh_all();
+
 }
 
 void scene_system(uint16_t *fb, int frame)
