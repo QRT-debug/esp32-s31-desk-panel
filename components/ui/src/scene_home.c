@@ -142,6 +142,113 @@ static void to_config_cb(lv_event_t *e)
  * 参考用户给的截图：96×96 圆角渐变色块 + 白色图标 + 下方 18px 文字。
  * 和 make_card 的区别：卡片是"信息面板"（带数值），图标块是"入口"（只有名字）。
  */
+/**
+ * B 站小电视（按官方 logo 形态复刻）：外框 + 内屏 + 眯眼 + ω嘴 + 天线 + 脚。
+ *
+ * ★ 2026-11-25：icon tile 版最初用 Font Awesome 的 `fa-tv`（0xF26C），
+ *   那是**普通电视机**的形状，不是 B 站的小电视，用户一眼看出不对。
+ *   这里把旧卡片版（make_card 的 idx==5 分支）那套手绘搬过来复用。
+ *
+ * 绘制坐标沿用旧版（在一个 56×56 容器内，图形实际占 x5~38 / y1~38）；
+ * 为了让图形在 96×96 的色块里**视觉居中**，容器不是放 (20,20) 而是 (26,28)。
+ */
+static void draw_bili_tv(lv_obj_t *parent, uint32_t color)
+{
+    lv_obj_t *box = lv_obj_create(parent);
+    lv_obj_set_size(box, 56, 56);
+    lv_obj_set_pos(box, 26, 28);
+    lv_obj_set_style_bg_opa(box, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(box, 0, 0);
+    lv_obj_set_style_pad_all(box, 0, 0);
+    lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+
+    const uint32_t C = color;
+    {   /* 外框 */
+        lv_obj_t *frame = lv_obj_create(box);
+        lv_obj_set_size(frame, 33, 22);
+        lv_obj_set_pos(frame, 5, 11);
+        lv_obj_set_style_radius(frame, 5, 0);
+        lv_obj_set_style_bg_opa(frame, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(frame, 3, 0);
+        lv_obj_set_style_border_color(frame, lv_color_hex(C), 0);
+        lv_obj_set_style_pad_all(frame, 0, 0);
+        lv_obj_clear_flag(frame, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    }
+    {   /* 内屏 */
+        lv_obj_t *sc = lv_obj_create(box);
+        lv_obj_set_size(sc, 27, 16);
+        lv_obj_set_pos(sc, 8, 14);
+        lv_obj_set_style_radius(sc, 3, 0);
+        lv_obj_set_style_bg_opa(sc, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(sc, 2, 0);
+        lv_obj_set_style_border_color(sc, lv_color_hex(C), 0);
+        lv_obj_set_style_pad_all(sc, 0, 0);
+        lv_obj_clear_flag(sc, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    }
+    /* 两只斜笑眼（左 \ 右 /，2×6 绕自身转 ±40°） */
+    for (int e = 0; e < 2; e++)
+    {
+        lv_obj_t *eye = lv_obj_create(box);
+        lv_obj_set_size(eye, 2, 6);
+        lv_obj_set_pos(eye, e ? 26 : 13, 18);
+        lv_obj_set_style_radius(eye, 1, 0);
+        lv_obj_set_style_bg_color(eye, lv_color_hex(C), 0);
+        lv_obj_set_style_bg_opa(eye, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(eye, 0, 0);
+        lv_obj_set_style_pad_all(eye, 0, 0);
+        lv_obj_clear_flag(eye, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_style_transform_pivot_x(eye, 1, 0);
+        lv_obj_set_style_transform_pivot_y(eye, 4, 0);
+        lv_obj_set_style_transform_rotation(eye, e ? -400 : 400, 0);
+    }
+    /* 嘴：两个下半圆弧拼成 ω（★ 0~180 才是下凸 ∪，写 180~360 会像眉毛） */
+    for (int m = 0; m < 2; m++)
+    {
+        lv_obj_t *arc = lv_arc_create(box);
+        lv_obj_set_size(arc, 6, 6);
+        lv_obj_set_pos(arc, m ? 21 : 16, 23);
+        lv_obj_set_style_arc_width(arc, 2, LV_PART_INDICATOR);
+        lv_obj_set_style_arc_color(arc, lv_color_hex(C), LV_PART_INDICATOR);
+        lv_obj_set_style_arc_opa(arc, LV_OPA_TRANSP, LV_PART_MAIN);
+        lv_obj_set_style_arc_width(arc, 0, LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(arc, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(arc, 0, 0);
+        lv_obj_set_style_pad_all(arc, 0, 0);
+        lv_arc_set_angles(arc, 0, 180);
+        lv_obj_remove_style(arc, NULL, LV_PART_KNOB);
+        lv_obj_clear_flag(arc, LV_OBJ_FLAG_CLICKABLE);
+    }
+    /* 两根天线（2×10，绕底部转 ±32°） */
+    for (int a = 0; a < 2; a++)
+    {
+        lv_obj_t *ant = lv_obj_create(box);
+        lv_obj_set_size(ant, 2, 10);
+        lv_obj_set_pos(ant, a ? 29 : 12, 1);
+        lv_obj_set_style_radius(ant, 1, 0);
+        lv_obj_set_style_bg_color(ant, lv_color_hex(C), 0);
+        lv_obj_set_style_bg_opa(ant, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(ant, 0, 0);
+        lv_obj_set_style_pad_all(ant, 0, 0);
+        lv_obj_clear_flag(ant, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_style_transform_pivot_x(ant, 1, 0);
+        lv_obj_set_style_transform_pivot_y(ant, 9, 0);
+        lv_obj_set_style_transform_rotation(ant, a ? 320 : -320, 0);
+    }
+    /* 两只脚 */
+    for (int f = 0; f < 2; f++)
+    {
+        lv_obj_t *foot = lv_obj_create(box);
+        lv_obj_set_size(foot, 5, 4);
+        lv_obj_set_pos(foot, f ? 24 : 13, 34);
+        lv_obj_set_style_radius(foot, 2, 0);
+        lv_obj_set_style_bg_color(foot, lv_color_hex(C), 0);
+        lv_obj_set_style_bg_opa(foot, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(foot, 0, 0);
+        lv_obj_set_style_pad_all(foot, 0, 0);
+        lv_obj_clear_flag(foot, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    }
+}
+
 static lv_obj_t *make_icon_tile(lv_obj_t *parent, int x, int y,
                                 uint32_t c1, uint32_t c2,
                                 const char *icon, const char *label,
@@ -172,12 +279,20 @@ static lv_obj_t *make_icon_tile(lv_obj_t *parent, int x, int y,
     lv_obj_set_style_shadow_width(tile, 0, 0);
     lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
 
-    /* 白色图标（居中）。ui_font_hw48 是 48px 版（24px 版在 96 方块里空太多） */
-    lv_obj_t *ic = lv_label_create(tile);
-    lv_obj_set_style_text_font(ic, &ui_font_hw48, 0);
-    lv_obj_set_style_text_color(ic, lv_color_hex(0xFFFFFF), 0);
-    lv_label_set_text(ic, icon);
-    lv_obj_center(ic);
+    /* 图标（居中）：B 站用手绘小电视，其余用 Font Awesome 48px 字形
+     * ★ fa-tv(0xF26C) 只是普通电视机，不是 B 站 logo，所以单独处理 */
+    if (label != NULL && strcmp(label, "B站") == 0)
+    {
+        draw_bili_tv(tile, 0xFFFFFF);
+    }
+    else
+    {
+        lv_obj_t *ic = lv_label_create(tile);
+        lv_obj_set_style_text_font(ic, &ui_font_hw48, 0);
+        lv_obj_set_style_text_color(ic, lv_color_hex(0xFFFFFF), 0);
+        lv_label_set_text(ic, icon);
+        lv_obj_center(ic);
+    }
 
     /* ★ 2026-11-25：APPS 页有壁纸后，浅色壁纸上白字会糊 ⇒ 加暗色描边。
      *   第一版（2px / OPA_30）实测**不够**，用户反馈"看不清" ⇒ 加强为 3px / OPA_80。
@@ -485,7 +600,7 @@ static void build_home(void)
                    to_hf_cb);
     make_icon_tile(scr, TX[1], TY[1], 0x64B5F6, 0x4C9AFF, "\xEF\x82\x80", "AI榜",
                    to_airank_cb);
-    make_icon_tile(scr, TX[2], TY[1], 0xFF8A80, 0xF2A03D, "\xEF\x89\xAC", "B站",
+    make_icon_tile(scr, TX[2], TY[1], 0xFB7299, 0xE85A82, "\xEF\x89\xAC", "B站",
                    to_bili_cb);
     make_icon_tile(scr, TX[3], TY[1], 0x80CBC4, 0x35D07F, "\xEF\x84\xB0", "语音",
                    to_voice_cb);
