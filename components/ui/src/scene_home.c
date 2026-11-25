@@ -384,7 +384,9 @@ static void build_home(void)
     /* 先铺纯色兜底，再尝试壁纸。
      * ★ APPS 页用**固定**的 desktop.jpg（不能用随机版：用户要它始终是同一张），
      *   没有 desktop.jpg 时才退回随机挑。时钟页继续随机，两个页面互不影响。 */
-    if (!wallpaper_apply_named(scr, "desktop.jpg"))
+    /* ★ 临时验证：壁纸疑似导致 PSRAM 带宽不足（四周频闪 + 左上角残留），
+     *   先关掉确认，确认后再想正确的方案（不能靠"少画一点"糊过去）。 */
+    if (0 && !wallpaper_apply_named(scr, "desktop.jpg"))
     {
         wallpaper_apply_bg(scr);
     }

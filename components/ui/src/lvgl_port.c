@@ -50,9 +50,15 @@ static lv_display_t *s_disp  = NULL;
 static lv_area_t s_dir_cur[MAX_DIRTY];
 static int       s_dir_cur_n   = 0;
 static bool      s_dir_cur_ovf = false;     /* 超出 16 块 ⇒ 退化整屏 sync */
-static lv_area_t s_dir_prev[MAX_DIRTY];
-static int       s_dir_prev_n  = 0;
-static bool      s_dir_prev_ovf = false;
+/* ★★★ 2026-11-25：上一帧脏区的**包围盒**（原 s_dir_prev[] 逐块记账已废弃）。
+ *   为什么改：LVGL 在自己内部（lv_refr.c: refr_sync_areas）会把多个小脏区
+ *   **合并成一个大矩形**，然后用 CPU memcpy 从旧 fb 拷到新 fb。
+ *   而我们只按"逐块"记账 → 合并矩形里那些"块与块之间"的部分从没 sync 过
+ *   ⇒ DMA 读到的是两帧前的像素 ⇒ 表现为「左上角残留旧画面 + 细竖线」，
+ *   且只在有局部刷新时出现（界面静止时不切 fb，看不出来）。
+ *   改用包围盒：覆盖范围只会更大，多写几条 cache line 没有副作用。 */
+static lv_area_t s_prev_box;
+static bool      s_prev_box_ok = false;
 
 /** 把一块区域的**整行**从 CPU cache 写回 PSRAM（行步长 1600B 是 64B cache line 的整数倍） */
 static void cache_sync_rows(const uint8_t *base, int32_t y1, int32_t y2)
@@ -127,7 +133,7 @@ static void flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
          *   ① 本帧新画的脏区  ② **上一帧的脏区**（被 refr_sync_areas 用 CPU memcpy 拷过、
          *   不经过本回调，不 sync 就会让 DMA 读到旧像素 = 局部闪）。
          *   多 sync 几个区域没有副作用（只多写回几条 cache line），少 sync 一定花屏。 */
-        if (s_dir_cur_ovf || s_dir_prev_ovf)
+        if (s_dir_cur_ovf)
         {
             cache_sync_rows(px_map, 0, LCD_V_RES - 1);
         }
@@ -137,16 +143,31 @@ static void flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
             {
                 cache_sync_rows(px_map, s_dir_cur[i].y1, s_dir_cur[i].y2);
             }
-            for (int i = 0; i < s_dir_prev_n; i++)
+            /* ★ 上一帧按**包围盒**同步（不是逐块）：LVGL 的 refr_sync_areas
+             *   会把脏区合并成大矩形再拷，逐块同步会漏掉块间空隙 ⇒ 残留/竖线。 */
+            if (s_prev_box_ok)
             {
-                cache_sync_rows(px_map, s_dir_prev[i].y1, s_dir_prev[i].y2);
+                cache_sync_rows(px_map, s_prev_box.y1, s_prev_box.y2);
             }
         }
 
-        /* 本帧 → 上帧，为下一次刷新记账 */
-        memcpy(s_dir_prev, s_dir_cur, sizeof(lv_area_t) * (size_t)s_dir_cur_n);
-        s_dir_prev_n   = s_dir_cur_n;
-        s_dir_prev_ovf = s_dir_cur_ovf;
+        /* 本帧 → 上帧：记录本帧脏区的包围盒 */
+        if (s_dir_cur_n > 0 && !s_dir_cur_ovf)
+        {
+            s_prev_box = s_dir_cur[0];
+            for (int i = 1; i < s_dir_cur_n; i++)
+            {
+                if (s_dir_cur[i].x1 < s_prev_box.x1) { s_prev_box.x1 = s_dir_cur[i].x1; }
+                if (s_dir_cur[i].y1 < s_prev_box.y1) { s_prev_box.y1 = s_dir_cur[i].y1; }
+                if (s_dir_cur[i].x2 > s_prev_box.x2) { s_prev_box.x2 = s_dir_cur[i].x2; }
+                if (s_dir_cur[i].y2 > s_prev_box.y2) { s_prev_box.y2 = s_dir_cur[i].y2; }
+            }
+            s_prev_box_ok = true;
+        }
+        else
+        {
+            s_prev_box_ok = false;
+        }
         s_dir_cur_n    = 0;
         s_dir_cur_ovf  = false;
 
