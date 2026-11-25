@@ -155,6 +155,9 @@ typedef struct
 static card_t s_c[4];   /* 0=CPU 1=GPU 2=MEM 3=DISK */
 static lv_obj_t *s_net_up, *s_net_dn, *s_bar_up, *s_bar_dn;
 static lv_obj_t *s_lbl_host, *s_net_dot, *s_net_stxt;
+/* 存储卡：两行盘符（每行 盘符 + 百分比 + 剩余 + 细条），不用环 */
+static lv_obj_t *s_dk_name[2], *s_dk_pct[2], *s_dk_free[2], *s_dk_bar[2];
+static lv_obj_t *s_dk_dot, *s_dk_stxt;
 
 static lv_obj_t *mk_card(lv_obj_t *p, int x, int y, int w, int h)
 {
@@ -265,6 +268,29 @@ static void mk_stat_card(lv_obj_t *p, int x, int y, const char *title, card_t *c
     c->arc = arc;
 }
 
+/**
+ * 存储卡：两行盘符列表。
+ * ★ 为什么不用环：环只能表达一个值，两个盘挤一个环必然有一个被弱化；
+ *   参考图的 RAM 卡也是双行细条的做法。每行：盘符 + 百分比 + 剩余 + 3px 细条。
+ */
+static void build_storage_card(lv_obj_t *p, int x, int y)
+{
+    lv_obj_t *k = mk_card(p, x, y, 380, 140);
+
+    mk_lbl(k, 16, 12, &ui_font_20, COL_TXT, "Storage");
+    mk_dot(k, 126, 20, COL_OK, &s_dk_dot);
+    s_dk_stxt = mk_lbl(k, 140, 15, &ui_font_14, COL_OK, "Optimal");
+
+    for (int i = 0; i < 2; i++)
+    {
+        int yy = 42 + i * 46;
+        s_dk_name[i] = mk_lbl(k, 16, yy - 2, &ui_font_20, COL_TXT, "—");
+        s_dk_pct[i]  = mk_lbl(k, 58, yy - 4, &ui_font_24, COL_TXT, "—");
+        s_dk_free[i] = mk_lbl(k, 140, yy + 4, &ui_font_14, COL_SUB, "—");
+        s_dk_bar[i]  = mk_bar(k, 16, yy + 32, 260, COL_RING);   /* 与上面几张卡的条等宽 */
+    }
+}
+
 static void build_monitor(void)
 {
     lv_obj_t *scr = lv_screen_active();
@@ -309,8 +335,7 @@ static void build_monitor(void)
     mk_stat_card(root, 16, 46, "Processor", &s_c[0]);
     mk_stat_card(root, 404, 46, "Video Card", &s_c[1]);
     mk_stat_card(root, 16, 194, "Memory", &s_c[2]);
-    mk_stat_card(root, 404, 194, "Storage", &s_c[3]);
-    s_c[3].pct  = s_c[3].pct;   /* Storage 的 sub 显示盘符 */
+    build_storage_card(root, 404, 194);
 
     /* 底部：网络 */
     lv_obj_t *cn = mk_card(root, 16, 342, 768, 122);
@@ -345,9 +370,7 @@ static void update_ui(void)
     vals[0] = st.valid ? (int)(st.cpu_pct + 0.5f) : 0;
     vals[1] = (st.valid && st.gpu_ok) ? st.gpu_pct : 0;
     vals[2] = st.valid ? (int)(st.mem_pct + 0.5f) : 0;
-    vals[3] = st.valid ? (int)(st.disks[0].percent + 0.5f) : 0;
-
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 3; i++)
     {
         int v = vals[i];
         if (v < 0)   { v = 0; }
@@ -372,15 +395,35 @@ static void update_ui(void)
     snprintf(b, sizeof(b), "%.0f / %.0f GB", (double)st.mem_used_gb, (double)st.mem_total_gb);
     set_text_if_changed(s_c[2].sub, b);
 
-    if (st.disk_count > 0)
+    /* 存储卡：两个盘各一行 */
+    int dmax = 0;
+    for (int i = 0; i < 2; i++)
     {
-        snprintf(b, sizeof(b), "%s  free %.0f GB", st.disks[0].name, (double)st.disks[0].free_gb);
+        if (i < st.disk_count)
+        {
+            int p = (int)(st.disks[i].percent + 0.5f);
+            if (p > dmax) { dmax = p; }
+            set_text_if_changed(s_dk_name[i], st.disks[i].name);
+            snprintf(b, sizeof(b), "%d%%", p);
+            set_text_if_changed(s_dk_pct[i], b);
+            snprintf(b, sizeof(b), "free %.0f GB", (double)st.disks[i].free_gb);
+            set_text_if_changed(s_dk_free[i], b);
+            lv_bar_set_value(s_dk_bar[i], p, LV_ANIM_OFF);
+        }
+        else
+        {
+            set_text_if_changed(s_dk_name[i], "—");
+            set_text_if_changed(s_dk_pct[i], "");
+            set_text_if_changed(s_dk_free[i], "");
+            lv_bar_set_value(s_dk_bar[i], 0, LV_ANIM_OFF);
+        }
     }
-    else
     {
-        snprintf(b, sizeof(b), "—");
+        uint32_t dcol = util_color(dmax);
+        lv_obj_set_style_bg_color(s_dk_dot, lv_color_hex(dcol), 0);
+        lv_obj_set_style_text_color(s_dk_stxt, lv_color_hex(dcol), 0);
+        set_text_if_changed(s_dk_stxt, dmax >= 90 ? "High" : (dmax >= 70 ? "Busy" : "Optimal"));
     }
-    set_text_if_changed(s_c[3].sub, b);
 
     /* 顶栏 */
     set_text_if_changed(s_lbl_host, st.host[0] ? st.host : "—");
