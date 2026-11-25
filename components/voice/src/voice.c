@@ -511,7 +511,23 @@ static void voice_task(void *arg)
         {
             ESP_LOGI(TAG, "too short (%dms), discard", voiced_ms);
             s_busy = false;     /* ★ 提前退出也必须释放，否则此后永远"设备忙" */
-            led_idle();         /* 没听到内容 → 灯回待机 */
+            if (s_continuous)
+            {
+                /* ★ 持续模式：没听到内容不等于要退出——用户长按完可能还没来得及开口，
+                 *   或者只碰到了按键的机械声。保持青灯，稍等再听。
+                 *   （第一版这里直接 led_idle()+continue，表现就是"进了模式又立刻退出"。） */
+                led_set_rgb(LED_IDLE_R, LED_IDLE_G, LED_IDLE_B);
+                led_breath(0, 130, 130, 1200);
+                vTaskDelay(pdMS_TO_TICKS(300));
+                if (s_continuous)
+                {
+                    s_trigger = 1;
+                }
+            }
+            else
+            {
+                led_idle();     /* 单次模式：没听到内容 → 灯回待机 */
+            }
             continue;
         }
 
