@@ -52,6 +52,31 @@ static lv_obj_t *s_root;
 static row_t     s_row[ROW_COUNT];
 static lv_obj_t *s_lbl_net_up, *s_lbl_net_dn, *s_lbl_up, *s_lbl_online;
 
+/**
+ * ★ 文本没变就不 set（2026-11-25）。
+ *
+ * LVGL 的 `lv_label_set_text` **不比较内容** —— 同一串也照样标脏重画。
+ * 本页每 300ms 刷 **34 个 label**，而 CPU/内存这些数值每次只变个位数，
+ * 结果整页被拉出 10+ 块脏区、render 20ms+（实测）。
+ * 加这道比对后，只有真的变了的那 1~2 个字段会重绘。
+ *
+ * ★ 不用"整页快照 memcmp"：pc_stats_t 里 CPU/内存每秒都在变，
+ *   快照永远不同 ⇒ 比对永不命中，等于没做。
+ * ★ 必须定义在所有调用点之前（本文件前面的 build 分支里也有调用）。
+ */
+static void set_text_if_changed(lv_obj_t *lbl, const char *s)
+{
+    if (lbl == NULL || s == NULL)
+    {
+        return;
+    }
+    const char *old = lv_label_get_text(lbl);
+    if (old == NULL || strcmp(old, s) != 0)
+    {
+        lv_label_set_text(lbl, s);
+    }
+}
+
 static void home_cb(lv_event_t *e)
 {
     (void)e;
@@ -108,14 +133,14 @@ static void make_row(lv_obj_t *parent, int idx, uint32_t accent,
         lv_obj_t *ic = lv_label_create(circle);
         lv_obj_set_style_text_font(ic, &ui_font_hw, 0);
         lv_obj_set_style_text_color(ic, lv_color_hex(accent), 0);
-        lv_label_set_text(ic, icon);
+        set_text_if_changed(ic, icon);
         lv_obj_center(ic);
     }
 
     lv_obj_t *t = lv_label_create(parent);
     lv_obj_set_style_text_font(t, &ui_font_20, 0);
     lv_obj_set_style_text_color(t, lv_color_hex(C_TITLE), 0);
-    lv_label_set_text(t, label);
+    set_text_if_changed(t, label);
     lv_obj_set_pos(t, 60, y + 16);
 
     lv_obj_t *bar = lv_bar_create(parent);
@@ -133,13 +158,13 @@ static void make_row(lv_obj_t *parent, int idx, uint32_t accent,
     lv_obj_t *pct = lv_label_create(parent);
     lv_obj_set_style_text_font(pct, &ui_font_28, 0);
     lv_obj_set_style_text_color(pct, lv_color_hex(C_TITLE), 0);
-    lv_label_set_text(pct, "--");
+    set_text_if_changed(pct, "--");
     lv_obj_set_pos(pct, 378, y + 8);
 
     lv_obj_t *sub = lv_label_create(parent);
     lv_obj_set_style_text_font(sub, &ui_font_14, 0);
     lv_obj_set_style_text_color(sub, lv_color_hex(C_SUB), 0);
-    lv_label_set_text(sub, "--");
+    set_text_if_changed(sub, "--");
     lv_obj_set_pos(sub, 490, y + 18);
     lv_obj_set_width(sub, 240);
     lv_obj_set_style_text_align(sub, LV_TEXT_ALIGN_RIGHT, 0);
@@ -181,7 +206,7 @@ static void build_monitor(void)
             lv_obj_t *l = lv_label_create(btn);
             lv_obj_set_style_text_font(l, &lv_font_montserrat_14, 0);
             lv_obj_set_style_text_color(l, lv_color_hex(C_SUB), 0);
-            lv_label_set_text(l, LV_SYMBOL_LEFT " HOME");
+            set_text_if_changed(l, LV_SYMBOL_LEFT " HOME");
             lv_obj_center(l);
         }
         lv_obj_add_event_cb(btn, home_cb, LV_EVENT_CLICKED, NULL);
@@ -189,7 +214,7 @@ static void build_monitor(void)
         lv_obj_t *title = lv_label_create(root);
         lv_obj_set_style_text_font(title, &ui_font_28, 0);
         lv_obj_set_style_text_color(title, lv_color_hex(C_TITLE), 0);
-        lv_label_set_text(title, "PC MONITOR");
+        set_text_if_changed(title, "PC MONITOR");
         lv_obj_set_pos(title, 120, 8);
     }
 
@@ -233,37 +258,37 @@ static void build_monitor(void)
         lv_obj_t *ni = lv_label_create(card);
         lv_obj_set_style_text_font(ni, &ui_font_hw, 0);
         lv_obj_set_style_text_color(ni, lv_color_hex(C_BLUE), 0);
-        lv_label_set_text(ni, "\xEF\x9B\xBF");   /* 网线 */
+        set_text_if_changed(ni, "\xEF\x9B\xBF");   /* 网线 */
         lv_obj_set_pos(ni, 18, 8);
 
         lv_obj_t *l1 = lv_label_create(card);
         lv_obj_set_style_text_font(l1, &ui_font_14, 0);
         lv_obj_set_style_text_color(l1, lv_color_hex(C_SUB), 0);
-        lv_label_set_text(l1, "NET");
+        set_text_if_changed(l1, "NET");
         lv_obj_set_pos(l1, 52, 14);
 
         s_lbl_net_up = lv_label_create(card);
         lv_obj_set_style_text_font(s_lbl_net_up, &ui_font_20, 0);
         lv_obj_set_style_text_color(s_lbl_net_up, lv_color_hex(C_GREEN), 0);
-        lv_label_set_text(s_lbl_net_up, "UP --");
+        set_text_if_changed(s_lbl_net_up, "UP --");
         lv_obj_set_pos(s_lbl_net_up, 20, 36);
 
         s_lbl_net_dn = lv_label_create(card);
         lv_obj_set_style_text_font(s_lbl_net_dn, &ui_font_20, 0);
         lv_obj_set_style_text_color(s_lbl_net_dn, lv_color_hex(C_BLUE), 0);
-        lv_label_set_text(s_lbl_net_dn, "DOWN --");
+        set_text_if_changed(s_lbl_net_dn, "DOWN --");
         lv_obj_set_pos(s_lbl_net_dn, 240, 36);
 
         s_lbl_up = lv_label_create(card);
         lv_obj_set_style_text_font(s_lbl_up, &ui_font_14, 0);
         lv_obj_set_style_text_color(s_lbl_up, lv_color_hex(C_SUB), 0);
-        lv_label_set_text(s_lbl_up, "PC UP --");
+        set_text_if_changed(s_lbl_up, "PC UP --");
         lv_obj_set_pos(s_lbl_up, 470, 18);
 
         s_lbl_online = lv_label_create(card);
         lv_obj_set_style_text_font(s_lbl_online, &ui_font_14, 0);
         lv_obj_set_style_text_color(s_lbl_online, lv_color_hex(C_GREEN), 0);
-        lv_label_set_text(s_lbl_online, "ONLINE");
+        set_text_if_changed(s_lbl_online, "ONLINE");
         lv_obj_set_pos(s_lbl_online, 470, 42);
     }
 }
@@ -279,15 +304,15 @@ static void update_ui(void)
     {
         for (int i = 0; i < ROW_COUNT; i++)
         {
-            lv_label_set_text(s_row[i].pct, "--");
-            lv_label_set_text(s_row[i].sub, "offline");
+            set_text_if_changed(s_row[i].pct, "--");
+            set_text_if_changed(s_row[i].sub, "offline");
             lv_bar_set_value(s_row[i].bar, 0, LV_ANIM_OFF);
         }
-        lv_label_set_text(s_lbl_online, "OFFLINE");
+        set_text_if_changed(s_lbl_online, "OFFLINE");
         lv_obj_set_style_text_color(s_lbl_online, lv_color_hex(C_RED), 0);
-        lv_label_set_text(s_lbl_up, "PC UP --");
-        lv_label_set_text(s_lbl_net_up, "UP --");
-        lv_label_set_text(s_lbl_net_dn, "DOWN --");
+        set_text_if_changed(s_lbl_up, "PC UP --");
+        set_text_if_changed(s_lbl_net_up, "UP --");
+        set_text_if_changed(s_lbl_net_dn, "DOWN --");
         return;
     }
 
@@ -295,25 +320,25 @@ static void update_ui(void)
         float p = st.cpu_pct;
         uint32_t c = level_color(p, s_row[0].accent);
         snprintf(b, sizeof(b), "%d%%", (int)(p + 0.5f));
-        lv_label_set_text(s_row[0].pct, b);
+        set_text_if_changed(s_row[0].pct, b);
         lv_obj_set_style_text_color(s_row[0].pct, lv_color_hex(c), 0);
         lv_bar_set_value(s_row[0].bar, (int)p, LV_ANIM_OFF);
         lv_obj_set_style_bg_color(s_row[0].bar, lv_color_hex(c), LV_PART_INDICATOR);
         snprintf(b, sizeof(b), "%d MHz   %d cores", st.cpu_mhz, st.cpu_cores);
-        lv_label_set_text(s_row[0].sub, b);
+        set_text_if_changed(s_row[0].sub, b);
     }
 
     {
         float p = st.mem_pct;
         uint32_t c = level_color(p, s_row[1].accent);
         snprintf(b, sizeof(b), "%d%%", (int)(p + 0.5f));
-        lv_label_set_text(s_row[1].pct, b);
+        set_text_if_changed(s_row[1].pct, b);
         lv_obj_set_style_text_color(s_row[1].pct, lv_color_hex(c), 0);
         lv_bar_set_value(s_row[1].bar, (int)p, LV_ANIM_OFF);
         lv_obj_set_style_bg_color(s_row[1].bar, lv_color_hex(c), LV_PART_INDICATOR);
         snprintf(b, sizeof(b), "%.1f / %.0f GB",
                  (double)st.mem_used_gb, (double)st.mem_total_gb);
-        lv_label_set_text(s_row[1].sub, b);
+        set_text_if_changed(s_row[1].sub, b);
     }
 
     {
@@ -322,17 +347,17 @@ static void update_ui(void)
             float p = (float)st.gpu_pct;
             uint32_t c = level_color(p, s_row[2].accent);
             snprintf(b, sizeof(b), "%d%%", st.gpu_pct);
-            lv_label_set_text(s_row[2].pct, b);
+            set_text_if_changed(s_row[2].pct, b);
             lv_obj_set_style_text_color(s_row[2].pct, lv_color_hex(c), 0);
             lv_bar_set_value(s_row[2].bar, st.gpu_pct, LV_ANIM_OFF);
             lv_obj_set_style_bg_color(s_row[2].bar, lv_color_hex(c), LV_PART_INDICATOR);
             snprintf(b, sizeof(b), "%d C   %d W", st.gpu_temp, (int)st.gpu_power);
-            lv_label_set_text(s_row[2].sub, b);
+            set_text_if_changed(s_row[2].sub, b);
         }
         else
         {
-            lv_label_set_text(s_row[2].pct, "--");
-            lv_label_set_text(s_row[2].sub, "no gpu data");
+            set_text_if_changed(s_row[2].pct, "--");
+            set_text_if_changed(s_row[2].sub, "no gpu data");
             lv_bar_set_value(s_row[2].bar, 0, LV_ANIM_OFF);
         }
     }
@@ -345,17 +370,17 @@ static void update_ui(void)
             float p = st.disks[i].percent;
             uint32_t c = level_color(p, s_row[idx].accent);
             snprintf(b, sizeof(b), "%d%%", (int)(p + 0.5f));
-            lv_label_set_text(s_row[idx].pct, b);
+            set_text_if_changed(s_row[idx].pct, b);
             lv_obj_set_style_text_color(s_row[idx].pct, lv_color_hex(c), 0);
             lv_bar_set_value(s_row[idx].bar, (int)p, LV_ANIM_OFF);
             lv_obj_set_style_bg_color(s_row[idx].bar, lv_color_hex(c), LV_PART_INDICATOR);
             snprintf(b, sizeof(b), "%.0f GB free", (double)st.disks[i].free_gb);
-            lv_label_set_text(s_row[idx].sub, b);
+            set_text_if_changed(s_row[idx].sub, b);
         }
         else
         {
-            lv_label_set_text(s_row[idx].pct, "--");
-            lv_label_set_text(s_row[idx].sub, "no disk");
+            set_text_if_changed(s_row[idx].pct, "--");
+            set_text_if_changed(s_row[idx].sub, "no disk");
             lv_bar_set_value(s_row[idx].bar, 0, LV_ANIM_OFF);
         }
     }
@@ -368,7 +393,7 @@ static void update_ui(void)
     {
         snprintf(b, sizeof(b), "UP %.0f KB/s", (double)st.net_up_kbps);
     }
-    lv_label_set_text(s_lbl_net_up, b);
+    set_text_if_changed(s_lbl_net_up, b);
 
     if (st.net_down_kbps >= 1024.0f)
     {
@@ -378,13 +403,13 @@ static void update_ui(void)
     {
         snprintf(b, sizeof(b), "DOWN %.0f KB/s", (double)st.net_down_kbps);
     }
-    lv_label_set_text(s_lbl_net_dn, b);
+    set_text_if_changed(s_lbl_net_dn, b);
 
     char up[24];
     fmt_uptime(st.uptime_s, up, sizeof(up));
-    lv_label_set_text(s_lbl_up, up);
+    set_text_if_changed(s_lbl_up, up);
 
-    lv_label_set_text(s_lbl_online, "ONLINE");
+    set_text_if_changed(s_lbl_online, "ONLINE");
     lv_obj_set_style_text_color(s_lbl_online, lv_color_hex(C_GREEN), 0);
 }
 

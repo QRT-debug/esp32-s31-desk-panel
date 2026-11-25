@@ -256,6 +256,26 @@ static void draw_bili_tv(lv_obj_t *parent, uint32_t color)
     }
 }
 
+/** 按下：色块变暗（透出被压暗过的壁纸，观感等于"按下去"）
+ *  松开/滑走：恢复。user_data 传的是色块对象（wrap 才是可点的那个）。 */
+static void tile_press_cb(lv_event_t *e)
+{
+    lv_obj_t *tile = (lv_obj_t *)lv_event_get_user_data(e);
+    if (tile != NULL)
+    {
+        lv_obj_set_style_bg_opa(tile, LV_OPA_60, 0);
+    }
+}
+
+static void tile_release_cb(lv_event_t *e)
+{
+    lv_obj_t *tile = (lv_obj_t *)lv_event_get_user_data(e);
+    if (tile != NULL)
+    {
+        lv_obj_set_style_bg_opa(tile, LV_OPA_COVER, 0);
+    }
+}
+
 static lv_obj_t *make_icon_tile(lv_obj_t *parent, int x, int y,
                                 uint32_t c1, uint32_t c2,
                                 const char *icon, const char *label,
@@ -285,6 +305,11 @@ static lv_obj_t *make_icon_tile(lv_obj_t *parent, int x, int y,
     lv_obj_set_style_pad_all(tile, 0, 0);
     lv_obj_set_style_shadow_width(tile, 0, 0);
     lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+
+    /* ★ 2026-11-25 按压反馈：按下变暗、松开恢复（点下去有"被按到"的手感）
+     *   tile 本身不可点（CLICKABLE 已清），事件挂在 wrap 上，用 user_data 指回 tile。 */
+    lv_obj_add_event_cb(wrap, tile_press_cb, LV_EVENT_PRESSED, tile);
+    lv_obj_add_event_cb(wrap, tile_release_cb, LV_EVENT_RELEASED | LV_EVENT_PRESS_LOST, tile);
 
     /* 图标（居中）：B 站用手绘小电视，其余用 Font Awesome 48px 字形
      * ★ fa-tv(0xF26C) 只是普通电视机，不是 B 站 logo，所以单独处理 */
