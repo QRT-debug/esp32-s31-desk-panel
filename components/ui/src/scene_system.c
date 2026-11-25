@@ -613,7 +613,7 @@ static void build_system(void)
     row_title(c_disp, 0, 50, "亮度");
     {
         lv_obj_t *sl = lv_slider_create(c_disp);
-        lv_obj_set_size(sl, 215, 10);   /* 右端 325，百分比从 330 起（5px） */
+        lv_obj_set_size(sl, 200, 10);   /* 右端 310，手柄半径约 8 => 实际占位到 318 */
         lv_obj_set_pos(sl, 110, 20);
         lv_slider_set_range(sl, 10, 100);
         lv_slider_set_value(sl, backlight_get(), LV_ANIM_OFF);
