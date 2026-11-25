@@ -86,6 +86,27 @@ lv_obj_set_style_shadow_width(ic, 12, 0);                     // 投影
 
 **可复用**：现有 `APPS` 九宫格改造，不是从零写
 
+**★ 做 UI 时一并解决渲染预算**（2026-11-25 实测，必须先腾空间再加效果）
+
+| 环节 | 当前 | 说明 |
+|---|---|---|
+| render | **23 ms** | LVGL 软件渲染，最大头 |
+| flush | 8 ms | 脏区 memcpy（PSRAM→PSRAM） |
+| 实际帧率 | **50 FPS** | 理论 66（320MHz + 40MHz PCLK） |
+
+**开销排序与对策**
+1. **阴影** `shadow_width=6` —— LVGL 逐像素模糊，最贵。→ 去掉或降到 2
+2. **大圆角** `radius=24` —— 抗锯齿成本。→ 降到 12
+3. **渐变背景** —— 每次重绘插值。→ 改静态图片或纯色
+4. flush 的 memcpy —— 可改 DMA2D
+
+**★ 大时钟的教训**：48px 字体 + 每秒 `lv_label_set_text` 会让 render 从 23ms 涨到 **45ms**，帧率掉到 39。**所以任何"每秒刷新的大字体"都要先算渲染成本**，或者用局部刷新（只 invalidate 时钟区域）。
+
+**硬件能力（已确认可用，未接）**
+- `CONFIG_SOC_PPA_SUPPORTED=y`（2D 图形加速：fill/blend/scale）
+- `CONFIG_SOC_DMA2D_SUPPORTED=y`
+- 接上 PPA 可把 render 压到 ~5ms、帧率拉满 66，但要写 LVGL draw 后端，工作量大
+
 **工作量**：桌面 1~2 天 / 播放页 2~3 天 / 歌单 1 天
 
 **和 #7 在线音乐的关系**：这条是**界面**，在线音乐是**数据源**。UI 可以先做（用 SD 卡的本地歌曲），接在线播放是后一步。
