@@ -50,6 +50,20 @@ static jpeg_decoder_handle_t s_dec;
 static int             s_last_min = -1;
 static volatile int    s_wp_ready = -1;   /* -1 解码中 / 0 失败 / 1 成功 */
 
+/* ---- 防烧屏：壁纸轮换 + 文字层偏移（2026-11-25）----
+ * 壁纸：每 4 小时换一张（同一张图连续暴露会被打断 ⇒ 液晶有恢复窗口）
+ * 文字：胶囊/日期每 4 小时随机偏移 ±4px（它们出现在**每一张**壁纸上，
+ *       位置永远一样，只能靠偏移打散）
+ * ★ 壁纸本身不偏移：满屏 800×480 挪 4px 会露黑边；要盖住就得放大并软件缩放，
+ *   代价是 LVGL 每帧多解 768KB，不划算。 */
+#define WP_ROTATE_SEC  (4 * 3600)   /* 已用 20 秒验证过：rotate 与换图都正常触发 */
+
+static lv_obj_t *s_cap;              /* 时间胶囊容器（偏移的对象） */
+static lv_obj_t *s_wp_img;           /* 当前壁纸 image，轮换时替换 */
+static time_t    s_wp_born;          /* 当前壁纸开始显示的时刻 */
+static int       s_shift_x;
+static int       s_shift_y;
+
 /* ---------------- 壁纸 ---------------- */
 
 /** 从目录里随机挑一张 jpg；没有返回 false */
@@ -237,6 +251,7 @@ static void wp_poll_cb(lv_timer_t *t)
      *   move_background 又会压到不透明 bg 的下面（壁纸整个被盖住，只剩灰屏）。
      *   正确位置 = index 1：bg(0) 之上、胶囊/时间之下。 */
     lv_obj_move_to_index(img, 1);
+    s_wp_img = img;                   /* 轮换时要拿它来删旧图 */
     ESP_LOGI(TAG, "wallpaper applied");
 }
 
@@ -246,6 +261,35 @@ static void decode_task(void *arg)
     bool ok = load_wallpaper();
     s_wp_ready = ok ? 1 : 0;          /* ★ 只写标志，LVGL 侧轮询；绝不在任务里碰 LVGL */
     vTaskDelete(NULL);
+}
+
+/** 把文字层偏移应用到界面 */
+static void apply_shift(void)
+{
+    if (s_cap != NULL)
+    {
+        lv_obj_set_pos(s_cap, 20 + s_shift_x, 14 + s_shift_y);
+    }
+}
+
+/** 起一轮"解码 + 轮询"（首次进页与每 4 小时轮换共用）
+ *  ★ 必须先删旧壁纸：解码任务会覆盖 s_pix，旧 image 还指着同一块缓冲的话，
+ *    解码过程中屏幕会显示正在被写的像素（花屏）。删掉后解码期间露出下面的纯色底。 */
+static void start_load_wallpaper(void)
+{
+    if (s_wp_img != NULL)
+    {
+        lv_obj_del(s_wp_img);
+        s_wp_img = NULL;
+    }
+    s_wp_ready = -1;
+    if (xTaskCreate(decode_task, "wpdec", 8192, NULL, 3, NULL) != pdPASS)
+    {
+        ESP_LOGW(TAG, "decode task create failed");
+        s_wp_ready = 0;
+        return;
+    }
+    lv_timer_create(wp_poll_cb, 100, NULL);   /* 100ms 轮询解码结果 */
 }
 
 static void clock_tap_cb(lv_event_t *e)
@@ -261,6 +305,23 @@ static void update_clock(bool force)
     struct tm tm_now;
     time(&now);
     localtime_r(&now, &tm_now);
+
+    /* ★★ 防烧屏轮换（2026-11-25）：每 4 小时同时做两件事 ——
+     *   ① 换一张壁纸（打断同一张图的连续暴露，液晶有恢复窗口）
+     *   ② 换一次文字层偏移（胶囊/日期在每张图上位置都一样，只能靠挪）
+     *   判据用 time(NULL)，不依赖 tick 计数；时间被 SNTP 校正跳变时最多多换一次，无害。 */
+    if (s_wp_born != 0 && (now - s_wp_born) >= WP_ROTATE_SEC)
+    {
+        s_wp_born = now;
+        s_shift_x = (int)(esp_random() % 9) - 4;
+        s_shift_y = (int)(esp_random() % 9) - 4;
+        apply_shift();
+        ESP_LOGI(TAG, "rotate: shift (%d,%d)", s_shift_x, s_shift_y);
+        if (s_dec != NULL && s_wp_ready != -1)   /* -1 = 正在解码，别叠加 */
+        {
+            start_load_wallpaper();
+        }
+    }
 
     /* ★ 临时心跳：每 5 秒打一条。用于定位"屏幕冻结但芯片活着"时 ui 循环死没死——
      *   如果日志停了 = ui_manager 卡死在场景代码里；一直打 = 循环活着，是渲染/flush 的问题。 */
@@ -303,6 +364,11 @@ void scene_clock(uint16_t *fb, int frame)
         lv_obj_clean(lv_scr_act());
         ui_statusbar_show(false);         /* ★ 壁纸页隐藏状态栏：时钟和它重复 */
 
+        /* ★ 上面 clean 已经把上一轮的壁纸/胶囊对象删了，这两个指针必须同步失效 ——
+         *   否则 wp_poll_cb / apply_shift 会操作已释放对象（崩溃）。 */
+        s_wp_img = NULL;
+        s_cap    = NULL;
+
         /* 解码引擎只建一次，跨场景复用 */
         if (s_dec == NULL)
         {
@@ -326,23 +392,28 @@ void scene_clock(uint16_t *fb, int frame)
         lv_obj_set_style_radius(bg, 0, 0);
         lv_obj_clear_flag(bg, LV_OBJ_FLAG_SCROLLABLE);
 
-        s_wp_ready = -1;
+        /* ★ 进页即重置防烧屏状态：抽新偏移、记录起点（壁纸随机抽在 load_wallpaper 里） */
+        srand((unsigned)time(NULL));
+        s_wp_born = time(NULL);
+        s_shift_x = (int)(esp_random() % 9) - 4;      /* -4 .. +4 */
+        s_shift_y = (int)(esp_random() % 9) - 4;
+
         if (s_dec != NULL)
         {
-            if (xTaskCreate(decode_task, "wpdec", 8192, NULL, 3, NULL) != pdPASS)
-            {
-                ESP_LOGW(TAG, "decode task create failed");
-                s_wp_ready = 0;
-            }
+            start_load_wallpaper();
         }
-        lv_timer_create(wp_poll_cb, 100, NULL);   /* 100ms 轮询解码结果 */
+        else
+        {
+            s_wp_ready = 0;
+        }
 
         /* ---- 时间背后的胶囊遮罩：亮壁纸上白字才看得清 ---- */
         lv_obj_t *cap = lv_obj_create(lv_scr_act());
         /* ★ 宽度自适应内容：96px 等宽 8 字符约 424px，固定 430 会把秒的个位裁掉一角；
          *   LV_SIZE_CONTENT 让胶囊跟着文本走，永不裁切。 */
         lv_obj_set_size(cap, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-        lv_obj_set_pos(cap, 20, 14);
+        lv_obj_set_pos(cap, 20 + s_shift_x, 14 + s_shift_y);   /* 直接带上本次偏移 */
+        s_cap = cap;                                          /* 轮换时 apply_shift() 用 */
         lv_obj_set_style_bg_color(cap, lv_color_hex(0x000000), 0);
         lv_obj_set_style_bg_opa(cap, LV_OPA_50, 0);
         lv_obj_set_style_border_width(cap, 0, 0);
