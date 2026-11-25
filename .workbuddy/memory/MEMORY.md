@@ -35,9 +35,15 @@
 5. **烧录提速配置**：`NO_STUB` 必须为 not set；`flash` = 1.5Mbps + stub + 增量（18 s 全流程）。
 6. **抓日志先看 `pwd`**：`boot_capture.py` 用相对路径写 `boot_log.txt`，曾因此读错旧日志误判。
 7. **动音频配置前先做零风险测量**：`DIAG: SINE/SILENCE` 分层切除、固件内 `DIAG RATE` 自测采样率，比盲改安全得多。
-8. ★★★ **写 flash 会撕裂画面**：`nvs_commit()` 期间**禁用 instruction cache**，而 LVGL 代码住在 flash
-   ⇒ 任务 stall ⇒ `flush_cb` 等 vsync 200ms 超时后放弃 ⇒ 画面时序错乱。表现是"点保存→屏幕花一下→重启"。
-   ⇒ 所有写 NVS/SPIFFS 都放在**画面静止**时（数据已到、界面未更新）；配网保存前先 `backlight_set(0)`。
+8. ★★★ **写 flash 会打断渲染**：`nvs_commit()` 期间**禁用 instruction cache**，而 LVGL 代码住在 flash
+   ⇒ 任务 stall ⇒ `flush_cb` 等 vsync 200ms 超时后放弃 ⇒ 画面时序错乱。
+   **两档严重度**：轻 = 掉几帧（`vsync timeout` 仍是 **0**，别拿"没超时"当"没 stall"）；
+   重 = 撕裂/花屏（"点保存→屏幕花一下→重启"）。
+   ⇒ 对策两条，别只记一条：
+   ① **减法优先**：内容没变就别写（`data_cache_save` 已加内容比对，热启动完全不碰 flash）；
+   ② 必须写时择时或遮挡：放在界面不重绘的间隙；配网保存前 `backlight_set(0)`（那是"藏"，不是"不发生"）。
+   ★ **"界面显示的是旧数据" ≠ "画面静止"**：天气页自己会重绘（实测每 5s 10~11 帧、脏区 7~10 块），
+   所以"挑静止间隙写"在开机场景**不成立** —— 2026-11-25 实测更正。
    ★ 注意 S31 的 `SOC_PSRAM_MEMSPI_IS_INDEPENDENT=1`，**不是 PSRAM/DMA 被抢**（旧结论已推翻）。
 9. ★★ **`strlcpy` 不是 `snprintf`/`strncpy`**：`wifi_config_t.sta.ssid` 是 `uint8_t[32]`**不含 NUL**，
    目标比源小时前两者分别触发 `-Werror=format-truncation` / `stringop-truncation`（一晚上踩 4 次）。
