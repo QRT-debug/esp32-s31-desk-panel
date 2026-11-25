@@ -72,6 +72,9 @@ static volatile voice_mode_t s_mode = VOICE_MODE_TASK;
 static volatile bool   s_listening;
 static volatile bool   s_busy;      /* 全流程忙碌：触发 -> 录音 -> 上传完成 */
 static volatile bool   s_trigger;
+/* ★ 持续对话模式（2026-11-25）：播完自动再听，不用每句都按按钮。
+ *   长按 KEY0 1 秒切换；进入后灯用"青"色（区别于单次的蓝），一眼能看出还在连续模式。 */
+static volatile bool   s_continuous;
 static SemaphoreHandle_t s_lock;
 
 /* ---------------- 事件分发 ---------------- */
@@ -422,10 +425,19 @@ static void voice_task(void *arg)
         ESP_LOGI(TAG, "listening (max %us, vad %u)", (unsigned)max_sec,
                  (unsigned)app_cfg_get()->vad_thresh);
 
-        /* ★ 状态灯：听 = 蓝色呼吸（1200ms 一个来回，呼吸比彩虹更容易一眼看出"在听"） */
+        /* ★ 状态灯：听 = 蓝色呼吸（1200ms 一个来回，呼吸比彩虹更容易一眼看出"在听"）
+         *   持续对话模式下改用青色，和单次区分开——用户能一眼看出"还在连续模式"。 */
         led_set_rgb(LED_IDLE_R, LED_IDLE_G, LED_IDLE_B);   /* 底色恒为待机色 */
-        led_breath(LED_LISTEN_R, LED_LISTEN_G, LED_LISTEN_B, 1200);
-        ESP_LOGI(TAG, "LED: listen(blue)");
+        if (s_continuous)
+        {
+            led_breath(0, 70, 70, 1200);
+            ESP_LOGI(TAG, "LED: listen(cyan, 持续对话)");
+        }
+        else
+        {
+            led_breath(LED_LISTEN_R, LED_LISTEN_G, LED_LISTEN_B, 1200);
+            ESP_LOGI(TAG, "LED: listen(blue)");
+        }
 
         int  used       = 0;
         int  silence_ms = 0;
@@ -568,6 +580,19 @@ static void voice_task(void *arg)
         }
 
         s_busy = false;     /* 全流程结束（含上传/识别），释放占位 */
+
+        /* ★ 持续对话模式：播完自动再听，不用再按按钮。
+         *   留 400ms 间隔——喇叭刚停时的余响会被麦克风拾进来，
+         *   不留间隔会立刻判成"有人在说话"，形成自问自答。 */
+        if (s_continuous)
+        {
+            vTaskDelay(pdMS_TO_TICKS(400));
+            if (s_continuous && !s_busy && !audio_player_is_playing())
+            {
+                s_trigger = 1;
+                ESP_LOGI(TAG, "持续对话：自动进入下一轮");
+            }
+        }
     }
 }
 
@@ -594,6 +619,9 @@ static void key_task(void *arg)
     gpio_config(&cfg);
 
     int stable = 1, last = 1, cnt = 0;
+    int  hold_ms    = 0;      /* 本次按住已持续的毫秒 */
+    bool long_fired = false;  /* 已触发过长按（松开时就不再做短按动作） */
+
     while (1)
     {
         int now = gpio_get_level(KEY_GPIO);
@@ -605,7 +633,12 @@ static void key_task(void *arg)
         else if (++cnt * 10 >= KEY_DEBOUNCE_MS && now != stable)
         {
             stable = now;
-            if (stable == 0)               /* 按下（低电平）才动作，松开不做事 */
+            if (stable == 0)               /* 按下：开始计按住时长 */
+            {
+                hold_ms    = 0;
+                long_fired = false;
+            }
+            else if (!long_fired)          /* 松开且没长按过 → 短按动作 */
             {
                 if (audio_player_is_playing())
                 {
@@ -622,6 +655,29 @@ static void key_task(void *arg)
                 }
             }
         }
+
+        /* ★ 长按 1 秒 → 切换持续对话（按住不动也会触发，不用等松开） */
+        if (stable == 0 && !long_fired)
+        {
+            hold_ms += 10;
+            if (hold_ms >= 1000)
+            {
+                long_fired = true;
+                s_continuous = !s_continuous;
+                ESP_LOGI(TAG, "KEY0: 长按 → 持续对话 %s",
+                         s_continuous ? "开（播完自动再听）" : "关");
+                if (s_continuous)
+                {
+                    led_set_rgb(LED_IDLE_R, LED_IDLE_G, LED_IDLE_B);
+                    led_breath(0, 70, 70, 1500);        /* 青色 = 在连续模式 */
+                }
+                else
+                {
+                    led_idle();
+                }
+            }
+        }
+
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
