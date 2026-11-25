@@ -25,6 +25,7 @@ typedef struct
     char  host[32];
     int   uptime_s;
 
+    char  cpu_name[48];       /* CPU 型号（服务端从注册表取，如 "i5-14600K"） */
     float cpu_pct;
     int   cpu_mhz;
     int   cpu_cores;

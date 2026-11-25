@@ -17,7 +17,9 @@ PC 状态采集服务 —— 给 ESP32-S31 显示屏提供 CPU / GPU / 内存 / 
     - CPU 温度在 Windows 上 psutil 读不到（需要管理员 + 主板支持），这里不采
 """
 import json
+import platform
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -54,6 +56,95 @@ except Exception as exc:              # 没有 NVIDIA 卡或没装驱动
 _state_lock = threading.Lock()
 _state = {}
 _net_prev = None
+
+
+# ---------------- CPU / GPU 型号（2026-11-26） ----------------
+# psutil 不提供型号；Windows 上走 WMI。WMI 冷启动要 1~2 秒，
+# 所以**只在第一次用到时取一次**并缓存 —— 型号不会变。
+
+_CPU_NAME = None
+
+
+def _short_cpu(s):
+    """把长型号压成能塞进 56px 行的短串。
+    "Intel(R) Core(TM) i7-12700H CPU @ 2.30GHz" -> "i7-12700H"
+    "AMD Ryzen 7 5800X 8-Core Processor"        -> "Ryzen 7 5800X"
+    """
+    s = (s or "").replace("(R)", "").replace("(TM)", "").replace("(tm)", "")
+    s = s.split("@")[0].replace("CPU", "").replace("Processor", "")
+    s = s.replace("8-Core", "").replace("16-Core", "").replace("6-Core", "")
+    s = " ".join(s.split())
+    for pre in ("Intel Core ", "Intel "):
+        if s.startswith(pre):
+            s = s[len(pre):]
+            break
+    return s.strip() or "CPU"
+
+
+def _short_gpu(s):
+    """"NVIDIA GeForce RTX 4060" -> "RTX 4060"；AMD/Intel 只去厂商前缀。"""
+    s = (s or "").strip()
+    for pre in ("NVIDIA GeForce ", "NVIDIA ", "AMD Radeon ", "Intel(R) "):
+        if s.startswith(pre):
+            s = s[len(pre):]
+            break
+    return s.strip() or "GPU"
+
+
+def _probe_cpu_name():
+    """Windows: 读注册表 `ProcessorNameString`。
+    ★ 比 WMI/PowerShell 好在三处：不用外部进程（快、无权限弹窗）、
+      不受 WMIC 弃用影响（Win11 已移除 wmic）、纯标准库。
+    其他平台退回 platform.processor()。"""
+    try:
+        import winreg
+        with winreg.OpenKey(
+                winreg.HKEY_LOCAL_MACHINE,
+                r"HARDWARE\DESCRIPTION\System\CentralProcessor\0") as k:
+            name, _ = winreg.QueryValueEx(k, "ProcessorNameString")
+            if name:
+                return str(name).strip()
+    except Exception:
+        pass
+    return platform.processor() or "Unknown CPU"
+
+
+def _probe_gpu_name():
+    """不依赖 NVML 的显卡型号兜底（注册表里显卡类的 DriverDesc）。
+    ★ 为什么要它：没装 pynvml 时 gpu 字段整个为 null，界面只显示"no gpu data"，
+      连型号都看不到。型号是静态信息，注册表就能拿到。
+    ★ 必须枚举多个子键并**优先独显**：i5/i7 这类带核显的机器，
+      0000 通常是 Intel UHD，独显在 0001 —— 只取 0000 会拿到核显。"""
+    names = []
+    try:
+        import winreg
+        base = (r"SYSTEM\CurrentControlSet\Control\Class"
+                r"\{4d36e968-e325-11ce-bfc1-08002be10318}")
+        for i in range(6):
+            try:
+                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                                    base + "\\%04d" % i) as k:
+                    name, _ = winreg.QueryValueEx(k, "DriverDesc")
+                    name = str(name)
+                    if name and "Microsoft Basic" not in name and name not in names:
+                        names.append(name)
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    for n in names:            # 独显优先
+        if any(k in n for k in ("NVIDIA", "RTX", "GTX", "Radeon")):
+            return n
+    return names[0] if names else None
+
+
+def cpu_name():
+    global _CPU_NAME
+    if _CPU_NAME is None:
+        _CPU_NAME = _probe_cpu_name()
+        print(f"[monitor] CPU: {_CPU_NAME}")
+    return _CPU_NAME
 
 
 def _read_gpu():
@@ -133,6 +224,7 @@ def collect():
         "host": socket.gethostname(),
         "uptime": int(time.time() - psutil.boot_time()),
         "cpu": {
+            "name": cpu_name(),
             "usage": round(cpu_pct, 1),
             "mhz": cpu_mhz,
             "cores": psutil.cpu_count(logical=True) or 0,
@@ -185,6 +277,7 @@ def to_kv(d):
     lines = [
         f"host={d['host']}",
         f"uptime={d['uptime']}",
+        f"cpu_name={_short_cpu(d['cpu']['name'])}",
         f"cpu={d['cpu']['usage']}",
         f"mhz={d['cpu']['mhz']}",
         f"cores={d['cpu']['cores']}",
@@ -198,7 +291,7 @@ def to_kv(d):
     if g:
         lines += [
             "gpu_ok=1",
-            f"gpu_name={g['name']}",
+            f"gpu_name={_short_gpu(g['name'])}",
             f"gpu={g['usage']}",
             f"gpu_mem_pct={g['mem_usage']}",
             f"gpu_mem_used={g['mem_used']}",
@@ -208,6 +301,10 @@ def to_kv(d):
         ]
     else:
         lines.append("gpu_ok=0")
+        # ★ 没有 NVML 也把型号发出去：界面至少能显示"这是什么卡"
+        gn = _probe_gpu_name()
+        if gn:
+            lines.append(f"gpu_name={_short_gpu(gn)}")
 
     disks = d.get("disks", [])[:4]
     lines.append(f"disk_count={len(disks)}")

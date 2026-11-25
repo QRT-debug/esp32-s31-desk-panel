@@ -76,6 +76,7 @@ static void set_field(pc_stats_t *st, const char *key, const char *val)
     if (!strcmp(key, "host"))               copy_val(st->host, sizeof(st->host), val);
     else if (!strcmp(key, "uptime"))        st->uptime_s = atoi(val);
     else if (!strcmp(key, "cpu"))           st->cpu_pct = (float)atof(val);
+    else if (!strcmp(key, "cpu_name"))      copy_val(st->cpu_name, sizeof(st->cpu_name), val);
     else if (!strcmp(key, "mhz"))           st->cpu_mhz = atoi(val);
     else if (!strcmp(key, "cores"))         st->cpu_cores = atoi(val);
     else if (!strcmp(key, "mem"))           st->mem_pct = (float)atof(val);

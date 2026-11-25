@@ -324,7 +324,15 @@ static void update_ui(void)
         lv_obj_set_style_text_color(s_row[0].pct, lv_color_hex(c), 0);
         lv_bar_set_value(s_row[0].bar, (int)p, LV_ANIM_OFF);
         lv_obj_set_style_bg_color(s_row[0].bar, lv_color_hex(c), LV_PART_INDICATOR);
-        snprintf(b, sizeof(b), "%d MHz   %d cores", st.cpu_mhz, st.cpu_cores);
+        /* ★ 2026-11-26：优先显示型号（服务端从注册表取），没有才退回频率/核心数 */
+        if (st.cpu_name[0] != '\0')
+        {
+            snprintf(b, sizeof(b), "%s", st.cpu_name);
+        }
+        else
+        {
+            snprintf(b, sizeof(b), "%d MHz   %d cores", st.cpu_mhz, st.cpu_cores);
+        }
         set_text_if_changed(s_row[0].sub, b);
     }
 
@@ -351,13 +359,24 @@ static void update_ui(void)
             lv_obj_set_style_text_color(s_row[2].pct, lv_color_hex(c), 0);
             lv_bar_set_value(s_row[2].bar, st.gpu_pct, LV_ANIM_OFF);
             lv_obj_set_style_bg_color(s_row[2].bar, lv_color_hex(c), LV_PART_INDICATOR);
-            snprintf(b, sizeof(b), "%d C   %d W", st.gpu_temp, (int)st.gpu_power);
+            /* 型号 + 温度；型号没有时退回温度/功耗 */
+            if (st.gpu_name[0] != '\0')
+            {
+                snprintf(b, sizeof(b), "%s  %d C", st.gpu_name, st.gpu_temp);
+            }
+            else
+            {
+                snprintf(b, sizeof(b), "%d C   %d W", st.gpu_temp, (int)st.gpu_power);
+            }
             set_text_if_changed(s_row[2].sub, b);
         }
         else
         {
             set_text_if_changed(s_row[2].pct, "--");
-            set_text_if_changed(s_row[2].sub, "no gpu data");
+            /* ★ 没装 NVML 时服务端仍会发型号（gpu_ok=0 但 gpu_name 有值），
+             *   这种情况显示型号而不是干巴巴的 "no gpu data" */
+            set_text_if_changed(s_row[2].sub,
+                                st.gpu_name[0] != '\0' ? st.gpu_name : "no gpu data");
             lv_bar_set_value(s_row[2].bar, 0, LV_ANIM_OFF);
         }
     }
