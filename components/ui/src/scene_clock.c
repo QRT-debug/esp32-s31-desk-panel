@@ -67,7 +67,12 @@ static bool pick_wallpaper(char *out, size_t outsz)
     while ((e = readdir(d)) != NULL && n < WP_MAX)
     {
         size_t l = strlen(e->d_name);
-        if (l > 4 && strcasecmp(e->d_name + l - 4, ".jpg") == 0)
+        /* ★ 必须排除 desktop.jpg（2026-11-25 修）：它是 APPS 页专用的固定图，
+         *   不排除的话时钟页会以 1/7 的概率"抽到桌面壁纸"，看起来像串页。
+         *   注意这里与 ui_wallpaper.c 的 pick() 是两套独立实现，
+         *   分流规则改动时**两边都要改** —— 当初就是只改了一边才漏的。 */
+        if (l > 4 && strcasecmp(e->d_name + l - 4, ".jpg") == 0 &&
+            strcasecmp(e->d_name, "desktop.jpg") != 0)
         {
             snprintf(names[n], sizeof(names[n]), "%s", e->d_name);
             n++;

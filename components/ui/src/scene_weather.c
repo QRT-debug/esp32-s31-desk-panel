@@ -146,6 +146,9 @@ static void draw_cloud(bool with_rain)
 
 /* 按描述关键字选形态（中文描述来自 wttr.in lang=zh） */
 static char s_last_desc[40] = { 0 };   /* 图标重画判据；frame==0 清空强制重画 */
+/* 颜色重设判据：0xFFFFFFFF = 本页还没设过（进页重置） */
+static uint32_t s_last_temp_col = 0xFFFFFFFFu;
+static uint32_t s_last_aqi_col  = 0xFFFFFFFFu;
 
 static void icon_update(const char *desc)
 {
@@ -401,6 +404,9 @@ static void build_weather(void)
 
     bg_apply(NULL);   /* 首帧默认渐变（多云），数据到达后随描述切换 */
     s_last_desc[0] = 0;   /* ★ 进页清残留：强制本帧重画图标/背景（防 static 残留） */
+    /* 颜色判据同样要清：新 label 是新建对象，没有颜色，哨兵值保证本帧一定重设一次 */
+    s_last_temp_col = 0xFFFFFFFFu;
+    s_last_aqi_col  = 0xFFFFFFFFu;
 
     /* ---- 底部 dock ---- */
     {
@@ -415,6 +421,27 @@ static void build_weather(void)
 
 /* ---------------- 刷新（每帧调用，内部限频） ---------------- */
 
+/**
+ * ★ 文本没变就不 set（2026-11-25）。
+ *
+ * LVGL 的 `lv_label_set_text` **不比较内容** —— 相同字符串照样标脏、照样重画。
+ * 而本页每 500ms 全量刷 13 个分散标签，实测因此产生 **7~10 块脏区 / 每帧写回 1092KB**
+ * （比整屏 768KB 还多），是开机"写 flash stall 撞上持续重绘"那个抖动的放大器。
+ * 天气数据 5 分钟才更新一次，所以 99% 的刷新都在重画一模一样的东西。
+ */
+static void set_text_if_changed(lv_obj_t *lbl, const char *s)
+{
+    if (lbl == NULL || s == NULL)
+    {
+        return;
+    }
+    const char *old = lv_label_get_text(lbl);
+    if (old == NULL || strcmp(old, s) != 0)
+    {
+        lv_label_set_text(lbl, s);
+    }
+}
+
 static void refresh_ui(void)
 {
     wx_data_t w;
@@ -424,52 +451,58 @@ static void refresh_ui(void)
 
     if (w.state == WX_STATE_INIT || w.state == WX_STATE_LOADING)
     {
-        lv_label_set_text(s_state_lbl, "Loading weather...");
+        set_text_if_changed(s_state_lbl, "Loading weather...");
     }
     else if (w.state == WX_STATE_FAIL)
     {
-        lv_label_set_text_fmt(s_state_lbl, "Failed (http %d), retry in 5min", w.http_code);
+        snprintf(b, sizeof(b), "Failed (http %d), retry in 5min", w.http_code);
+        set_text_if_changed(s_state_lbl, b);
     }
     else
     {
-        lv_label_set_text(s_state_lbl, "");
+        set_text_if_changed(s_state_lbl, "");
     }
 
     if (w.temp_c != 0 || w.state == WX_STATE_OK)
     {
         snprintf(b, sizeof(b), "%d°", w.temp_c);
-        lv_label_set_text(s_temp, b);
-        lv_obj_set_style_text_color(s_temp, lv_color_hex(temp_color(w.temp_c)), 0);
+        set_text_if_changed(s_temp, b);
+        uint32_t tcol = temp_color(w.temp_c);
+        if (tcol != s_last_temp_col)
+        {
+            lv_obj_set_style_text_color(s_temp, lv_color_hex(tcol), 0);
+            s_last_temp_col = tcol;
+        }
     }
     if (w.city[0])
     {
-        lv_label_set_text(s_city, w.city);
+        set_text_if_changed(s_city, w.city);
     }
     if (w.desc[0])
     {
-        lv_label_set_text(s_desc, w.desc);
+        set_text_if_changed(s_desc, w.desc);
     }
     if (w.updated[0])
     {
         snprintf(b, sizeof(b), "Updated %s", w.updated);
-        lv_label_set_text(s_upd, b);
+        set_text_if_changed(s_upd, b);
     }
     if (w.today_max != -99)
     {
         snprintf(b, sizeof(b), "Today  \u2191%d\u00b0  \u2193%d\u00b0", w.today_max, w.today_min);
-        lv_label_set_text(s_hl_today, b);
+        set_text_if_changed(s_hl_today, b);
         snprintf(b, sizeof(b), "Tmrw   \u2191%d\u00b0  \u2193%d\u00b0", w.tmrw_max, w.tmrw_min);
-        lv_label_set_text(s_hl_tmrw, b);
+        set_text_if_changed(s_hl_tmrw, b);
     }
     if (w.humidity >= 0)
     {
         snprintf(b, sizeof(b), "%d%%", w.humidity);
-        lv_label_set_text(s_hum_val, b);
+        set_text_if_changed(s_hum_val, b);
     }
     if (w.aqi > 0)
     {
         snprintf(b, sizeof(b), "%d", w.aqi);
-        lv_label_set_text(s_aqi_val, b);
+        set_text_if_changed(s_aqi_val, b);
         /* 分级配色（US AQI）：好=绿 中等=黄 敏感=橙 不健康=红 很差=紫 */
         uint32_t col = 0x4CAF50;
         if (w.aqi > 300)
@@ -492,18 +525,22 @@ static void refresh_ui(void)
         {
             col = 0xE6A700;
         }
-        lv_obj_set_style_text_color(s_aqi_val, lv_color_hex(col), 0);
+        if (col != s_last_aqi_col)
+        {
+            lv_obj_set_style_text_color(s_aqi_val, lv_color_hex(col), 0);
+            s_last_aqi_col = col;
+        }
     }
 
     if (w.wind_kmph >= 0)
     {
         snprintf(b, sizeof(b), "%d km/h", w.wind_kmph);
-        lv_label_set_text(s_wind_val, b);
+        set_text_if_changed(s_wind_val, b);
     }
     if (w.feels_c != -99)
     {
         snprintf(b, sizeof(b), "%d°", w.feels_c);
-        lv_label_set_text(s_feel_val, b);
+        set_text_if_changed(s_feel_val, b);
     }
 
     /* 图标只在描述变化时重建（每 500ms 重建会闪）。
