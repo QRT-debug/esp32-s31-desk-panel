@@ -28,6 +28,7 @@ set(UI_SRC
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/ui/src/scene_system.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/ui/src/ui_statusbar.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/ui/src/ui_logbuf.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/ui/src/ui_wallpaper.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/ui/src/ui_anim.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/ui/src/ui_theme.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/ui/src/scene_weather.c"

@@ -21,6 +21,7 @@
 #include "pc_monitor.h"
 #include "sd_card.h"
 #include "ui_fonts.h"
+#include "ui_wallpaper.h"
 #include "hf_trend.h"
 #include "ai_rank.h"
 #include "bili_hot.h"
@@ -156,21 +157,19 @@ static lv_obj_t *make_icon_tile(lv_obj_t *parent, int x, int y,
     lv_obj_add_flag(wrap, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(wrap, cb, LV_EVENT_CLICKED, NULL);
 
-    /* 色块：96×96、圆角 24、上浅下深渐变、轻阴影（阴影 8 已比卡片的 6 更省，
-     * 因为图标块数量虽多但面积小） */
+    /* 色块：96×96、**纯色**（不用渐变）+ 大圆角 28 + **无阴影**
+     * ★ 2026-11-25 用户反馈"像十多年前的老式手机 UI"：
+     *   老式感来自三处拟物化特征 —— 彩色渐变 + 重阴影 + 渐变背景。
+     *   现代做法是：纯色、无影、大圆角、留白。这里全部改掉。 */
     lv_obj_t *tile = lv_obj_create(wrap);
     lv_obj_set_size(tile, 96, 96);
     lv_obj_set_pos(tile, 10, 0);
-    lv_obj_set_style_radius(tile, 24, 0);
+    lv_obj_set_style_radius(tile, 28, 0);
     lv_obj_set_style_bg_color(tile, lv_color_hex(c1), 0);
-    lv_obj_set_style_bg_grad_color(tile, lv_color_hex(c2), 0);
-    lv_obj_set_style_bg_grad_dir(tile, LV_GRAD_DIR_VER, 0);
+    lv_obj_set_style_bg_grad_dir(tile, LV_GRAD_DIR_NONE, 0);
     lv_obj_set_style_border_width(tile, 0, 0);
     lv_obj_set_style_pad_all(tile, 0, 0);
-    lv_obj_set_style_shadow_width(tile, 8, 0);
-    lv_obj_set_style_shadow_opa(tile, LV_OPA_20, 0);
-    lv_obj_set_style_shadow_color(tile, lv_color_hex(0x202030), 0);
-    lv_obj_set_style_shadow_offset_y(tile, 3, 0);
+    lv_obj_set_style_shadow_width(tile, 0, 0);
     lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
 
     /* 白色图标（居中）。ui_font_hw48 是 48px 版（24px 版在 96 方块里空太多） */
@@ -180,11 +179,10 @@ static lv_obj_t *make_icon_tile(lv_obj_t *parent, int x, int y,
     lv_label_set_text(ic, icon);
     lv_obj_center(ic);
 
-    /* 下方文字：★ 用深色（C_TITLE）。第一版用白色，在浅色渐变背景上几乎看不清
-     * （截图确认：白字 + 浅蓝紫背景 = 对比度不足）。将来换深色壁纸时再改回白色。 */
+    /* 下方文字：深底上必须用白字（第一版浅底用白色看不清，现在反过来） */
     lv_obj_t *txt = lv_label_create(wrap);
     lv_obj_set_style_text_font(txt, &ui_font_cn18, 0);
-    lv_obj_set_style_text_color(txt, lv_color_hex(C_TITLE), 0);
+    lv_obj_set_style_text_color(txt, lv_color_hex(0xF2F3F8), 0);
     lv_obj_set_style_text_align(txt, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_width(txt, 116);
     lv_obj_set_pos(txt, 0, 100);
@@ -379,9 +377,12 @@ static void build_home(void)
     lv_obj_clear_flag(root, LV_OBJ_FLAG_SCROLLABLE);
     s_root = root;
 
-    lv_obj_set_style_bg_color(scr, lv_color_hex(C_BG_TOP), 0);
-    lv_obj_set_style_bg_grad_color(scr, lv_color_hex(C_BG_BOT), 0);
-    lv_obj_set_style_bg_grad_dir(scr, LV_GRAD_DIR_VER, 0);
+    /* ★ 深色纯底（近黑带一点蓝），不用渐变：
+     *   渐变背景 + 彩色图标是"拟物化老式感"的主要来源之一，纯深色更像现代系统。 */
+    lv_obj_set_style_bg_color(scr, lv_color_hex(0x14141E), 0);
+    lv_obj_set_style_bg_grad_dir(scr, LV_GRAD_DIR_NONE, 0);
+    /* 先铺纯色兜底，再尝试壁纸（没有 SD 卡/没图时保持纯色） */
+    wallpaper_apply_bg(scr);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
     lv_obj_set_style_pad_all(scr, 0, 0);
     lv_obj_set_style_border_width(scr, 0, 0);
@@ -397,7 +398,7 @@ static void build_home(void)
         lv_obj_set_size(back, 92, 28);   /* 缩小到 92 宽，避免和 x=113 起的"监控"图标重叠 */
         lv_obj_set_pos(back, 16, 12);    /* ★ 挪到左上角：原来在 (648,58) 会压住"系统"图标 */
         lv_obj_set_style_radius(back, 17, 0);
-        lv_obj_set_style_bg_color(back, lv_color_hex(C_CARD), 0);
+        lv_obj_set_style_bg_color(back, lv_color_hex(0x2A2A38), 0);   /* 深底上的半深色按钮 */
         lv_obj_set_style_bg_opa(back, LV_OPA_COVER, 0);
         lv_obj_set_style_border_width(back, 0, 0);
         lv_obj_set_style_shadow_width(back, 8, 0);
@@ -407,7 +408,7 @@ static void build_home(void)
         lv_obj_add_event_cb(back, to_weather_cb, LV_EVENT_CLICKED, NULL);
         lv_obj_t *bl = lv_label_create(back);
         lv_obj_set_style_text_font(bl, &lv_font_montserrat_14, 0);   /* symbol 只在 montserrat 有字形 */
-        lv_obj_set_style_text_color(bl, lv_color_hex(C_TITLE), 0);
+        lv_obj_set_style_text_color(bl, lv_color_hex(0xF2F3F8), 0);
         lv_label_set_text(bl, LV_SYMBOL_LEFT " WEATHER");
         lv_obj_center(bl);
     }
