@@ -179,10 +179,15 @@ static lv_obj_t *make_icon_tile(lv_obj_t *parent, int x, int y,
     lv_label_set_text(ic, icon);
     lv_obj_center(ic);
 
-    /* 下方文字：深底上必须用白字（第一版浅底用白色看不清，现在反过来） */
+    /* 下方文字：深底上必须用白字（第一版浅底用白色看不清，现在反过来）
+     * ★ 2026-11-25：APPS 页有壁纸后，浅色壁纸上白字会糊 ⇒ 加一层**极淡的暗色描边**
+     *   （2px、纯黑、透明度 30%）。只是给字压一圈边，不改变字的观感。 */
     lv_obj_t *txt = lv_label_create(wrap);
     lv_obj_set_style_text_font(txt, &ui_font_cn18, 0);
     lv_obj_set_style_text_color(txt, lv_color_hex(0xF2F3F8), 0);
+    lv_obj_set_style_text_outline_stroke_width(txt, 2, 0);
+    lv_obj_set_style_text_outline_stroke_color(txt, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_text_outline_stroke_opa(txt, LV_OPA_30, 0);
     lv_obj_set_style_text_align(txt, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_width(txt, 116);
     lv_obj_set_pos(txt, 0, 100);
@@ -433,32 +438,40 @@ static void build_home(void)
      *   3 列 × 3 行，每格 116×130（96 色块 + 下方文字）
      *   x 均分：800 = 113 + 116 + 113 + 116 + 113 + 116 + 113
      *   y：顶部留 24，行距 14 */
-    const int TX[3] = { 113, 342, 571 };
-    const int TY[3] = { 24, 168, 312 };
+    /* ★ 2026-11-25 布局定调（用户两次纠正后的结论）：
+     *   ① **手机桌面 = 小图标 + 排得近 + 上方留白**，不是把图标放大撑满
+     *   ② **不追求左右对称** —— 后面还会继续加图标，所以按"一行能放几个"来定，
+     *      最后一行不满是正常的（手机桌面也这样）
+     *   ③ 取 **4 列**：96×4 + 56×3 = 552 宽，左右留白各 124（≈ 图标宽 1.3 倍，接近手机比例）
+     *      wrap 间距 152 ⇒ 色块间空 56；wrap 总宽 116+152×3 = 572，起始 x = (800-572)/2 = 114
+     *   ④ 垂直：行距 130 = 图块高，顶部 TY[0]=72 给状态栏外再留 42px 空白
+     *   ★ 第 3 行目前只有 1 个（配网），是为后续新增图标预留的位置。 */
+    const int TX[4] = { 114, 266, 418, 570 };
+    const int TY[3] = { 72, 202, 332 };
 
-    /* 第一行：监控 / 音乐 / 系统 */
+    /* 第一行：工具 / 设置 —— 监控 / 音乐 / 系统 / 配网 */
     make_icon_tile(scr, TX[0], TY[0], 0x4C9AFF, 0x2F6FD0, "\xEF\x8B\x9B", "监控",
                    to_monitor_cb);
     make_icon_tile(scr, TX[1], TY[0], 0xFFC94D, 0xF2A03D, "\xEF\x80\x81", "音乐",
                    to_audio_cb);
     make_icon_tile(scr, TX[2], TY[0], 0x9BE15D, 0x35D07F, "\xEF\x80\x93", "系统",
                    to_system_cb);
+    make_icon_tile(scr, TX[3], TY[0], 0x90CAF9, 0x2F6FD0, "\xEF\x87\x9E", "配网",
+                   to_config_cb);
 
-    /* 第二行：三个榜单 */
+    /* 第二行：内容 / 语音 —— 热榜 / AI榜 / B站 / 语音 */
     make_icon_tile(scr, TX[0], TY[1], 0xB48CFF, 0x7E57C2, "\xEF\x81\xAD", "热榜",
                    to_hf_cb);
     make_icon_tile(scr, TX[1], TY[1], 0x64B5F6, 0x4C9AFF, "\xEF\x82\x80", "AI榜",
                    to_airank_cb);
     make_icon_tile(scr, TX[2], TY[1], 0xFF8A80, 0xF2A03D, "\xEF\x89\xAC", "B站",
                    to_bili_cb);
+    make_icon_tile(scr, TX[3], TY[1], 0x80CBC4, 0x35D07F, "\xEF\x84\xB0", "语音",
+                   to_voice_cb);
 
-    /* 第三行：屏保 / 语音 / 配网 */
+    /* 第三行：屏保 —— 时钟（后面新增的图标往这一行排） */
     make_icon_tile(scr, TX[0], TY[2], 0x9FA8DA, 0x5C6BC0, "\xEF\x80\x97", "时钟",
                    to_clock_cb);
-    make_icon_tile(scr, TX[1], TY[2], 0x80CBC4, 0x35D07F, "\xEF\x84\xB0", "语音",
-                   to_voice_cb);
-    make_icon_tile(scr, TX[2], TY[2], 0x90CAF9, 0x2F6FD0, "\xEF\x87\x9E", "配网",
-                   to_config_cb);
 }
 
 /* 每 500ms 刷一次卡片数值（读各模块的真实/模拟状态） */
