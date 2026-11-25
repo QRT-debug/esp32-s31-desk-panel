@@ -670,6 +670,12 @@ static void key_task(void *arg)
                 {
                     led_set_rgb(LED_IDLE_R, LED_IDLE_G, LED_IDLE_B);
                     led_breath(0, 70, 70, 1500);        /* 青色 = 在连续模式 */
+                    /* ★ 进入后必须立刻开始第一轮听：灯变青只表示"模式已开"，
+                     *   不开始听的话用户以为已经在听，说话却没反应（第一版漏了这句，实测踩到）。 */
+                    if (voice_listen())
+                    {
+                        ESP_LOGI(TAG, "持续对话：模式已开，开始第一轮");
+                    }
                 }
                 else
                 {
