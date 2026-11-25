@@ -167,7 +167,7 @@ static void draw_bili_tv(lv_obj_t *parent, uint32_t color)
      *   图形在 56 容器里偏左上，用容器中心当支点会把它整体推到右下。 */
     lv_obj_set_style_transform_pivot_x(box, 19, 0);
     lv_obj_set_style_transform_pivot_y(box, 19, 0);
-    lv_obj_set_style_transform_scale(box, 294, 0);   /* 256 = 1.0 ⇒ 294 ≈ 1.15x */
+    lv_obj_set_style_transform_scale(box, 340, 0);   /* 256 = 1.0 ⇒ 340 ≈ 1.33x */
 
     const uint32_t C = color;
     {   /* 外框 */
