@@ -29,6 +29,26 @@
 #include "ui_theme.h"
 #include "ai_rank.h"
 
+/**
+ * ★ 文本没变就不 set（2026-11-25）。
+ * LVGL 的 lv_label_set_text 不比较内容 —— 同一串也标脏重画。
+ * 本页每 500ms 全量刷十几个 label，实测脏区被拉到 20+ 块（AI RANK 页 max=22），
+ * 加了比对后只有真变的字段重绘。
+ */
+static void set_text_if_changed(lv_obj_t *lbl, const char *s)
+{
+    if (lbl == NULL || s == NULL)
+    {
+        return;
+    }
+    const char *old = lv_label_get_text(lbl);
+    if (old == NULL || strcmp(old, s) != 0)
+    {
+        lv_label_set_text(lbl, s);
+    }
+}
+
+
 #define AR_N         10          /* 每榜 10 条 */
 #define AR_ROW_H     104
 #define AR_HEAD_H    44
@@ -76,7 +96,7 @@ static lv_obj_t *mk_label(lv_obj_t *parent, int x, int y, const lv_font_t *f,
     lv_obj_t *l = lv_label_create(parent);
     lv_obj_set_style_text_font(l, f, 0);
     lv_obj_set_style_text_color(l, lv_color_hex(color), 0);
-    lv_label_set_text(l, txt);
+    set_text_if_changed(l, txt);
     lv_obj_set_pos(l, x, y);
     return l;
 }
@@ -229,7 +249,7 @@ static void build_ar(void)
         lv_obj_t *bl = lv_label_create(bb);
         lv_obj_set_style_text_font(bl, &lv_font_montserrat_16, 0);
         lv_obj_set_style_text_color(bl, lv_color_hex(p.fg), 0);
-        lv_label_set_text(bl, LV_SYMBOL_LEFT);
+        set_text_if_changed(bl, LV_SYMBOL_LEFT);
         lv_obj_center(bl);
     }
 
@@ -251,7 +271,7 @@ static void build_ar(void)
         lv_obj_t *rl = lv_label_create(rb);
         lv_obj_set_style_text_font(rl, &lv_font_montserrat_14, 0);
         lv_obj_set_style_text_color(rl, lv_color_hex(p.fg), 0);
-        lv_label_set_text(rl, LV_SYMBOL_REFRESH);
+        set_text_if_changed(rl, LV_SYMBOL_REFRESH);
         lv_obj_center(rl);
     }
 
@@ -302,10 +322,10 @@ static void build_ar(void)
 
 static void clear_row(ar_row_t *r)
 {
-    lv_label_set_text(r->rk, "");
-    lv_label_set_text(r->en, "");
-    lv_label_set_text(r->cn, "");
-    lv_label_set_text(r->tag, "");
+    set_text_if_changed(r->rk, "");
+    set_text_if_changed(r->en, "");
+    set_text_if_changed(r->cn, "");
+    set_text_if_changed(r->tag, "");
 }
 
 static void fill_row(ar_row_t *r, const ai_rank_item_t *it, const char *tag)
@@ -318,13 +338,13 @@ static void fill_row(ar_row_t *r, const ai_rank_item_t *it, const char *tag)
     }
 
     snprintf(b, sizeof(b), "#%02d", it->rank);
-    lv_label_set_text(r->rk, b);
-    lv_label_set_text(r->en, it->name);
+    set_text_if_changed(r->rk, b);
+    set_text_if_changed(r->en, it->name);
 
     /* 中文名与原英文名完全相同（如 DeepSeek）就不重复显示 */
     if (strcmp(it->cn, it->name) == 0 || it->cn[0] == 0)
     {
-        lv_label_set_text(r->cn, "-");   /* 占位：保持三行结构一致，不留空洞 */
+        set_text_if_changed(r->cn, "-");   /* 占位：保持三行结构一致，不留空洞 */
     }
     else
     {
@@ -332,15 +352,15 @@ static void fill_row(ar_row_t *r, const ai_rank_item_t *it, const char *tag)
         utf8_trunc(it->cn, cut, 58);
         if (font_covers(cut, &ui_font_cn18))
         {
-            lv_label_set_text(r->cn, cut);
+            set_text_if_changed(r->cn, cut);
         }
         else
         {
-            lv_label_set_text(r->cn, "-");   /* 缺字降级：宁可不显示，也不出豆腐块 */
+            set_text_if_changed(r->cn, "-");   /* 缺字降级：宁可不显示，也不出豆腐块 */
         }
     }
 
-    lv_label_set_text(r->tag, tag);
+    set_text_if_changed(r->tag, tag);
 }
 
 static void fill_ar(void)
@@ -357,13 +377,13 @@ static void fill_ar(void)
     if (d.month[0])
     {
         snprintf(b, sizeof(b), "DATA %s / QUARTERLY", d.month);
-        lv_label_set_text(s_month, b);
+        set_text_if_changed(s_month, b);
     }
-    lv_label_set_text(s_state, (d.state == AI_RANK_OK) ? "OK" : "..");
+    set_text_if_changed(s_state, (d.state == AI_RANK_OK) ? "OK" : "..");
     if (d.updated[0])
     {
         snprintf(b, sizeof(b), "UPD %s", d.updated);
-        lv_label_set_text(s_upl, b);
+        set_text_if_changed(s_upl, b);
     }
 
     for (int i = 0; i < AR_N; i++)

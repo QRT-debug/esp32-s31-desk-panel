@@ -31,6 +31,26 @@
 #include "ui_theme.h"
 #include "hf_trend.h"
 
+/**
+ * ★ 文本没变就不 set（2026-11-25）。
+ * LVGL 的 lv_label_set_text 不比较内容 —— 同一串也标脏重画。
+ * 本页每 500ms 全量刷十几个 label，实测脏区被拉到 20+ 块（AI RANK 页 max=22），
+ * 加了比对后只有真变的字段重绘。
+ */
+static void set_text_if_changed(lv_obj_t *lbl, const char *s)
+{
+    if (lbl == NULL || s == NULL)
+    {
+        return;
+    }
+    const char *old = lv_label_get_text(lbl);
+    if (old == NULL || strcmp(old, s) != 0)
+    {
+        lv_label_set_text(lbl, s);
+    }
+}
+
+
 #define HF_HEART_RED 0xE0443E   /* 心形红色（参考原视频） */
 #define HF_ROWS      3          /* 一屏 3 条 */
 #define HF_PAGES     4          /* 10 条 / 3 = 4 页 */
@@ -89,7 +109,7 @@ static lv_obj_t *mk_label(lv_obj_t *parent, int x, int y, const lv_font_t *f,
     lv_obj_t *l = lv_label_create(parent);
     lv_obj_set_style_text_font(l, f, 0);
     lv_obj_set_style_text_color(l, lv_color_hex(color), 0);
-    lv_label_set_text(l, txt);
+    set_text_if_changed(l, txt);
     lv_obj_set_pos(l, x, y);
     return l;
 }
@@ -181,8 +201,8 @@ static void fill_slot(int r, int idx, const hf_item_t *it, const hf_pal_t *p)
     lv_obj_clear_flag(s->row, LV_OBJ_FLAG_HIDDEN);
 
     snprintf(b, sizeof(b), "%02d", idx + 1);
-    lv_label_set_text(s->num, b);
-    lv_label_set_text(s->st, it->is_new ? "+" : "=");
+    set_text_if_changed(s->num, b);
+    set_text_if_changed(s->st, it->is_new ? "+" : "=");
 
     /* 超长名字截断并加 ~ 提示（原视频同款）；34 字符 @24 号 ≈ 442px，恰不撞右侧 */
     if (strlen(it->id) > 33)
@@ -193,17 +213,17 @@ static void fill_slot(int r, int idx, const hf_item_t *it, const hf_pal_t *p)
     {
         snprintf(b, sizeof(b), "%s", it->id);
     }
-    lv_label_set_text(s->name, b);
+    set_text_if_changed(s->name, b);
 
     /* 类型显示限 28 字符（存储 40，足够容纳 HF 最长 tag） */
     snprintf(b, sizeof(b), "%.28s", it->task);
-    lv_label_set_text(s->task, b);
-    lv_label_set_text(s->time_hm, it->created);
+    set_text_if_changed(s->task, b);
+    set_text_if_changed(s->time_hm, it->created);
 
     fmt_count(it->likes, nb, sizeof(nb));
-    lv_label_set_text(s->likes, nb);
+    set_text_if_changed(s->likes, nb);
     fmt_count(it->downloads, nb, sizeof(nb));
-    lv_label_set_text(s->dls, nb);
+    set_text_if_changed(s->dls, nb);
 }
 
 /* ---------------- 翻页（只改状态 + 文字，零对象操作） ---------------- */
@@ -301,7 +321,7 @@ static void build_hf(void)
     /* ★★★ 11-22 崩溃修复（coredump 实锤）：
      *   lv_obj_clean() 删掉了所有子对象，但下面的静态指针仍指向已释放的内存。
      *   崩溃栈：release_cb → hf_page_prev → fill_list → fill_slot(idx=0)
-     *           → lv_label_set_text(s->st) → lv_obj_invalidate → lv_obj_get_parent（崩）
+     *           → set_text_if_changed(s->st) → lv_obj_invalidate → lv_obj_get_parent（崩）
      *   触发条件：滑动翻页的瞬间切场景（残留的 RELEASED 事件携带旧对象指针）。
      *   修法：clean 之后立刻清空全部指针，配合 fill_list/fill_slot 的空指针保护。 */
     memset(s_slot, 0, sizeof(s_slot));
@@ -349,7 +369,7 @@ static void build_hf(void)
         lv_obj_t *bl = lv_label_create(bb);
         lv_obj_set_style_text_font(bl, &lv_font_montserrat_16, 0);
         lv_obj_set_style_text_color(bl, lv_color_hex(p.fg), 0);
-        lv_label_set_text(bl, LV_SYMBOL_LEFT);
+        set_text_if_changed(bl, LV_SYMBOL_LEFT);
         lv_obj_center(bl);
     }
 
@@ -373,7 +393,7 @@ static void build_hf(void)
         lv_obj_t *rl = lv_label_create(rb);
         lv_obj_set_style_text_font(rl, &lv_font_montserrat_14, 0);
         lv_obj_set_style_text_color(rl, lv_color_hex(p.fg), 0);
-        lv_label_set_text(rl, LV_SYMBOL_REFRESH);
+        set_text_if_changed(rl, LV_SYMBOL_REFRESH);
         lv_obj_center(rl);
     }
 
@@ -456,7 +476,7 @@ static void build_hf(void)
         lv_obj_t *l1 = lv_label_create(b1);
         lv_obj_set_style_text_font(l1, &lv_font_montserrat_16, 0);
         lv_obj_set_style_text_color(l1, lv_color_hex(p.fg), 0);
-        lv_label_set_text(l1, LV_SYMBOL_LEFT);
+        set_text_if_changed(l1, LV_SYMBOL_LEFT);
         lv_obj_center(l1);
 
         lv_obj_t *b2 = lv_button_create(scr);
@@ -471,7 +491,7 @@ static void build_hf(void)
         lv_obj_t *l2 = lv_label_create(b2);
         lv_obj_set_style_text_font(l2, &lv_font_montserrat_16, 0);
         lv_obj_set_style_text_color(l2, lv_color_hex(p.fg), 0);
-        lv_label_set_text(l2, LV_SYMBOL_RIGHT);
+        set_text_if_changed(l2, LV_SYMBOL_RIGHT);
         lv_obj_center(l2);
     }
 
@@ -516,7 +536,7 @@ static void fill_list(void)
     /* 页码 + 进度方块 */
     int pages = (d->count > 0) ? ((d->count + HF_ROWS - 1) / HF_ROWS) : HF_PAGES;
     snprintf(b, sizeof(b), "%d/%d", s_page + 1, pages);
-    lv_label_set_text(s_page_lbl, b);
+    set_text_if_changed(s_page_lbl, b);
 
     for (int i = 0; i < 10; i++)
     {
@@ -533,20 +553,20 @@ static void fill_list(void)
     if (d->updated[0])
     {
         snprintf(b, sizeof(b), "UPD %s", d->updated);
-        lv_label_set_text(s_time_lbl, b);
+        set_text_if_changed(s_time_lbl, b);
     }
     if (d->state == HF_STATE_OK)
     {
-        lv_label_set_text(s_state_lbl, "OK");
+        set_text_if_changed(s_state_lbl, "OK");
     }
     else if (d->state == HF_STATE_FAIL)
     {
         snprintf(b, sizeof(b), "ERR %d", d->http_code);
-        lv_label_set_text(s_state_lbl, b);
+        set_text_if_changed(s_state_lbl, b);
     }
     else
     {
-        lv_label_set_text(s_state_lbl, "..");
+        set_text_if_changed(s_state_lbl, "..");
     }
 
     s_last_page  = s_page;

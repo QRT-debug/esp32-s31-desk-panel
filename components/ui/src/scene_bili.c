@@ -26,6 +26,26 @@
 #include "ui_theme.h"
 #include "bili_hot.h"
 
+/**
+ * ★ 文本没变就不 set（2026-11-25）。
+ * LVGL 的 lv_label_set_text 不比较内容 —— 同一串也标脏重画。
+ * 本页每 500ms 全量刷十几个 label，实测脏区被拉到 20+ 块（AI RANK 页 max=22），
+ * 加了比对后只有真变的字段重绘。
+ */
+static void set_text_if_changed(lv_obj_t *lbl, const char *s)
+{
+    if (lbl == NULL || s == NULL)
+    {
+        return;
+    }
+    const char *old = lv_label_get_text(lbl);
+    if (old == NULL || strcmp(old, s) != 0)
+    {
+        lv_label_set_text(lbl, s);
+    }
+}
+
+
 #define BILI_ROWS  10
 #define BILI_ROW_H 34
 
@@ -69,7 +89,7 @@ static lv_obj_t *mk_label(lv_obj_t *parent, int x, int y, const lv_font_t *f,
     lv_obj_t *l = lv_label_create(parent);
     lv_obj_set_style_text_font(l, f, 0);
     lv_obj_set_style_text_color(l, lv_color_hex(color), 0);
-    lv_label_set_text(l, txt);
+    set_text_if_changed(l, txt);
     lv_obj_set_pos(l, x, y);
     return l;
 }
@@ -200,7 +220,7 @@ static void build_bili(void)
         lv_obj_t *bl = lv_label_create(bb);
         lv_obj_set_style_text_font(bl, &lv_font_montserrat_16, 0);
         lv_obj_set_style_text_color(bl, lv_color_hex(p.fg), 0);
-        lv_label_set_text(bl, LV_SYMBOL_LEFT);
+        set_text_if_changed(bl, LV_SYMBOL_LEFT);
         lv_obj_center(bl);
     }
 
@@ -222,7 +242,7 @@ static void build_bili(void)
         lv_obj_t *rl = lv_label_create(rb);
         lv_obj_set_style_text_font(rl, &lv_font_montserrat_14, 0);
         lv_obj_set_style_text_color(rl, lv_color_hex(p.fg), 0);
-        lv_label_set_text(rl, LV_SYMBOL_REFRESH);
+        set_text_if_changed(rl, LV_SYMBOL_REFRESH);
         lv_obj_center(rl);
     }
 
@@ -263,28 +283,28 @@ static void fill_bili(void)
     if (d.updated[0])
     {
         snprintf(b, sizeof(b), "UPD %s", d.updated);
-        lv_label_set_text(s_upd, b);
+        set_text_if_changed(s_upd, b);
     }
-    lv_label_set_text(s_state, (d.state == BILI_OK) ? "OK" : "..");
+    set_text_if_changed(s_state, (d.state == BILI_OK) ? "OK" : "..");
 
     for (int i = 0; i < BILI_ROWS; i++)
     {
         if (i < d.count)
         {
             snprintf(b, sizeof(b), "#%02d", d.item[i].rank);
-            lv_label_set_text(s_row[i].rk, b);
+            set_text_if_changed(s_row[i].rk, b);
 
             sanitize(d.item[i].word, b, sizeof(b), 26);   /* 26 字 @20 号 ≈ 520px，右侧热度不撞 */
-            lv_label_set_text(s_row[i].word, b);
+            set_text_if_changed(s_row[i].word, b);
 
             fmt_heat(d.item[i].heat, b, sizeof(b));
-            lv_label_set_text(s_row[i].heat, b);
+            set_text_if_changed(s_row[i].heat, b);
         }
         else
         {
-            lv_label_set_text(s_row[i].rk, "");
-            lv_label_set_text(s_row[i].word, "");
-            lv_label_set_text(s_row[i].heat, "");
+            set_text_if_changed(s_row[i].rk, "");
+            set_text_if_changed(s_row[i].word, "");
+            set_text_if_changed(s_row[i].heat, "");
         }
     }
 
