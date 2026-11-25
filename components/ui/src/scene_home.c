@@ -179,15 +179,16 @@ static lv_obj_t *make_icon_tile(lv_obj_t *parent, int x, int y,
     lv_label_set_text(ic, icon);
     lv_obj_center(ic);
 
-    /* 下方文字：深底上必须用白字（第一版浅底用白色看不清，现在反过来）
-     * ★ 2026-11-25：APPS 页有壁纸后，浅色壁纸上白字会糊 ⇒ 加一层**极淡的暗色描边**
-     *   （2px、纯黑、透明度 30%）。只是给字压一圈边，不改变字的观感。 */
+    /* ★ 2026-11-25：APPS 页有壁纸后，浅色壁纸上白字会糊 ⇒ 加暗色描边。
+     *   第一版（2px / OPA_30）实测**不够**，用户反馈"看不清" ⇒ 加强为 3px / OPA_80。
+     *   字色也从 0xF2F3F8（近白）改成纯白，把对比拉到最大。
+     *   ★ 若还不够，下一步是给文字垫半透明暗底条（最可靠，但多一块视觉元素）。 */
     lv_obj_t *txt = lv_label_create(wrap);
     lv_obj_set_style_text_font(txt, &ui_font_cn18, 0);
-    lv_obj_set_style_text_color(txt, lv_color_hex(0xF2F3F8), 0);
-    lv_obj_set_style_text_outline_stroke_width(txt, 2, 0);
+    lv_obj_set_style_text_color(txt, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_text_outline_stroke_width(txt, 3, 0);
     lv_obj_set_style_text_outline_stroke_color(txt, lv_color_hex(0x000000), 0);
-    lv_obj_set_style_text_outline_stroke_opa(txt, LV_OPA_30, 0);
+    lv_obj_set_style_text_outline_stroke_opa(txt, LV_OPA_80, 0);
     lv_obj_set_style_text_align(txt, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_width(txt, 116);
     lv_obj_set_pos(txt, 0, 100);
@@ -403,6 +404,26 @@ static void build_home(void)
     if (!wallpaper_apply_named(scr, "desktop.jpg"))
     {
         wallpaper_apply_bg(scr);
+    }
+    else
+    {
+        /* ★★★ 2026-11-25：壁纸上白字看不清 —— 给整页压一层 32% 黑。
+         *   ★ 为什么不用文字描边：LVGL 的 `text_outline_stroke` 只在**矢量字体**
+         *     （lv_draw_sw_letter.c 的 vector 分支）里实现，我们用的是 lv_font_conv
+         *     生成的**位图字体**（bpp4），那条路径压根没有描边处理 ——
+         *     所以调宽度/透明度都不会有任何变化（实测两版都一样，白改了）。
+         *   ★ 压暗是手机桌面的常规做法（系统壁纸也会被压暗一档），
+         *     整体压暗对图标色块的影响很小，但白字对比立刻够用。
+         *   ★ z-order：本层在壁纸之后、图标之前创建 ⇒ 图标压在它上面，不会被压暗。 */
+        lv_obj_t *dim = lv_obj_create(scr);
+        lv_obj_set_size(dim, 800, 480);
+        lv_obj_set_pos(dim, 0, 0);
+        lv_obj_set_style_bg_color(dim, lv_color_hex(0x000000), 0);
+        lv_obj_set_style_bg_opa(dim, LV_OPA_30, 0);
+        lv_obj_set_style_border_width(dim, 0, 0);
+        lv_obj_set_style_radius(dim, 0, 0);
+        lv_obj_set_style_pad_all(dim, 0, 0);
+        lv_obj_clear_flag(dim, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     }
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
     lv_obj_set_style_pad_all(scr, 0, 0);
