@@ -45,7 +45,11 @@ static lv_display_t *s_disp  = NULL;
  *   所以永远 sync 不到。⇒ 必须把"上一帧的脏区"也一起 sync。
  *
  *   为什么只在刷新时看得见：界面静止时 LVGL 不刷新，src_sync 不执行也不会切 fb。 */
-#define MAX_DIRTY 16
+/* ★★ 2026-11-25 实测：SYSTEM 页撞到 `max=16 ovf=2`（500ms 刷 18 个 label
+ *    叠加 100ms 的麦克风电平），说明 16 不够。提到 32：
+ *    数组只多 16×16=256B BSS，而少一次"退化成整屏 768KB sync"就够本。
+ *    ★ 另一路治本：各页文本改成"内容没变就不 set"（monitor/system 已做）。 */
+#define MAX_DIRTY 32
 
 static lv_area_t s_dir_cur[MAX_DIRTY];
 static int       s_dir_cur_n   = 0;

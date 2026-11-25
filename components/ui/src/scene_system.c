@@ -56,6 +56,28 @@ static lv_obj_t *s_lbl_mic;     /* 麦克风电平数值 */
 
 /* ---------------- 回调 ---------------- */
 
+/**
+ * ★ 文本没变就不 set（2026-11-25）。
+ *
+ * LVGL 的 `lv_label_set_text` **不比较内容**，同一串也标脏。
+ * 本页每 500ms 全量刷 18 个 label，再叠加每 100ms 的麦克风电平 ——
+ * **实测撞到 `max=16 ovf=2`**：脏区达到 `MAX_DIRTY` 上限并溢出，
+ * 溢出后 flush_cb 退化成"整屏 768KB sync"，这正是最该避免的情况。
+ * 加了比对后 500ms 那批通常只剩 1~3 块真变的，整体远低于上限。
+ */
+static void set_text_if_changed(lv_obj_t *lbl, const char *s)
+{
+    if (lbl == NULL || s == NULL)
+    {
+        return;
+    }
+    const char *old = lv_label_get_text(lbl);
+    if (old == NULL || strcmp(old, s) != 0)
+    {
+        lv_label_set_text(lbl, s);
+    }
+}
+
 static void home_cb(lv_event_t *e)
 {
     (void)e;
@@ -111,7 +133,7 @@ static void refresh_all(void)
              (unsigned)(ram_min / 1024),
              up_h, up_m, up_sec, (unsigned)tasks,
              esp_get_idf_version());
-    lv_label_set_text(s_lbl_sys, b);
+    set_text_if_changed(s_lbl_sys, b);
 
     /* ---- 右：WiFi ---- */
     char ip[20] = {0};
@@ -131,12 +153,12 @@ static void refresh_all(void)
              conn ? WIFI_SSID : "-",
              ip,
              rssi, lvl);
-    lv_label_set_text(s_lbl_wifi, b);
+    set_text_if_changed(s_lbl_wifi, b);
     lv_obj_set_style_text_color(s_lbl_wifi,
                                 lv_color_hex(conn ? COL_TEXT : COL_RED), 0);
 
     /* 按钮文字随状态变 */
-    lv_label_set_text(s_lbl_btn, conn ? "DISCONNECT WiFi" : "CONNECT WiFi");
+    set_text_if_changed(s_lbl_btn, conn ? "DISCONNECT WiFi" : "CONNECT WiFi");
     lv_obj_set_style_border_color(s_btn_wifi,
                                   lv_color_hex(conn ? COL_RED : COL_GREEN), 0);
 
@@ -158,7 +180,7 @@ static void refresh_all(void)
     {
         snprintf(b, sizeof(b), "(no log yet)");
     }
-    lv_label_set_text(s_lbl_log, b);
+    set_text_if_changed(s_lbl_log, b);
 }
 
 /* ---------------- 建界面 ---------------- */
@@ -200,7 +222,7 @@ static void bl_cb(lv_event_t *e)
     {
         char b[8];
         snprintf(b, sizeof(b), "%d%%", v);
-        lv_label_set_text(s_lbl_bl, b);
+        set_text_if_changed(s_lbl_bl, b);
     }
 }
 
@@ -258,7 +280,7 @@ static void build_system(void)
     lv_obj_t *bl = lv_label_create(btn);
     lv_obj_set_style_text_font(bl, &lv_font_montserrat_14, 0);
     lv_obj_set_style_text_color(bl, lv_color_hex(COL_TEXT), 0);
-    lv_label_set_text(bl, LV_SYMBOL_LEFT " HOME");
+    set_text_if_changed(bl, LV_SYMBOL_LEFT " HOME");
     lv_obj_center(bl);
     lv_obj_add_event_cb(btn, home_cb, LV_EVENT_CLICKED, NULL);
 
@@ -266,7 +288,7 @@ static void build_system(void)
     lv_obj_t *title = lv_label_create(root);
     lv_obj_set_style_text_font(title, &ui_font_28, 0);
     lv_obj_set_style_text_color(title, lv_color_hex(COL_TEXT), 0);
-    lv_label_set_text(title, "SYSTEM INFO");
+    set_text_if_changed(title, "SYSTEM INFO");
     lv_obj_set_pos(title, 120, 6);
 
     /* 左面板：芯片 / 内存 */
@@ -275,7 +297,7 @@ static void build_system(void)
     lv_obj_set_style_text_font(s_lbl_sys, &ui_font_14, 0);
     lv_obj_set_style_text_color(s_lbl_sys, lv_color_hex(COL_TEXT), 0);
     lv_obj_set_style_text_line_space(s_lbl_sys, 6, 0);
-    lv_label_set_text(s_lbl_sys, "reading...");
+    set_text_if_changed(s_lbl_sys, "reading...");
 
     /* 右面板：WiFi 状态 + 开关 */
     lv_obj_t *p2 = panel(scr, 500, 52, 284, 190, 0x2A3550);
@@ -283,7 +305,7 @@ static void build_system(void)
     lv_obj_set_style_text_font(s_lbl_wifi, &ui_font_14, 0);
     lv_obj_set_style_text_color(s_lbl_wifi, lv_color_hex(COL_TEXT), 0);
     lv_obj_set_style_text_line_space(s_lbl_wifi, 6, 0);
-    lv_label_set_text(s_lbl_wifi, "reading...");
+    set_text_if_changed(s_lbl_wifi, "reading...");
 
     s_btn_wifi = lv_button_create(p2);
     lv_obj_set_size(s_btn_wifi, 240, 40);
@@ -299,7 +321,7 @@ static void build_system(void)
     s_lbl_btn = lv_label_create(s_btn_wifi);
     lv_obj_set_style_text_font(s_lbl_btn, &ui_font_14, 0);
     lv_obj_set_style_text_color(s_lbl_btn, lv_color_hex(COL_TEXT), 0);
-    lv_label_set_text(s_lbl_btn, "DISCONNECT WiFi");
+    set_text_if_changed(s_lbl_btn, "DISCONNECT WiFi");
     lv_obj_center(s_lbl_btn);
     lv_obj_add_event_cb(s_btn_wifi, wifi_toggle_cb, LV_EVENT_CLICKED, NULL);
 
@@ -310,7 +332,7 @@ static void build_system(void)
         lv_obj_t *bl = lv_label_create(p3);
         lv_obj_set_style_text_font(bl, &ui_font_14, 0);
         lv_obj_set_style_text_color(bl, lv_color_hex(COL_DIM), 0);
-        lv_label_set_text(bl, "BACKLIGHT");
+        set_text_if_changed(bl, "BACKLIGHT");
         lv_obj_set_pos(bl, 0, 6);
 
         lv_obj_t *sl = lv_slider_create(p3);
@@ -337,14 +359,14 @@ static void build_system(void)
         lv_obj_set_style_text_color(s_lbl_bl, lv_color_hex(COL_TEXT), 0);
         char b[8];
         snprintf(b, sizeof(b), "%d%%", backlight_get());
-        lv_label_set_text(s_lbl_bl, b);
+        set_text_if_changed(s_lbl_bl, b);
         lv_obj_set_pos(s_lbl_bl, 548, 4);
 
         /* ---- 深色模式开关（背光行右侧） ---- */
         lv_obj_t *dk = lv_label_create(p3);
         lv_obj_set_style_text_font(dk, &ui_font_14, 0);
         lv_obj_set_style_text_color(dk, lv_color_hex(COL_DIM), 0);
-        lv_label_set_text(dk, "DARK MODE");
+        set_text_if_changed(dk, "DARK MODE");
         lv_obj_set_pos(dk, 596, 8);
 
         lv_obj_t *sw = lv_switch_create(p3);
@@ -366,7 +388,7 @@ static void build_system(void)
         lv_obj_t *mi = lv_label_create(p3);
         lv_obj_set_style_text_font(mi, &ui_font_14, 0);
         lv_obj_set_style_text_color(mi, lv_color_hex(COL_DIM), 0);
-        lv_label_set_text(mi, "MIC");
+        set_text_if_changed(mi, "MIC");
         lv_obj_set_pos(mi, 0, 40);
 
         s_bar_mic = lv_bar_create(p3);
@@ -385,7 +407,7 @@ static void build_system(void)
         s_lbl_mic = lv_label_create(p3);
         lv_obj_set_style_text_font(s_lbl_mic, &ui_font_20, 0);
         lv_obj_set_style_text_color(s_lbl_mic, lv_color_hex(COL_TEXT), 0);
-        lv_label_set_text(s_lbl_mic, "0");
+        set_text_if_changed(s_lbl_mic, "0");
         lv_obj_set_pos(s_lbl_mic, 548, 38);
     }
 
@@ -401,7 +423,7 @@ static void build_system(void)
     lv_obj_t *cap = lv_label_create(p3);
     lv_obj_set_style_text_font(cap, &ui_font_14, 0);
     lv_obj_set_style_text_color(cap, lv_color_hex(COL_DIM), 0);
-    lv_label_set_text(cap, "RECENT LOG  (latest at bottom)");
+    set_text_if_changed(cap, "RECENT LOG  (latest at bottom)");
     lv_obj_set_pos(cap, 0, 78);
 
     s_lbl_log = lv_label_create(logwrap);
@@ -411,7 +433,7 @@ static void build_system(void)
     lv_obj_set_pos(s_lbl_log, 0, 0);
     lv_obj_set_width(s_lbl_log, 740);
     lv_label_set_long_mode(s_lbl_log, LV_LABEL_LONG_WRAP);
-    lv_label_set_text(s_lbl_log, "(no log yet)");
+    set_text_if_changed(s_lbl_log, "(no log yet)");
 
     refresh_all();
 }
@@ -444,7 +466,7 @@ void scene_system(uint16_t *fb, int frame)
         {
             char b[8];
             snprintf(b, sizeof(b), "%d", lv);
-            lv_label_set_text(s_lbl_mic, b);
+            set_text_if_changed(s_lbl_mic, b);
         }
 
     }
