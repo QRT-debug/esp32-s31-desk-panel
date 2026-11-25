@@ -308,16 +308,21 @@ static lv_obj_t *make_card(lv_obj_t *parent, int x, int y,
     return card;
 }
 
-static lv_obj_t *s_root;   /* 整页容器：切页动画用 */
-static lv_obj_t *s_clock_lbl;   /* 顶部大时钟（手机风改造，2026-11-25） */
+static lv_obj_t   *s_root;   /* 整页容器：切页动画用 */
+static lv_obj_t   *s_clock_lbl;   /* 顶部大时钟（手机风改造，2026-11-25） */
+static lv_timer_t *s_clock_timer; /* ★ 只创建一次：否则每进一次页面就多一个 timer */
 
-/* 每秒刷新一次时钟。注意 s_clock_lbl 可能因切页被 lv_obj_clean 删除，
- * 所以 cb 里判空——已删除的对象指针会变成悬空，但 build_home 会重置它。 */
+/* 每秒刷新一次时钟。
+ * ★★★ 必须用 lv_obj_is_valid 判有效，不能只判 NULL：
+ *    切页时 lv_obj_clean() 会删掉所有对象，但 s_clock_lbl 仍指向**已释放的内存**
+ *    （悬空指针 ≠ NULL），此时 lv_label_set_text 直接 LoadProhibited 崩溃。
+ *    第一版只做了判空，实测进页面再切走就崩屏。 */
 static void clock_tick_cb(lv_timer_t *t)
 {
     (void)t;
-    if (s_clock_lbl == NULL)
+    if (s_clock_lbl == NULL || !lv_obj_is_valid(s_clock_lbl))
     {
+        s_clock_lbl = NULL;
         return;
     }
     time_t    now = time(NULL);
@@ -365,7 +370,12 @@ static void build_home(void)
         lv_label_set_text(s_clock_lbl, buf);
     }
     lv_obj_set_pos(s_clock_lbl, 32, 10);
-    lv_timer_create(clock_tick_cb, 1000, NULL);
+    /* ★ timer 只建一次（s_clock_timer 判空），否则每进一次 APPS 页就多一个，
+     *   切页后那些 timer 全都指向已删除的 label。 */
+    if (s_clock_timer == NULL)
+    {
+        s_clock_timer = lv_timer_create(clock_tick_cb, 1000, NULL);
+    }
 
     lv_obj_t *date_lbl = lv_label_create(root);
     lv_obj_set_style_text_font(date_lbl, &ui_font_cn18, 0);
