@@ -363,6 +363,15 @@ static lv_obj_t *make_card(lv_obj_t *parent, int x, int y,
 
 static lv_obj_t *s_root;   /* 整页容器：切页动画用 */
 
+/* ★★ 临时诊断开关（2026-11-25 脏区压力测量）：1 = 开移动圆点。
+ *   2026-11-25 已测完，结论：壁纸开/关脏区压力完全一致（max=2 块 / ovf=0 / 125KB 每帧）。
+ *   留 0 以便复测；彻底不用时可以删掉整段。 */
+#define DIR_DIAG 0
+#if DIR_DIAG
+static lv_obj_t *s_dbg_mover;
+static int       s_dbg_x;
+#endif
+
 static void build_home(void)
 {
     lv_obj_t *scr = lv_screen_active();
@@ -386,7 +395,7 @@ static void build_home(void)
      *   没有 desktop.jpg 时才退回随机挑。时钟页继续随机，两个页面互不影响。 */
     /* ★ 临时验证：壁纸疑似导致 PSRAM 带宽不足（四周频闪 + 左上角残留），
      *   先关掉确认，确认后再想正确的方案（不能靠"少画一点"糊过去）。 */
-    if (0 && !wallpaper_apply_named(scr, "desktop.jpg"))
+    if (!wallpaper_apply_named(scr, "desktop.jpg"))
     {
         wallpaper_apply_bg(scr);
     }
@@ -622,7 +631,28 @@ void scene_home(uint16_t *fb, int frame)
     {
         build_home();
         refresh_cards();
+#if DIR_DIAG
+        /* ★★ 临时诊断（2026-11-25）：一个来回移动的小圆点，制造稳定的"局部持续刷新"。
+         *   目的：静止画面下 LVGL 一帧都不刷（实测 40s 只有 5 帧），测不出脏区压力；
+         *   加它之后每帧都有固定的 2 块小脏区，壁纸开/关的差异才比得出来。测完删除。 */
+        s_dbg_mover = lv_obj_create(lv_screen_active());
+        lv_obj_set_size(s_dbg_mover, 40, 40);
+        lv_obj_set_style_bg_color(s_dbg_mover, lv_color_hex(0xFF3366), 0);
+        lv_obj_set_style_bg_opa(s_dbg_mover, LV_OPA_COVER, 0);
+        lv_obj_set_style_radius(s_dbg_mover, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_border_width(s_dbg_mover, 0, 0);
+        lv_obj_clear_flag(s_dbg_mover, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+        s_dbg_x = 0;
+#endif
     }
+
+#if DIR_DIAG
+    if (s_dbg_mover != NULL)
+    {
+        s_dbg_x = (s_dbg_x + 8) % 760;
+        lv_obj_set_pos(s_dbg_mover, s_dbg_x, 430);
+    }
+#endif
 
     /* 每 30 帧（≈0.5s）刷一次，避免每帧动 LVGL 对象 */
     if ((frame % 15) == 0)     /* 约 250ms 刷一次，数值更"活" */

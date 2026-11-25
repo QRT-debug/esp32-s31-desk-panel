@@ -60,6 +60,14 @@ static bool      s_dir_cur_ovf = false;     /* 超出 16 块 ⇒ 退化整屏 sy
 static lv_area_t s_prev_box;
 static bool      s_prev_box_ok = false;
 
+/* 脏区压力统计（诊断用，2 秒汇总一次后清零） */
+static int64_t   s_dbg_last_log = 0;
+static int       s_dbg_frames   = 0;
+static int       s_dbg_sum_n    = 0;
+static int       s_dbg_max_n    = 0;
+static int       s_dbg_ovf      = 0;
+static int       s_dbg_rows     = 0;      /* 本窗口实际 sync 的行数（× 1600B = 写回字节）*/
+
 /** 把一块区域的**整行**从 CPU cache 写回 PSRAM（行步长 1600B 是 64B cache line 的整数倍） */
 static void cache_sync_rows(const uint8_t *base, int32_t y1, int32_t y2)
 {
@@ -119,14 +127,38 @@ static void flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
      *   中间块直接 flush_ready —— 它们已经画进 buf_act，最后一块切过去时一起显示。 */
     if (lv_display_flush_is_last(disp))
     {
-        /* ★ 临时诊断：节流到每 2 秒一条，看 refr/flush 是否在跑 */
+        /* ★★ 2026-11-25 诊断：脏区记账压力统计（每 2 秒汇总一条）
+         *   目的：开壁纸前先确认 s_dir_cur_n 是否经常撞 MAX_DIRTY(16)。
+         *   一撞就退化成整屏 768KB cache sync，PSRAM 带宽顶不住 ⇒ 四周频闪。
+         *   打 avg / max / ovf 与实际写回的字节数，一次运行即可判定，不必逐帧刷日志。
+         *   ★ 不用 %f：newlib nano 格式化不一定带浮点，统一用整数拼 x.x。 */
+        s_dbg_frames++;
+        s_dbg_sum_n += s_dir_cur_n;
+        if (s_dir_cur_n > s_dbg_max_n)
         {
-            static int64_t s_last_log = 0;
+            s_dbg_max_n = s_dir_cur_n;
+        }
+        if (s_dir_cur_ovf)
+        {
+            s_dbg_ovf++;
+        }
+        {
             int64_t now = esp_timer_get_time();
-            if (now - s_last_log > 2000000)
+            if (now - s_dbg_last_log > 5000000)
             {
-                s_last_log = now;
-                ESP_LOGI("flush", "last flush at %lldms", now / 1000);
+                s_dbg_last_log = now;
+                int avg_x10 = s_dbg_frames ? (s_dbg_sum_n * 10) / s_dbg_frames : 0;
+                int kb_per_frame = s_dbg_frames
+                                       ? (int)((long)s_dbg_rows * (long)LCD_H_RES * 2 / s_dbg_frames / 1024)
+                                       : 0;
+                ESP_LOGI("flush", "dir: frames=%d avg=%d.%d max=%d ovf=%d kb=%d",
+                         s_dbg_frames, avg_x10 / 10, avg_x10 % 10,
+                         s_dbg_max_n, s_dbg_ovf, kb_per_frame);
+                s_dbg_frames   = 0;
+                s_dbg_sum_n    = 0;
+                s_dbg_max_n    = 0;
+                s_dbg_ovf      = 0;
+                s_dbg_rows     = 0;
             }
         }
         /* ★★★ 见文件开头 MAX_DIRTY 处的说明：必须同时 sync
@@ -136,18 +168,21 @@ static void flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
         if (s_dir_cur_ovf)
         {
             cache_sync_rows(px_map, 0, LCD_V_RES - 1);
+            s_dbg_rows += LCD_V_RES;
         }
         else
         {
             for (int i = 0; i < s_dir_cur_n; i++)
             {
                 cache_sync_rows(px_map, s_dir_cur[i].y1, s_dir_cur[i].y2);
+                s_dbg_rows += (int)(s_dir_cur[i].y2 - s_dir_cur[i].y1 + 1);
             }
             /* ★ 上一帧按**包围盒**同步（不是逐块）：LVGL 的 refr_sync_areas
              *   会把脏区合并成大矩形再拷，逐块同步会漏掉块间空隙 ⇒ 残留/竖线。 */
             if (s_prev_box_ok)
             {
                 cache_sync_rows(px_map, s_prev_box.y1, s_prev_box.y2);
+                s_dbg_rows += (int)(s_prev_box.y2 - s_prev_box.y1 + 1);
             }
         }
 
