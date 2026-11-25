@@ -437,18 +437,97 @@ static lv_obj_t *row_button(lv_obj_t *card, int y, int row_h, int w,
     return l;
 }
 
-/** 打开配网热点（SoftAP + 网页表单，用手机连） */
+/** 配网弹窗：点「配网」后出现，告诉用户连哪个热点、开什么网址
+ *  ★ 2026-11-26：原来只调 wifi_prov_start() 而屏幕上什么都不显示，
+ *    用户以为"没反应"（实际热点开了）。补上这张指引卡。 */
+static lv_obj_t *s_prov_card;
+
+static void prov_card_close_cb(lv_event_t *e)
+{
+    lv_obj_t *c = (lv_obj_t *)lv_event_get_user_data(e);
+    if (c != NULL)
+    {
+        lv_obj_del(c);
+    }
+    s_prov_card = NULL;
+    /* 注意：只关卡片，不停热点 —— 用户可能还没在手机上输完密码 */
+}
+
 static void prov_cb(lv_event_t *e)
 {
     (void)e;
+
     esp_err_t err = wifi_prov_start();
     ESP_LOGI("system", "prov start: %s", esp_err_to_name(err));
+
+    if (err != ESP_OK || s_prov_card != NULL)
+    {
+        return;
+    }
+
+    /* 遮罩 */
+    lv_obj_t *mask = lv_obj_create(lv_screen_active());
+    lv_obj_set_size(mask, 800, 480);
+    lv_obj_set_pos(mask, 0, 0);
+    lv_obj_set_style_bg_color(mask, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(mask, LV_OPA_60, 0);
+    lv_obj_set_style_border_width(mask, 0, 0);
+    lv_obj_set_style_radius(mask, 0, 0);
+    lv_obj_set_style_pad_all(mask, 0, 0);
+    lv_obj_clear_flag(mask, LV_OBJ_FLAG_SCROLLABLE);
+    s_prov_card = mask;
+
+    lv_obj_t *box = lv_obj_create(mask);
+    lv_obj_set_size(box, 480, 306);
+    lv_obj_center(box);
+    lv_obj_set_style_bg_color(box, lv_color_hex(ui_theme()->card), 0);
+    lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(box, 0, 0);
+    lv_obj_set_style_radius(box, 22, 0);
+    lv_obj_set_style_pad_all(box, 22, 0);
+    lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *t = lv_label_create(box);
+    lv_obj_set_style_text_font(t, &ui_font_cn18, 0);
+    lv_obj_set_style_text_color(t, lv_color_hex(COL_TEXT), 0);
+    lv_label_set_text(t, "手机配网");
+    lv_obj_set_pos(t, 0, 0);
+
+    char b[320];
+    snprintf(b, sizeof(b),
+             "1. 手机连热点\n     %s\n     密码 %s\n\n"
+             "2. 浏览器打开\n     http://%s\n\n"
+             "3. 选家里 WiFi 并输入密码",
+             wifi_prov_ssid(), PROV_AP_PASS, PROV_AP_IP);
+
+    lv_obj_t *body = lv_label_create(box);
+    lv_obj_set_style_text_font(body, &ui_font_cn18, 0);
+    lv_obj_set_style_text_color(body, lv_color_hex(COL_DIM), 0);
+    lv_obj_set_style_text_line_space(body, 3, 0);
+    lv_obj_set_pos(body, 0, 34);
+    lv_obj_set_width(body, 436);
+    lv_label_set_long_mode(body, LV_LABEL_LONG_WRAP);
+    lv_label_set_text(body, b);
+
+    lv_obj_t *btn = lv_button_create(box);
+    lv_obj_set_size(btn, 140, 40);
+    lv_obj_align(btn, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_set_style_radius(btn, 20, 0);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(COL_BLUE), 0);
+    lv_obj_set_style_shadow_width(btn, 0, 0);
+    lv_obj_add_event_cb(btn, prov_card_close_cb, LV_EVENT_CLICKED, mask);
+    lv_obj_t *bl = lv_label_create(btn);
+    lv_obj_set_style_text_font(bl, &ui_font_cn18, 0);
+    lv_obj_set_style_text_color(bl, lv_color_hex(0xFFFFFF), 0);
+    lv_label_set_text(bl, "完成");
+    lv_obj_center(bl);
 }
 
 static void build_system(void)
 {
     lv_obj_t *scr = lv_screen_active();
     lv_obj_clean(scr);
+    s_prov_card = NULL;          /* clean 已删掉配网弹窗，指针必须失效 */
 
     lv_obj_set_style_bg_color(scr, lv_color_hex(COL_BG), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
@@ -523,7 +602,7 @@ static void build_system(void)
     row_title(c_disp, 0, 50, "亮度");
     {
         lv_obj_t *sl = lv_slider_create(c_disp);
-        lv_obj_set_size(sl, 110, 10);   /* 原来 140，右端顶到百分比 */
+        lv_obj_set_size(sl, 140, 10);   /* 加长到紧贴百分比右侧（间距 5px） */
         lv_obj_set_pos(sl, 110, 20);
         lv_slider_set_range(sl, 10, 100);
         lv_slider_set_value(sl, backlight_get(), LV_ANIM_OFF);
