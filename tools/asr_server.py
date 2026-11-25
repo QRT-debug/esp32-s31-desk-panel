@@ -866,19 +866,27 @@ def main():
         print(f"本地模型: {os.environ.get('WHISPER_SIZE', 'base')} "
               f"(HF_ENDPOINT={os.environ.get('HF_ENDPOINT', 'https://hf-mirror.com')})", flush=True)
 
-    # ★★★ 预热 SoVITS（2026-11-25 实测发现）：首次合成要 **9 秒**，之后只要 **2 秒**。
-    #   原因是首句要编译 GPU kernel + 分配缓存。用户重启服务后说的第一句话就吃这 9 秒，
-    #   体感就是"第一句特别慢，后面正常"。
-    #   这里在启动期先合成一句极短的，把这段开销挪到"还没人说话"的时候。
-    #   ⚠️ 会阻塞启动约 9 秒（服务晚 9 秒可用），换来每轮对话都稳定在 2 秒。
+    # ★★★ 预热 SoVITS：首次合成 5~9 秒（编译 GPU kernel + 分配缓存），之后只要 1~2 秒。
+    #   ★ 必须用**后台线程 + 重试**：asr 通常比 sovits 先起来（sovits 模型 2~3 GB，
+    #     加载要 10~30 s），启动时直接调会因 9880 还没监听而失败
+    #     —— 实测报 `WinError 10061 目标计算机积极拒绝`。
     if TTS_BACKEND == "sovits":
-        try:
-            _t = time.time()
-            synth_wav("嗯。", "中立")
-            print(f"[warmup] SoVITS 预热完成 {time.time() - _t:.2f}s（冷启动开销已提前消化）",
+        import threading
+
+        def _warmup_sovits():
+            for _attempt in range(30):                 # 最多等 60 s
+                try:
+                    _t = time.time()
+                    synth_wav("嗯。", "中立")
+                    print(f"[warmup] SoVITS 预热完成 {time.time() - _t:.2f}s（之后每句约 1~2s）",
+                          flush=True)
+                    return
+                except Exception:
+                    time.sleep(2)
+            print("[warmup] 放弃预热：SoVITS 60 秒内未就绪（第一句会慢，不影响使用）",
                   flush=True)
-        except Exception as _e:
-            print(f"[warmup] 预热失败（不影响使用，只是第一句会慢）: {_e}", flush=True)
+
+        threading.Thread(target=_warmup_sovits, daemon=True).start()
 
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
 
