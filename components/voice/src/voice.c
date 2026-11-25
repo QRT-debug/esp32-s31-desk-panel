@@ -430,7 +430,9 @@ static void voice_task(void *arg)
         led_set_rgb(LED_IDLE_R, LED_IDLE_G, LED_IDLE_B);   /* 底色恒为待机色 */
         if (s_continuous)
         {
-            led_breath(0, 70, 70, 1200);
+            /* ★ 亮度必须够高：bsp_led 内部有 gamma 2.8 校正，v=70 映射到 PWM 只剩 ~7 级，
+             *   做呼吸就是一段段跳（实测"闪得不丝滑"）。v=130 有 ~40 级，才平滑。 */
+            led_breath(0, 130, 130, 1200);
             ESP_LOGI(TAG, "LED: listen(cyan, 持续对话)");
         }
         else
@@ -669,7 +671,7 @@ static void key_task(void *arg)
                 if (s_continuous)
                 {
                     led_set_rgb(LED_IDLE_R, LED_IDLE_G, LED_IDLE_B);
-                    led_breath(0, 70, 70, 1500);        /* 青色 = 在连续模式 */
+                    led_breath(0, 130, 130, 1200);      /* 青色 = 在连续模式（亮度和蓝色同级，gamma 后才平滑） */
                     /* ★ 进入后必须立刻开始第一轮听：灯变青只表示"模式已开"，
                      *   不开始听的话用户以为已经在听，说话却没反应（第一版漏了这句，实测踩到）。 */
                     if (voice_listen())
