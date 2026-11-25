@@ -335,9 +335,16 @@ def synth_sovits(text, emotion="中立"):
     req = urllib.request.Request(
         SOVITS_URL, data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
         headers={"Content-Type": "application/json"})
+    t0 = time.time()
     with _local_opener().open(req, timeout=180) as r:
         raw = r.read()
-    return _to_44k_mono(raw, suffix=".wav")
+    t1 = time.time()
+    out = _to_44k_mono(raw, suffix=".wav")
+    t2 = time.time()
+    # ★ 分开计时：确认 9 秒的 TTS 里多少是 GPU 推理、多少是 ffmpeg 重采样+归一化
+    print(f"[sovits] synth {t1 - t0:.2f}s | ffmpeg {t2 - t1:.2f}s | in {len(raw) // 1024}KB",
+          flush=True)
+    return out
 
 
 def _local_opener():
