@@ -489,6 +489,78 @@ static esp_err_t h_del(httpd_req_t *req)
     return httpd_resp_sendstr(req, msg);
 }
 
+/* 复制壁纸：GET /wpcopy?f=up_3.jpg&t=desktop.jpg
+ * 用途：APPS 桌面固定读 desktop.jpg；用户传了新图后不用拔卡也能指定它当桌面。 */
+static esp_err_t h_copy(httpd_req_t *req)
+{
+    char query[128];
+    char src_name[48] = {0};
+    char dst_name[48] = {0};
+
+    httpd_resp_set_type(req, "text/plain; charset=utf-8");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+
+    if (httpd_req_get_url_query_len(req) <= 0 ||
+        httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||
+        httpd_query_key_value(query, "f", src_name, sizeof(src_name)) != ESP_OK ||
+        httpd_query_key_value(query, "t", dst_name, sizeof(dst_name)) != ESP_OK)
+    {
+        return httpd_resp_sendstr(req, "ERR usage: /wpcopy?f=up_3.jpg&t=desktop.jpg");
+    }
+
+    /* 防目录穿越 + 必须是 .jpg */
+    const char *names[2] = { src_name, dst_name };
+    for (int k = 0; k < 2; k++)
+    {
+        const char *nm = names[k];
+        if (strstr(nm, "..") || strchr(nm, '/') || strchr(nm, '\\'))
+        {
+            return httpd_resp_sendstr(req, "ERR bad name");
+        }
+        size_t ln = strlen(nm);
+        if (ln < 5 || strcasecmp(nm + ln - 4, ".jpg") != 0)
+        {
+            return httpd_resp_sendstr(req, "ERR not a .jpg");
+        }
+    }
+
+    char sp[96], dp[96];
+    snprintf(sp, sizeof(sp), WP_DIR "/%s", src_name);
+    snprintf(dp, sizeof(dp), WP_DIR "/%s", dst_name);
+
+    FILE *fi = fopen(sp, "rb");
+    if (fi == NULL)
+    {
+        return httpd_resp_sendstr(req, "ERR src not found");
+    }
+    FILE *fo = fopen(dp, "wb");
+    if (fo == NULL)
+    {
+        fclose(fi);
+        return httpd_resp_sendstr(req, "ERR dst open failed");
+    }
+
+    /* static：4KB 栈缓冲对 httpd 任务偏大 */
+    static char buf[4096];
+    size_t n;
+    size_t total = 0;
+    while ((n = fread(buf, 1, sizeof(buf), fi)) > 0)
+    {
+        if (fwrite(buf, 1, n, fo) != n)
+        {
+            break;
+        }
+        total += n;
+    }
+    fclose(fi);
+    fclose(fo);
+
+    char msg[96];
+    snprintf(msg, sizeof(msg), "OK  %s -> %s (%u B)", src_name, dst_name, (unsigned)total);
+    ESP_LOGI(TAG, "wallpaper copied: %s -> %s (%u B)", src_name, dst_name, (unsigned)total);
+    return httpd_resp_sendstr(req, msg);
+}
+
 /** 下载最近一次录音（调试用）：GET /voicedbg → /sdcard/voice_last.wav
  *  用来把真实录到的音频拷到 PC 分析（波形/频谱/过零率），
  *  区分"麦克风/采样率问题"和"模型识别问题"。 */
@@ -778,6 +850,9 @@ esp_err_t wifi_prov_httpd_start(void)
     static const httpd_uri_t uri_del = {
         .uri = "/wpdel", .method = HTTP_GET, .handler = h_del, .user_ctx = NULL,
     };
+    static const httpd_uri_t uri_copy = {
+        .uri = "/wpcopy", .method = HTTP_GET, .handler = h_copy, .user_ctx = NULL,
+    };
     static const httpd_uri_t uri_vdbg = {
         .uri = "/voicedbg", .method = HTTP_GET, .handler = h_voicedbg, .user_ctx = NULL,
     };
@@ -787,6 +862,7 @@ esp_err_t wifi_prov_httpd_start(void)
     httpd_register_uri_handler(s_srv, &uri_clear);
     httpd_register_uri_handler(s_srv, &uri_list);
     httpd_register_uri_handler(s_srv, &uri_del);
+    httpd_register_uri_handler(s_srv, &uri_copy);
     httpd_register_uri_handler(s_srv, &uri_vdbg);
 
     ESP_LOGI(TAG, "config page ready (STA 也可访问)");

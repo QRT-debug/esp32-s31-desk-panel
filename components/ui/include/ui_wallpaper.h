@@ -20,3 +20,12 @@
  *   页面切换本来就有一帧空档，可以接受。
  */
 bool wallpaper_apply_bg(lv_obj_t *parent);
+
+/**
+ * @brief  贴一张**指定文件名**的壁纸（在 /sdcard/wallpaper/ 下）
+ * @param  name  文件名，如 "desktop.jpg"
+ * @retval true=成功；false=文件不存在或解码失败
+ *
+ * 用途：APPS 桌面要固定一张，不能被"随机挑"换掉；时钟页继续用随机版。
+ */
+bool wallpaper_apply_named(lv_obj_t *parent, const char *name);

@@ -381,8 +381,13 @@ static void build_home(void)
      *   渐变背景 + 彩色图标是"拟物化老式感"的主要来源之一，纯深色更像现代系统。 */
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x14141E), 0);
     lv_obj_set_style_bg_grad_dir(scr, LV_GRAD_DIR_NONE, 0);
-    /* 先铺纯色兜底，再尝试壁纸（没有 SD 卡/没图时保持纯色） */
-    wallpaper_apply_bg(scr);
+    /* 先铺纯色兜底，再尝试壁纸。
+     * ★ APPS 页用**固定**的 desktop.jpg（不能用随机版：用户要它始终是同一张），
+     *   没有 desktop.jpg 时才退回随机挑。时钟页继续随机，两个页面互不影响。 */
+    if (!wallpaper_apply_named(scr, "desktop.jpg"))
+    {
+        wallpaper_apply_bg(scr);
+    }
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
     lv_obj_set_style_pad_all(scr, 0, 0);
     lv_obj_set_style_border_width(scr, 0, 0);

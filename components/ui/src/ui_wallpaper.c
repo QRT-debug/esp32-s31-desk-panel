@@ -52,7 +52,10 @@ static bool pick(char *out, size_t outsz)
     while ((e = readdir(d)) != NULL && n < WP_MAX)
     {
         size_t l = strlen(e->d_name);
-        if (l > 4 && strcasecmp(e->d_name + l - 4, ".jpg") == 0)
+        /* ★ 跳过 desktop.jpg：它是 APPS 桌面专用的固定图，
+         *   让时钟页的随机池只包含用户上传的 up_*.jpg，两个页面互不干扰。 */
+        if (l > 4 && strcasecmp(e->d_name + l - 4, ".jpg") == 0 &&
+            strcasecmp(e->d_name, "desktop.jpg") != 0)
         {
             snprintf(names[n], sizeof(names[n]), "%s", e->d_name);
             n++;
@@ -68,14 +71,8 @@ static bool pick(char *out, size_t outsz)
     return true;
 }
 
-bool wallpaper_apply_bg(lv_obj_t *parent)
+static bool decode_and_attach(lv_obj_t *parent, const char *name)
 {
-    char name[40];
-    if (!pick(name, sizeof(name)))
-    {
-        ESP_LOGW(TAG, "没有 .jpg in " WP_DIR);
-        return false;
-    }
 
     char path[96];
     snprintf(path, sizeof(path), WP_DIR "/%s", name);
@@ -172,11 +169,34 @@ bool wallpaper_apply_bg(lv_obj_t *parent)
     return true;
 }
 
+bool wallpaper_apply_bg(lv_obj_t *parent)
+{
+    char name[40];
+    if (!pick(name, sizeof(name)))
+    {
+        ESP_LOGW(TAG, "没有 .jpg in " WP_DIR);
+        return false;
+    }
+    return decode_and_attach(parent, name);
+}
+
+bool wallpaper_apply_named(lv_obj_t *parent, const char *name)
+{
+    return decode_and_attach(parent, name);
+}
+
 #else   /* ---------------- PC 模拟器 ---------------- */
 
 bool wallpaper_apply_bg(lv_obj_t *parent)
 {
     (void)parent;   /* PC 上没有硬件 JPEG 解码器，调用方回退到纯色背景 */
+    return false;
+}
+
+bool wallpaper_apply_named(lv_obj_t *parent, const char *name)
+{
+    (void)parent;
+    (void)name;
     return false;
 }
 
