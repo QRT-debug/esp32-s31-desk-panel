@@ -79,15 +79,47 @@ static int  s_wav_n;
 static int  s_wav_idx;
 
 /* 两级页面：0=播放页 1=歌单页 */
+static int       s_subpage = 0;
+static lv_obj_t *s_vol_panel = NULL;    /* 音量弹窗（按需创建/销毁） */
+
+/* 前向声明（这些定义都在文件后半部；异步切页回调在中间就要用到） */
 static void to_playlist_cb(lv_event_t *e);
 static void to_player_cb(lv_event_t *e);
-/* 前向声明：下面的弹窗函数用到这些（定义在文件后半部） */
+static void build_player(void);
+static void build_playlist(void);
+static void refresh_state_ui(void);
 static lv_obj_t *mk_lbl5(lv_obj_t *p, int x, int y, const lv_font_t *f,
                          uint32_t col, lv_opa_t opa, const char *txt);
 static void slider_cb(lv_event_t *e);
 static void close_vol_panel(void);
 
-static lv_obj_t *s_vol_panel = NULL;    /* 音量弹窗（按需创建/销毁） */
+/**
+ * 延迟切换页面。
+ * ★ 不能在事件回调里直接 build_xxx()：它开头就 lv_obj_clean(scr)，
+ *   会把**正在派发事件的那个对象**（刚被点的按钮/列表行）一起删掉，
+ *   回调返回后 LVGL 继续访问已释放内存 => use-after-free（点歌后黑屏/卡死/重启）。
+ *   lv_async_call 把重建推迟到事件处理完之后。
+ */
+static void switch_page_async(void *arg)
+{
+    s_subpage = (int)(intptr_t)arg;
+    if (s_subpage == 0)
+    {
+        build_player();
+    }
+    else
+    {
+        build_playlist();
+    }
+    refresh_state_ui();
+}
+
+/** 同样：关闭音量弹窗也可能是"点遮罩关自己"，必须延迟 */
+static void close_panel_async(void *arg)
+{
+    (void)arg;
+    close_vol_panel();
+}
 
 /* 音量弹窗：低频操作，按需呼出，不占常驻页面 */
 static void vol_btn_cb(lv_event_t *e)
@@ -95,7 +127,7 @@ static void vol_btn_cb(lv_event_t *e)
     (void)e;
     if (s_vol_panel != NULL)
     {
-        close_vol_panel();
+        lv_async_call(close_panel_async, NULL);   /* 可能是点在遮罩上：不能同步删自己 */
         return;
     }
 
@@ -160,7 +192,6 @@ static lv_obj_t *s_pg_box;
 static lv_obj_t *s_pg_row[AUDIO_MAX_TRACKS];
 static lv_obj_t *s_pg_mark[AUDIO_MAX_TRACKS];
 static lv_obj_t *s_nav_btn;
-static int       s_subpage = 0;
 
 static const char *current_short_name(void);   /* 前向声明 */
 
@@ -568,9 +599,8 @@ static void pl_row_cb(lv_event_t *e)
         {
             s_wav_idx = i;
             audio_player_play_sd_by_name(s_wav[i]);
-            s_subpage = 0;              /* 点歌后回到播放页，能立刻看到/控制 */
-            build_player();
-            refresh_state_ui();
+            /* 回播放页要延迟：当前正处在列表行的点击回调里，同步 lv_obj_clean 会删掉这一行 */
+            lv_async_call(switch_page_async, (void *)(intptr_t)0);
             break;
         }
     }
@@ -776,6 +806,8 @@ static void build_topbar(lv_obj_t *root, const char *title, uint32_t txt_col,
 }
 
 /* ================= 主页面：播放 ================= */
+
+
 static void build_player(void)
 {
     lv_obj_t *scr = lv_screen_active();
@@ -1039,18 +1071,14 @@ static void build_playlist(void)
 static void to_playlist_cb(lv_event_t *e)
 {
     (void)e;
-    s_subpage = 1;
-    build_playlist();
-    refresh_state_ui();
+    lv_async_call(switch_page_async, (void *)(intptr_t)1);
 }
 
 /** 切回播放页 */
 static void to_player_cb(lv_event_t *e)
 {
     (void)e;
-    s_subpage = 0;
-    build_player();
-    refresh_state_ui();
+    lv_async_call(switch_page_async, (void *)(intptr_t)0);
 }
 
 
@@ -1082,6 +1110,7 @@ void scene_audio_selftest(void)
     printf("[st] 上一首    : idx=%d  state=%d\n", s_wav_idx, (int)audio_player_state());
 
     to_playlist_cb(NULL);
+    lv_timer_handler();          /* 处理 lv_async_call 排队的切页 */
     printf("[st] 进歌单    : subpage=%d  第一行=%s  条数=%d\n",
            s_subpage, s_pg_row[0] != NULL ? "已创建" : "空", s_wav_n);
 
@@ -1089,16 +1118,20 @@ void scene_audio_selftest(void)
     if (s_wav_n > 1 && s_pg_row[1] != NULL)
     {
         lv_obj_send_event(s_pg_row[1], LV_EVENT_CLICKED, NULL);
+        lv_timer_handler();
         printf("[st] 点第2首   : subpage=%d  idx=%d  state=%d\n",
                s_subpage, s_wav_idx, (int)audio_player_state());
     }
 
     vol_btn_cb(NULL);
+    lv_timer_handler();
     printf("[st] 开音量弹窗: panel=%s\n", s_vol_panel != NULL ? "已创建" : "空");
     vol_btn_cb(NULL);
+    lv_timer_handler();
     printf("[st] 关音量弹窗: panel=%s\n", s_vol_panel != NULL ? "已创建" : "空");
 
     to_player_cb(NULL);
+    lv_timer_handler();
     printf("[st] 回播放页  : subpage=%d\n", s_subpage);
     printf("[st] ===== 自测结束 =====\n\n");
 }
