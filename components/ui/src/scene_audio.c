@@ -612,7 +612,7 @@ static void mk_cover_box(lv_obj_t *p, int x, int y, int size, int radius, uint32
 
     lv_obj_t *img = lv_image_create(wrap);
     lv_image_set_src(img, &album_cover);
-    lv_obj_set_pos(img, 0, 0);
+    lv_obj_center(img);            /* ★ 必须居中：容器尺寸 ≠ 图片尺寸时贴左上会错位 */
     lv_obj_clear_flag(img, LV_OBJ_FLAG_CLICKABLE);
 }
 
@@ -691,7 +691,7 @@ static void build_player(void)
     build_topbar(root, "Music", C_TITLE, "歌单 >", to_playlist_cb);
 
     /* 大封面 */
-    mk_cover_box(root, 40, 72, 250, 125, C_SHADOW);   /* 圆形：radius = size/2 */
+    mk_cover_box(root, 70, 102, 190, 95, C_SHADOW);   /* 与图片同尺寸，radius=size/2 */
 
     /* 右侧信息 */
     s_lbl_title  = mk_lbl5(root, 320, 96, &ui_font_28, C_TITLE, LV_OPA_COVER, "No track");
