@@ -586,7 +586,7 @@ static void build_audio(void)
         lv_obj_set_pos(wrap, 25, 61);
         lv_obj_set_style_bg_opa(wrap, LV_OPA_TRANSP, 0);
         lv_obj_set_style_border_width(wrap, 0, 0);
-        lv_obj_set_style_radius(wrap, 16, 0);
+        lv_obj_set_style_radius(wrap, 26, 0);   /* 与图片的圆角一致 */
         lv_obj_set_style_pad_all(wrap, 0, 0);
         lv_obj_set_style_shadow_width(wrap, 26, 0);
         lv_obj_set_style_shadow_opa(wrap, LV_OPA_40, 0);
