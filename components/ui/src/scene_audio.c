@@ -25,6 +25,8 @@
 #include "ui_scenes.h"
 #include "ui_theme.h"
 
+LV_IMG_DECLARE(bg_glow);      /* components/ui/src/bg_glow.c，音频页径向背景 */
+
 /* ★ 11-20 01:35 主题化：原浅色硬编码全部指向 ui_theme() 色板（可切深色）。
  *   COL_BG 已无使用处（旧黑主题残留，保留定义防外链）。 */
 #define COL_BG     (ui_theme()->panel_dark)
@@ -536,14 +538,25 @@ static void build_audio(void)
         s_wav_idx = 0;
     }
 
-    /* 背景：深蓝 -> 亮青 纵向渐变 */
-    lv_obj_set_style_bg_color(scr, lv_color_hex(M_TOP), 0);
-    lv_obj_set_style_bg_grad_color(scr, lv_color_hex(M_BOT), 0);
-    lv_obj_set_style_bg_grad_dir(scr, LV_GRAD_DIR_VER, 0);
+    /* 背景：近黑底 + 中间一团青色光晕
+     * ★ 参考图实测是径向渐变（边缘 #020811 近黑、中心 #0196D8 亮青），
+     *   但本版 LVGL 没有 LV_GRAD_TYPE_RADIAL，只能用「圆 + 大阴影」模拟衰减。 */
+    lv_obj_set_style_bg_color(scr, lv_color_hex(0x020811), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
     lv_obj_set_style_pad_all(scr, 0, 0);
     lv_obj_set_style_border_width(scr, 0, 0);
     lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
+
+    /* 背景：预生成的径向光晕图（1/8 尺寸放大 8 倍铺满）
+     * ★ 为什么不用 LVGL 的渐变：本版没有 RADIAL 类型；线性渐变做不出"中心亮四周暗"；
+     *   用「圆 + 大 shadow」模拟实测是硬边圆盘。只有贴图能得到连续衰减。 */
+    {
+        lv_obj_t *bg = lv_image_create(scr);
+        lv_image_set_src(bg, &bg_glow);
+        lv_image_set_scale(bg, 2048);          /* 256 = 1x，8x = 2048 */
+        lv_obj_center(bg);
+        lv_obj_clear_flag(bg, LV_OBJ_FLAG_CLICKABLE);
+    }
 
     lv_obj_t *root = lv_obj_create(scr);
     lv_obj_set_size(root, 800, 480);
