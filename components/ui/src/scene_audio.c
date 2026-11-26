@@ -25,7 +25,8 @@
 #include "ui_scenes.h"
 #include "ui_theme.h"
 
-LV_IMG_DECLARE(bg_glow);      /* components/ui/src/bg_glow.c，音频页径向背景 */
+LV_IMG_DECLARE(bg_glow);       /* bg_glow.c，径向光晕（当前未使用） */
+LV_IMG_DECLARE(album_cover);   /* album_cover.c，190x190 圆角插画封面 */
 
 /* ★ 11-20 01:35 主题化：原浅色硬编码全部指向 ui_theme() 色板（可切深色）。
  *   COL_BG 已无使用处（旧黑主题残留，保留定义防外链）。 */
@@ -577,26 +578,11 @@ static void build_audio(void)
 
     /* ---- 左栏：封面 + 歌单信息 ---- */
     {
-        lv_obj_t *cover = lv_obj_create(root);
-        lv_obj_set_size(cover, 200, 200);
-        lv_obj_set_pos(cover, 20, 56);
-        lv_obj_set_style_radius(cover, 16, 0);
-        lv_obj_set_style_bg_color(cover, lv_color_hex(0x4F46E5), 0);
-        lv_obj_set_style_bg_grad_color(cover, lv_color_hex(0x3B82F6), 0);
-        lv_obj_set_style_bg_grad_dir(cover, LV_GRAD_DIR_VER, 0);
-        lv_obj_set_style_bg_opa(cover, LV_OPA_COVER, 0);
-        lv_obj_set_style_border_width(cover, 0, 0);
-        lv_obj_set_style_shadow_width(cover, 30, 0);
-        lv_obj_set_style_shadow_opa(cover, LV_OPA_30, 0);
-        lv_obj_set_style_shadow_color(cover, lv_color_hex(0x0B2A6B), 0);
-        lv_obj_clear_flag(cover, LV_OBJ_FLAG_SCROLLABLE);
-
-        lv_obj_t *ic = lv_label_create(cover);
-        lv_obj_set_style_text_font(ic, &ui_font_hw48, 0);
-        lv_obj_set_style_text_color(ic, lv_color_hex(0xFFFFFF), 0);
-        lv_obj_set_style_text_opa(ic, LV_OPA_80, 0);
-        lv_label_set_text(ic, "\xEF\x80\x81");     /* fa-music */
-        lv_obj_center(ic);
+        /* 封面：真实插画（190x190，圆角已烘进图里，圆角外填的是背景蓝） */
+        lv_obj_t *cover = lv_image_create(root);
+        lv_image_set_src(cover, &album_cover);
+        lv_obj_set_pos(cover, 25, 61);
+        lv_obj_clear_flag(cover, LV_OBJ_FLAG_CLICKABLE);
     }
     mk_lbl3(root, 20, 268, &ui_font_28, M_TXT, LV_OPA_COVER, "Local Songs");
     {
