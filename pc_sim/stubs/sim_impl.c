@@ -242,7 +242,16 @@ esp_err_t wifi_sta_reconnect_user(void)  { s_wifi_on = true;  return ESP_OK; }
 
 /* ---------------- SD 卡（假曲目） ---------------- */
 
-static const char *k_fake_wav[] = { "Inferno.wav", "SawanoHiroyuki[nZk] - REMEMBER.wav", "TheDOGS.wav" };
+static const char *k_fake_wav[] = {
+    "Inferno.wav",
+    "SawanoHiroyuki[nZk] - REMEMBER.wav",
+    "TheDOGS.wav",
+    "LiSA - Gurenge.wav",
+    "Aimer - Ref rain.wav",
+    "YOASOBI - Racing into the Night.wav",
+    "Eve - Dramaturgy.wav",
+    "Kenshi Yonezu - Lemon.wav",
+};
 
 static bool s_sd_ready = true;
 
