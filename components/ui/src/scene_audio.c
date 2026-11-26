@@ -684,23 +684,28 @@ static lv_obj_t *mk_lbl5(lv_obj_t *p, int x, int y, const lv_font_t *f,
     return l;
 }
 
-/** 方形封面（插画）带投影：lv_image 不能投影，套一层透明壳 */
-static void mk_cover_box(lv_obj_t *p, int x, int y, int size, int radius, uint32_t sh_col)
+/** 封面：容器按 radius 裁切图片（radius = size/2 得圆，小值得圆角矩形）
+ *  ★ lv_image 自身不支持圆角；靠容器的 clip_corner 把方形图裁出形状，
+ *    这样同一张图在播放页是圆、在歌单页是圆角方。 */
+static void mk_cover_box(lv_obj_t *p, int x, int y, int size, int radius)
 {
     lv_obj_t *wrap = lv_obj_create(p);
-    lv_obj_set_size(wrap, size + 10, size + 10);   /* 留 5px 余量给 clip */
-    lv_obj_set_pos(wrap, x - 5, y - 5);
+    lv_obj_set_size(wrap, size, size);
+    lv_obj_set_pos(wrap, x, y);
     lv_obj_set_style_bg_opa(wrap, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(wrap, 0, 0);
-    lv_obj_set_style_radius(wrap, radius + 5, 0);
+    lv_obj_set_style_radius(wrap, radius, 0);
+    lv_obj_set_style_clip_corner(wrap, true, 0);     /* ★ 关键：子对象按圆角裁 */
     lv_obj_set_style_pad_all(wrap, 0, 0);
-    /* ★ 不加阴影：圆形 + 下偏移会在底部聚成一条"月牙"，看着很脏 */
-    lv_obj_set_style_shadow_width(wrap, 0, 0);
     lv_obj_clear_flag(wrap, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
 
     lv_obj_t *img = lv_image_create(wrap);
     lv_image_set_src(img, &album_cover);
-    lv_obj_center(img);            /* ★ 必须居中：容器尺寸 ≠ 图片尺寸时贴左上会错位 */
+    if (size != 220)                                 /* 图是 220，缩放到目标尺寸 */
+    {
+        lv_image_set_scale(img, (uint32_t)(size * 256 / 220));
+    }
+    lv_obj_center(img);
     lv_obj_clear_flag(img, LV_OBJ_FLAG_CLICKABLE);
 }
 
@@ -779,7 +784,7 @@ static void build_player(void)
     build_topbar(root, "Music", C_TITLE, "歌单 >", to_playlist_cb);
 
     /* 大封面 */
-    mk_cover_box(root, 38, 128, 220, 110, C_SHADOW);   /* 220 圆形，垂直居中 */
+    mk_cover_box(root, 38, 128, 220, 110);     /* radius = size/2 -> 圆 */
 
     /* 右侧信息 */
     s_lbl_title  = mk_lbl5(root, 300, 138, &ui_font_32, C_TITLE, LV_OPA_COVER, "No track");
@@ -912,7 +917,7 @@ static void build_playlist(void)
 
     build_topbar(root, "Playlist", P_TXT, "< 返回", to_player_cb);
 
-    mk_cover_box(root, 16, 60, 190, 95, 0x00243D);   /* 圆形 */
+    mk_cover_box(root, 16, 62, 186, 26);       /* 圆角矩形（歌单页） */
     mk_lbl5(root, 20, 268, &ui_font_28, P_TXT, LV_OPA_COVER, "Local Songs");
     {
         char b[48];
