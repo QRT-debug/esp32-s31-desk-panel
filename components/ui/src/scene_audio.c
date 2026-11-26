@@ -733,7 +733,8 @@ static void mk_cover_box(lv_obj_t *p, int x, int y, int size, int radius)
 
 /* ---------- 顶部通栏：返回 + 标题 + 右侧切换 ---------- */
 static void build_topbar(lv_obj_t *root, const char *title, uint32_t txt_col,
-                         const char *right_txt, lv_event_cb_t right_cb)
+                         const char *right_txt, lv_event_cb_t right_cb,
+                         lv_event_cb_t back_cb)
 {
     lv_obj_t *back = lv_button_create(root);
     lv_obj_set_size(back, 34, 34);
@@ -743,7 +744,7 @@ static void build_topbar(lv_obj_t *root, const char *title, uint32_t txt_col,
     lv_obj_set_style_bg_opa(back, LV_OPA_20, 0);
     lv_obj_set_style_border_width(back, 0, 0);
     lv_obj_set_style_shadow_width(back, 0, 0);
-    lv_obj_add_event_cb(back, home_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(back, back_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *bl = lv_label_create(back);
     lv_obj_set_style_text_font(bl, &ui_font_20, 0);
     lv_obj_set_style_text_color(bl, lv_color_hex(C_TITLE), 0);
@@ -803,7 +804,7 @@ static void build_player(void)
     lv_obj_clear_flag(root, LV_OBJ_FLAG_SCROLLABLE);
     s_root = root;
 
-    build_topbar(root, "Music", C_TITLE, "歌单 >", to_playlist_cb);
+    build_topbar(root, "Music", C_TITLE, "歌单 >", to_playlist_cb, home_cb);
 
     /* 大封面 */
     mk_cover_box(root, 38, 128, 220, 110);     /* radius = size/2 -> 圆 */
@@ -937,7 +938,7 @@ static void build_playlist(void)
     lv_obj_clear_flag(root, LV_OBJ_FLAG_SCROLLABLE);
     s_root = root;
 
-    build_topbar(root, "Playlist", P_TXT, "< 返回", to_player_cb);
+    build_topbar(root, "Playlist", P_TXT, NULL, NULL, to_player_cb);
 
     mk_cover_box(root, 16, 62, 186, 26);       /* 圆角矩形（歌单页） */
     mk_lbl5(root, 20, 268, &ui_font_28, P_TXT, LV_OPA_COVER, "Local Songs");
