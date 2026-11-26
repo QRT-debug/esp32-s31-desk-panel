@@ -57,6 +57,10 @@ static char s_wav[16][64];
 static int  s_wav_n;
 static int  s_wav_idx;
 static lv_obj_t *s_lbl_name;
+
+/* 歌单（右侧列表，2026-11-26）：点击行即切歌 */
+static lv_obj_t *s_pl_box;
+static lv_obj_t *s_pl_row[16];
 static const char *current_short_name(void);   /* 前向声明 */
 
 /* 正式版界面的控件（build 里创建，轮询里更新） */
@@ -104,9 +108,26 @@ static void set_playing_ui(bool on, const char *what)
 }
 
 /* 按驱动状态机刷新大圆按钮 + 状态行（LOADING 时也可按 STOP 取消） */
+/** 歌单高亮：当前曲目行用强调色 + 半透明底 */
+static void pl_highlight(void)
+{
+    for (int i = 0; i < s_wav_n && i < 16; i++)
+    {
+        if (s_pl_row[i] == NULL)
+        {
+            continue;
+        }
+        bool cur = (i == s_wav_idx);
+        lv_obj_set_style_bg_color(s_pl_row[i],
+                                  lv_color_hex(cur ? C_ACCENT : C_CARD), 0);
+        lv_obj_set_style_bg_opa(s_pl_row[i], cur ? LV_OPA_20 : LV_OPA_TRANSP, 0);
+    }
+}
+
 static void refresh_state_ui(void)
 {
     audio_player_state_t st = audio_player_state();
+    pl_highlight();
 
     if (st == AUD_STATE_PLAYING)
     {
@@ -366,6 +387,22 @@ static lv_obj_t *round_btn(lv_obj_t *parent, int x, int y, int size, int radius)
 
 static lv_obj_t *s_root;   /* 整页容器：切页动画用 */
 
+/** 歌单行点击：切到该曲并立即播放 */
+static void pl_row_cb(lv_event_t *e)
+{
+    lv_obj_t *row = lv_event_get_target(e);
+    for (int i = 0; i < s_wav_n && i < 16; i++)
+    {
+        if (s_pl_row[i] == row)
+        {
+            s_wav_idx = i;
+            audio_player_play_sd_by_name(s_wav[i]);
+            refresh_state_ui();
+            break;
+        }
+    }
+}
+
 static void build_audio(void)
 {
     lv_obj_t *scr = lv_screen_active();
@@ -397,8 +434,8 @@ static void build_audio(void)
 
     /* ---------------- 右上：圆形"封面"（程序绘制，占位） ---------------- */
     lv_obj_t *cover = lv_obj_create(root);
-    lv_obj_set_size(cover, 236, 236);
-    lv_obj_set_pos(cover, 548, 96);
+    lv_obj_set_size(cover, 100, 100);      /* 缩小，把下方让给歌单 */
+    lv_obj_set_pos(cover, 616, 92);
     lv_obj_set_style_radius(cover, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(cover, lv_color_hex(C_ACCENT_L), 0);
     lv_obj_set_style_bg_grad_color(cover, lv_color_hex(C_ACCENT_L2), 0);
@@ -415,6 +452,59 @@ static void build_audio(void)
         lv_obj_set_style_text_color(ic, lv_color_hex(C_ACCENT), 0);
         lv_label_set_text(ic, LV_SYMBOL_AUDIO);
         lv_obj_center(ic);
+    }
+
+    /* ---------------- 右侧：歌单列表（点行即切歌，2026-11-26） ----------------
+     * 曲目表来自 sd_card_scan_wav()（/sdcard 根目录 .wav，最多 16 首）。
+     * 容器可滚动；当前曲目由 pl_highlight() 上色。 */
+    s_pl_box = lv_obj_create(root);
+    lv_obj_set_pos(s_pl_box, 548, 210);
+    lv_obj_set_size(s_pl_box, 236, 168);   /* 4 行；再高会压到下方音量区(366~400) */
+    lv_obj_set_style_bg_color(s_pl_box, lv_color_hex(C_CARD), 0);
+    lv_obj_set_style_bg_opa(s_pl_box, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(s_pl_box, 14, 0);
+    lv_obj_set_style_border_width(s_pl_box, 0, 0);
+    lv_obj_set_style_pad_all(s_pl_box, 6, 0);
+    lv_obj_set_scrollbar_mode(s_pl_box, LV_SCROLLBAR_MODE_AUTO);
+
+    if (s_wav_n <= 0)
+    {
+        lv_obj_t *t = lv_label_create(s_pl_box);
+        lv_obj_set_style_text_font(t, &ui_font_14, 0);
+        lv_obj_set_style_text_color(t, lv_color_hex(C_SUB), 0);
+        lv_label_set_text(t, "no wav on SD");
+        lv_obj_center(t);
+    }
+    for (int i = 0; i < s_wav_n && i < 16; i++)
+    {
+        lv_obj_t *row = lv_obj_create(s_pl_box);
+        lv_obj_set_size(row, 220, 38);
+        lv_obj_set_pos(row, 0, i * 41);
+        lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(row, 0, 0);
+        lv_obj_set_style_radius(row, 8, 0);
+        lv_obj_set_style_pad_all(row, 0, 0);
+        lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_event_cb(row, pl_row_cb, LV_EVENT_CLICKED, NULL);
+
+        lv_obj_t *n = lv_label_create(row);
+        lv_obj_set_style_text_font(n, &ui_font_14, 0);
+        lv_obj_set_style_text_color(n, lv_color_hex(C_SUB), 0);
+        char nb[8];
+        snprintf(nb, sizeof(nb), "%02d", i + 1);
+        lv_label_set_text(n, nb);
+        lv_obj_set_pos(n, 10, 9);
+
+        lv_obj_t *t = lv_label_create(row);
+        lv_obj_set_style_text_font(t, &ui_font_14, 0);
+        lv_obj_set_style_text_color(t, lv_color_hex(C_TITLE), 0);
+        lv_obj_set_pos(t, 38, 9);
+        lv_obj_set_width(t, 168);
+        lv_obj_set_height(t, 22);          /* ★ 必须限高：LONG_DOT 不限高会被撑成多行 */
+        lv_label_set_long_mode(t, LV_LABEL_LONG_DOT);
+        lv_label_set_text(t, s_wav[i]);
+
+        s_pl_row[i] = row;
     }
 
     /* ---------------- 左上：HOME 返回 ---------------- */
