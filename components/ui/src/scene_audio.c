@@ -578,10 +578,25 @@ static void build_audio(void)
 
     /* ---- 左栏：封面 + 歌单信息 ---- */
     {
-        /* 封面：真实插画（190x190，圆角已烘进图里，圆角外填的是背景蓝） */
-        lv_obj_t *cover = lv_image_create(root);
+        /* 封面：真实插画（190x190，圆角已烘进图里）
+         * ★ lv_image 不能直接加 shadow，所以在外面套一个透明圆角壳来投影，
+         *   阴影颜色用比背景更深的 #00243D，往下偏 6px 制造"浮起来"的感觉。 */
+        lv_obj_t *wrap = lv_obj_create(root);
+        lv_obj_set_size(wrap, 190, 190);
+        lv_obj_set_pos(wrap, 25, 61);
+        lv_obj_set_style_bg_opa(wrap, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(wrap, 0, 0);
+        lv_obj_set_style_radius(wrap, 16, 0);
+        lv_obj_set_style_pad_all(wrap, 0, 0);
+        lv_obj_set_style_shadow_width(wrap, 26, 0);
+        lv_obj_set_style_shadow_opa(wrap, LV_OPA_40, 0);
+        lv_obj_set_style_shadow_color(wrap, lv_color_hex(0x00243D), 0);
+        lv_obj_set_style_shadow_ofs_y(wrap, 7, 0);
+        lv_obj_clear_flag(wrap, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+
+        lv_obj_t *cover = lv_image_create(wrap);
         lv_image_set_src(cover, &album_cover);
-        lv_obj_set_pos(cover, 25, 61);
+        lv_obj_set_pos(cover, 0, 0);
         lv_obj_clear_flag(cover, LV_OBJ_FLAG_CLICKABLE);
     }
     mk_lbl3(root, 20, 268, &ui_font_28, M_TXT, LV_OPA_COVER, "Local Songs");
@@ -605,7 +620,7 @@ static void build_audio(void)
 
         s_lbl_play = lv_label_create(pb);
         lv_obj_set_style_text_font(s_lbl_play, &ui_font_cn18, 0);   /* ★ 含中文，必须 cn18 */
-        lv_obj_set_style_text_color(s_lbl_play, lv_color_hex(0x06283D), 0);
+        lv_obj_set_style_text_color(s_lbl_play, lv_color_hex(0xFFFFFF), 0);
         lv_label_set_text(s_lbl_play, "> 播放全部");
         lv_obj_center(s_lbl_play);
         s_btn_play = pb;
