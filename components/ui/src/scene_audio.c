@@ -96,6 +96,32 @@ static bool      s_debug_visible;   /* 调试层（DIAG + 状态行）是否显�
 static lv_obj_t *s_btn_diag;       /* 诊断按钮（嘶嘶声分层定位） */
 static lv_obj_t *s_lbl_diag;
 
+/**
+ * 清空所有控件指针。
+ * ★ 必须做：lv_obj_clean() 会在切换页面时删掉全部对象，而 s_bar / s_pg_row[] 这些
+ *   静态指针仍然指向被释放的内存。下一帧刷新（进度条每 100ms、状态轮询每 20ms）
+ *   就会往野指针里写字 ⇒ Guru Meditation（真机实测崩过一次）。
+ */
+static void reset_widget_ptrs(void)
+{
+    s_bar = NULL;
+    s_lbl_pos = NULL;
+    s_lbl_dur = NULL;
+    s_lbl_title = NULL;
+    s_lbl_artist = NULL;
+    s_lbl_play = NULL;
+    s_btn_play = NULL;
+    s_lbl_vol = NULL;
+    s_lbl_state = NULL;
+    s_pg_box = NULL;
+    s_nav_btn = NULL;
+    for (int i = 0; i < 16; i++)
+    {
+        s_pg_row[i] = NULL;
+        s_pg_mark[i] = NULL;
+    }
+}
+
 static const char *k_diag_name[8] = { "DIAG: OFF", "DIAG: MUTE", "DIAG: PA OFF",
                                       "DIAG: ALL OFF", "DIAG: SILENCE", "DIAG: SINE 1k",
                                       "DIAG: SINE 8k", "DIAG: RAM MUSIC" };
@@ -118,23 +144,32 @@ static void set_playing_ui(bool on, const char *what)
     {
         lv_label_set_text(s_lbl_play, on ? "暂停" : "播放");
     }
+    /* ★ 必须判 NULL：歌单页没有这个控件（reset_widget_ptrs 已置 NULL），
+     *   而状态轮询每 20ms 都会调到这里 —— 少了这个判断就是野指针写入，实测崩溃。 */
+    if (s_lbl_title == NULL)
+    {
+        return;
+    }
     char b[64];
     if (on && what != NULL)
     {
-        snprintf(b, sizeof(b), "%s", what);
+        snprintf(b, sizeof(b), "%.63s", what);   /* 显式限长，避免 -Wformat-truncation */
     }
     else
     {
         snprintf(b, sizeof(b), "No track");
     }
     lv_label_set_text(s_lbl_title, b);
-    /* ★ 不再写 s_lbl_state：它现在是歌单计数行（"N songs / SD CARD"） */
 }
 
 /* 按驱动状态机刷新大圆按钮 + 状态行（LOADING 时也可按 STOP 取消） */
 /** 歌单高亮：当前曲目行用强调色 + 半透明底 */
 static void pl_highlight(void)
 {
+    if (s_subpage != 1)
+    {
+        return;                     /* 播放页没有歌单行，别去碰那些指针 */
+    }
     for (int i = 0; i < s_wav_n && i < 16; i++)
     {
         if (s_pg_row[i] == NULL)
@@ -629,6 +664,7 @@ static void build_player(void)
 {
     lv_obj_t *scr = lv_screen_active();
     lv_obj_clean(scr);
+    reset_widget_ptrs();
     ui_statusbar_show(false);
 
     s_wav_n = sd_card_ready() ? sd_card_scan_wav(s_wav, 16) : 0;
@@ -753,8 +789,6 @@ static void build_player(void)
     s_lbl_vol = mk_lbl5(root, 626, 368, &ui_font_20, P_TXT, LV_OPA_COVER, "40");
 
     s_lbl_state = mk_lbl5(root, 320, 424, &ui_font_14, P_SUB, LV_OPA_0, "");
-
-    pl_highlight();
 }
 
 /* ================= 二级页：歌单 ================= */
@@ -762,6 +796,7 @@ static void build_playlist(void)
 {
     lv_obj_t *scr = lv_screen_active();
     lv_obj_clean(scr);
+    reset_widget_ptrs();
     ui_statusbar_show(false);
 
     s_wav_n = sd_card_ready() ? sd_card_scan_wav(s_wav, 16) : 0;
