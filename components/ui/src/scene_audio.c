@@ -70,7 +70,11 @@ static lv_obj_t *s_lbl_state;      /* 底部状态行 */
 static int       s_track_idx = 0;  /* 当前曲目 */
 
 /* SD 卡曲目表（扫描 /sdcard 根目录所有 .wav，最多 16 首） */
-static char s_wav[16][64];
+/** SD 卡最多支持的曲目数。64 首 * 64B = 4KB（bss，不占显存）。
+ * 早先写死 16，SD 卡里放 20 首就只显示前 16 首 —— 用户会以为"新歌没进来"。 */
+#define AUDIO_MAX_TRACKS  64
+
+static char s_wav[AUDIO_MAX_TRACKS][64];
 static int  s_wav_n;
 static int  s_wav_idx;
 static lv_obj_t *s_lbl_name;
@@ -154,8 +158,8 @@ static void build_player(void);
 static void build_playlist(void);
 
 static lv_obj_t *s_pg_box;
-static lv_obj_t *s_pg_row[16];
-static lv_obj_t *s_pg_mark[16];
+static lv_obj_t *s_pg_row[AUDIO_MAX_TRACKS];
+static lv_obj_t *s_pg_mark[AUDIO_MAX_TRACKS];
 static lv_obj_t *s_nav_btn;
 static int       s_subpage = 0;
 
@@ -201,7 +205,7 @@ static void reset_widget_ptrs(void)
     s_lbl_state = NULL;
     s_pg_box = NULL;
     s_nav_btn = NULL;
-    for (int i = 0; i < 16; i++)
+    for (int i = 0; i < AUDIO_MAX_TRACKS; i++)
     {
         s_pg_row[i] = NULL;
         s_pg_mark[i] = NULL;
@@ -256,7 +260,7 @@ static void pl_highlight(void)
     {
         return;                     /* 播放页没有歌单行，别去碰那些指针 */
     }
-    for (int i = 0; i < s_wav_n && i < 16; i++)
+    for (int i = 0; i < s_wav_n; i++)
     {
         if (s_pg_row[i] == NULL)
         {
@@ -536,7 +540,7 @@ static lv_obj_t *s_root;   /* 整页容器：切页动画用 */
 static void pl_row_cb(lv_event_t *e)
 {
     lv_obj_t *row = lv_event_get_target(e);
-    for (int i = 0; i < s_wav_n && i < 16; i++)
+    for (int i = 0; i < s_wav_n; i++)
     {
         if (s_pg_row[i] == row)
         {
@@ -751,7 +755,7 @@ static void build_player(void)
     reset_widget_ptrs();
     ui_statusbar_show(false);
 
-    s_wav_n = sd_card_ready() ? sd_card_scan_wav(s_wav, 16) : 0;
+    s_wav_n = sd_card_ready() ? sd_card_scan_wav(s_wav, AUDIO_MAX_TRACKS) : 0;
     if (s_wav_idx >= s_wav_n)
     {
         s_wav_idx = 0;
@@ -885,7 +889,7 @@ static void build_playlist(void)
     reset_widget_ptrs();
     ui_statusbar_show(false);
 
-    s_wav_n = sd_card_ready() ? sd_card_scan_wav(s_wav, 16) : 0;
+    s_wav_n = sd_card_ready() ? sd_card_scan_wav(s_wav, AUDIO_MAX_TRACKS) : 0;
     if (s_wav_idx >= s_wav_n)
     {
         s_wav_idx = 0;
@@ -946,7 +950,7 @@ static void build_playlist(void)
     {
         mk_lbl5(s_pg_box, 8, 12, &ui_font_20, P_SUB, LV_OPA_COVER, "no wav on SD card");
     }
-    for (int i = 0; i < s_wav_n && i < 16; i++)
+    for (int i = 0; i < s_wav_n; i++)
     {
         char title[64] = { 0 };
         char artist[40] = { 0 };
@@ -1019,6 +1023,55 @@ static void to_player_cb(lv_event_t *e)
     s_subpage = 0;
     build_player();
     refresh_state_ui();
+}
+
+
+/* ---------------- 自测：点击逻辑（仅 PC 模拟器调用） ----------------
+ * 模拟器没有 GUI 自动化，所以直接把各个回调按顺序调一遍，打印状态变化：
+ * 播放 -> 下一首 -> 上一首 -> 进歌单 -> 开/关音量 -> 回播放页
+ * 各个 *_cb 里都用 (void)e，可以安全传 NULL（pl_row_cb 需要事件目标，单独验证）。
+ */
+void scene_audio_selftest(void)
+{
+    printf("\n[st] ===== 音频页点击逻辑自测 =====\n");
+    printf("[st] 初始      : subpage=%d  wav_n=%d  idx=%d\n", s_subpage, s_wav_n, s_wav_idx);
+
+    if (s_btn_play == NULL)
+    {
+        printf("[st] !! 播放按钮为空，页面没构建\n");
+        return;
+    }
+
+    play_cb(NULL);
+    printf("[st] 点播放    : state=%d (2=PLAYING)  idx=%d\n",
+           (int)audio_player_state(), s_wav_idx);
+
+    next_cb(NULL);
+    printf("[st] 下一首    : idx=%d\n", s_wav_idx);
+
+    prev_cb(NULL);
+    printf("[st] 上一首    : idx=%d\n", s_wav_idx);
+
+    to_playlist_cb(NULL);
+    printf("[st] 进歌单    : subpage=%d  第一行=%s  条数=%d\n",
+           s_subpage, s_pg_row[0] != NULL ? "已创建" : "空", s_wav_n);
+
+    /* 点列表第 2 首（模拟 pl_row_cb 的效果：切歌 + 回播放页） */
+    if (s_wav_n > 1 && s_pg_row[1] != NULL)
+    {
+        lv_obj_send_event(s_pg_row[1], LV_EVENT_CLICKED, NULL);
+        printf("[st] 点第2首   : subpage=%d  idx=%d  state=%d\n",
+               s_subpage, s_wav_idx, (int)audio_player_state());
+    }
+
+    vol_btn_cb(NULL);
+    printf("[st] 开音量弹窗: panel=%s\n", s_vol_panel != NULL ? "已创建" : "空");
+    vol_btn_cb(NULL);
+    printf("[st] 关音量弹窗: panel=%s\n", s_vol_panel != NULL ? "已创建" : "空");
+
+    to_player_cb(NULL);
+    printf("[st] 回播放页  : subpage=%d\n", s_subpage);
+    printf("[st] ===== 自测结束 =====\n\n");
 }
 
 void scene_audio(uint16_t *fb, int frame)

@@ -20,6 +20,8 @@
 #include "pc_monitor.h"
 #include "sd_card.h"
 #include "ui_scenes.h"
+
+void scene_audio_selftest(void);   /* 音频页点击逻辑自测（仅模拟器） */
 #include "ui_theme.h"
 #include "wifi_sta.h"
 
@@ -177,6 +179,8 @@ int main(int argc, char **argv)
     weather_start();   /* PC 模拟：装载固定假天气数据（sim_impl.c） */
     hf_start();        /* PC 模拟：装载固定假 HF 榜单 */
 
+    bool do_selftest = false;
+
     /* 可选：--scene N 直接打开指定页面（0=WEATHER 1=MONITOR 2=AUDIO 3=SYSTEM 4=APPS） */
     for (int i = 1; i < argc; i++)
     {
@@ -192,6 +196,11 @@ int main(int argc, char **argv)
         {
             shot_path  = argv[i + 1];
             shot_after = 90;   /* 渲染 90 帧（约 1.5s）后截图 */
+        }
+        if (strcmp(argv[i], "--selftest") == 0)
+        {
+            do_selftest = true;
+            sim_scene_set(2);          /* AUDIO */
         }
         if (strcmp(argv[i], "--nosd") == 0)
         {
@@ -283,7 +292,14 @@ int main(int argc, char **argv)
         {
         case UI_SCENE_HOME:    scene_weather(NULL, frame++); break;
         case UI_SCENE_MONITOR: scene_monitor(NULL, frame++); break;
-        case UI_SCENE_AUDIO:   scene_audio(NULL, frame++);   break;
+        case UI_SCENE_AUDIO:
+            scene_audio(NULL, frame++);
+            if (do_selftest && frame == 60)   /* 等页面构建完、渲染几帧再测 */
+            {
+                scene_audio_selftest();
+                running = false;
+            }
+            break;
         case UI_SCENE_SYSTEM:  scene_system(NULL, frame++);  break;
         case UI_SCENE_APPS:    scene_home(NULL, frame++);    break;
         case UI_SCENE_HF:      scene_hf(NULL, frame++);      break;
