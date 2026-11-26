@@ -114,6 +114,21 @@ static void switch_page_async(void *arg)
     refresh_state_ui();
 }
 
+/** 点歌：起播 + 回播放页。整体放异步里 —— play_sd_by_name 内部要等旧任务退出（最多 600ms），
+ *  同步调用会把 LVGL 事件回调卡住。 */
+static void play_row_async(void *arg)
+{
+    int idx = (int)(intptr_t)arg;
+    if (idx >= 0 && idx < s_wav_n)
+    {
+        s_wav_idx = idx;
+        audio_player_play_sd_by_name(s_wav[idx]);   /* 内部会先停旧任务并等待 */
+    }
+    s_subpage = 0;
+    build_player();
+    refresh_state_ui();
+}
+
 /** 同样：关闭音量弹窗也可能是"点遮罩关自己"，必须延迟 */
 static void close_panel_async(void *arg)
 {
@@ -597,10 +612,9 @@ static void pl_row_cb(lv_event_t *e)
     {
         if (s_pg_row[i] == row)
         {
-            s_wav_idx = i;
-            audio_player_play_sd_by_name(s_wav[i]);
-            /* 回播放页要延迟：当前正处在列表行的点击回调里，同步 lv_obj_clean 会删掉这一行 */
-            lv_async_call(switch_page_async, (void *)(intptr_t)0);
+            /* 起播 + 切页都放异步：既避免 lv_obj_clean 删掉当前行，
+             * 也避免 play_sd_by_name 等旧任务时卡住事件回调 */
+            lv_async_call(play_row_async, (void *)(intptr_t)i);
             break;
         }
     }

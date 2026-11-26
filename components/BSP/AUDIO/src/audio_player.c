@@ -1281,9 +1281,21 @@ esp_err_t audio_player_play_sd_by_name(const char *name)
     {
         return ESP_ERR_INVALID_STATE;
     }
+    /* ★ 切歌必走这里：旧任务还在跑时**不能直接 return**，
+     *   否则调用方已经改了曲目索引，会出现"歌名变了、音频还在放上一首、进度条继续走"。
+     *   stop() 本身是异步的（只清 s_playing，任务自己退出），所以这里要等它退干净。 */
     if (s_task != NULL)
     {
-        return ESP_ERR_INVALID_STATE;
+        s_playing = false;
+        for (int i = 0; i < 60 && s_task != NULL; i++)   /* 最多等 600ms */
+        {
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+        if (s_task != NULL)
+        {
+            ESP_LOGW(TAG, "sd: previous task did not exit, switch aborted");
+            return ESP_ERR_TIMEOUT;
+        }
     }
     if (s_diag != 0)
     {
