@@ -7,6 +7,6 @@ rem  面板要求 PC 开机并运行本服务；服务停了面板会显示上�
 rem  开机自启：Win+R -> shell:startup -> 把本文件快捷方式放进去
 rem  注：用 python.exe 而非 pythonw（pythonw 无控制台会静默退出）
 rem ============================================================
-cd /d "%~dp0"
-start "S31 PC Monitor" /min "C:/Users/Admin/AppData/Local/Programs/Python/Python313/python.exe" "pc_monitor_server.py"
+cd /d "%~dp0."
+start "S31 PC Monitor" /min "C:\Users\Admin\AppData\Local\Programs\Python\Python313\python.exe" "pc_monitor_server.py"
 exit

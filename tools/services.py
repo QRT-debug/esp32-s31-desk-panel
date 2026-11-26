@@ -322,14 +322,15 @@ def status():
 # ---------------------------------------------------------------- 命令分发
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
-    target = sys.argv[2] if len(sys.argv) > 2 else None
+    targets = [a for a in sys.argv[2:] if a != "all"]   # 支持同时指定多个：stop asr sovits
+    target = targets[0] if targets else None
 
     if cmd == "status":
         status()
 
     elif cmd == "start":
         print("\n启动服务：")
-        names = [target] if target else list(SERVICES)
+        names = targets if targets else list(SERVICES)
         for n in names:
             if n not in SERVICES:
                 print(f"  未知服务：{n}（可选：{', '.join(SERVICES)}）")
@@ -340,14 +341,16 @@ def main():
 
     elif cmd == "stop":
         print("\n停止服务：")
-        names = [target] if target and target != "all" else list(SERVICES)
+        names = targets if targets else list(SERVICES)
         for n in names:
             if n in SERVICES:
                 stop_one(n)
+            else:
+                print(f"  未知服务：{n}（可选：{', '.join(SERVICES)}）")
         print()
 
     elif cmd == "restart":
-        names = [target] if target else list(SERVICES)
+        names = targets if targets else list(SERVICES)
         print(f"\n重启：{', '.join(names)}")
         for n in names:
             if n not in SERVICES:
