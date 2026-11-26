@@ -39,6 +39,7 @@ set(UI_SRC
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/ui/src/bg_glow.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/ui/src/album_cover.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/ui/src/play_icons.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/ui/src/vol_icon.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/ui/src/ui_voice_intent.c"
 )
 

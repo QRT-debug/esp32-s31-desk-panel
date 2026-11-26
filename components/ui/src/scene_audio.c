@@ -29,6 +29,7 @@ LV_IMG_DECLARE(bg_glow);       /* bg_glow.c，径向光晕（当前未使用） 
 LV_IMG_DECLARE(album_cover);
 LV_IMG_DECLARE(ic_play);       /* play_icons.c */
 LV_IMG_DECLARE(ic_pause);
+LV_IMG_DECLARE(ic_volume);
 
 /* ★ 11-20 01:35 主题化：原浅色硬编码全部指向 ui_theme() 色板（可切深色）。
  *   COL_BG 已无使用处（旧黑主题残留，保留定义防外链）。 */
@@ -606,10 +607,8 @@ static void mk_cover_box(lv_obj_t *p, int x, int y, int size, int radius, uint32
     lv_obj_set_style_border_width(wrap, 0, 0);
     lv_obj_set_style_radius(wrap, radius, 0);
     lv_obj_set_style_pad_all(wrap, 0, 0);
-    lv_obj_set_style_shadow_width(wrap, 26, 0);
-    lv_obj_set_style_shadow_opa(wrap, LV_OPA_40, 0);
-    lv_obj_set_style_shadow_color(wrap, lv_color_hex(sh_col), 0);
-    lv_obj_set_style_shadow_ofs_y(wrap, 7, 0);
+    /* ★ 不加阴影：圆形 + 下偏移会在底部聚成一条"月牙"，看着很脏 */
+    lv_obj_set_style_shadow_width(wrap, 0, 0);
     lv_obj_clear_flag(wrap, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
 
     lv_obj_t *img = lv_image_create(wrap);
@@ -771,23 +770,30 @@ static void build_player(void)
     }
 
     /* 音量 */
-    mk_lbl5(root, 290, 410, &ui_font_cn18, C_SUB, LV_OPA_COVER, "音量");
+    {
+        lv_obj_t *vi = lv_image_create(root);
+        lv_image_set_src(vi, &ic_volume);
+        lv_obj_set_pos(vi, 290, 400);
+        lv_obj_set_style_image_recolor(vi, lv_color_hex(C_SUB), 0);
+        lv_obj_set_style_image_recolor_opa(vi, LV_OPA_COVER, 0);
+        lv_obj_clear_flag(vi, LV_OBJ_FLAG_CLICKABLE);
+    }
     {
         lv_obj_t *vsl = lv_slider_create(root);
-        lv_obj_set_size(vsl, 260, 6);
-        lv_obj_set_pos(vsl, 348, 414);
+        lv_obj_set_size(vsl, 300, 4);
+        lv_obj_set_pos(vsl, 342, 422);
         lv_slider_set_range(vsl, 0, 100);
         lv_slider_set_value(vsl, audio_player_get_volume(), LV_ANIM_OFF);
         lv_obj_set_style_bg_color(vsl, lv_color_hex(C_ACCENT_L2), LV_PART_MAIN);
         lv_obj_set_style_bg_opa(vsl, LV_OPA_COVER, LV_PART_MAIN);
         lv_obj_set_style_bg_color(vsl, lv_color_hex(C_ACCENT), LV_PART_INDICATOR);
         lv_obj_set_style_bg_color(vsl, lv_color_hex(C_ACCENT), LV_PART_KNOB);
-        lv_obj_set_style_pad_all(vsl, 3, LV_PART_KNOB);
+        lv_obj_set_style_pad_all(vsl, 4, LV_PART_KNOB);
         lv_obj_set_style_radius(vsl, LV_RADIUS_CIRCLE, LV_PART_KNOB);
         lv_obj_set_style_shadow_width(vsl, 0, LV_PART_KNOB);
         lv_obj_add_event_cb(vsl, slider_cb, LV_EVENT_VALUE_CHANGED, NULL);
     }
-    s_lbl_vol = mk_lbl5(root, 622, 406, &ui_font_20, C_TITLE, LV_OPA_COVER, "40");
+    s_lbl_vol = mk_lbl5(root, 660, 410, &ui_font_14, C_SUB, LV_OPA_COVER, "40");
 
     s_lbl_state = mk_lbl5(root, 320, 424, &ui_font_14, P_SUB, LV_OPA_0, "");
 }
