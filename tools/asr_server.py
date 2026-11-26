@@ -609,7 +609,7 @@ def fetch_chat(user_text):
                      + list(_CHAT_HIST)
                      + [{"role": "user", "content": user_text}]),
         "temperature": 0.8,
-        "max_tokens": 120,
+        "max_tokens": 220,      # 80 汉字 ≈ 120~160 token，留余量；人设也同步放宽到 80 字
         "stream": False,
     }
     hdrs = {"Content-Type": "application/json"}
