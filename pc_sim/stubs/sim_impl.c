@@ -327,6 +327,8 @@ int sd_card_scan_wav(char names[][64], int max)
     return n;
 }
 
+void sd_card_ensure_dirs(void) { /* PC 模拟：无文件系统 */ }
+
 bool sd_card_find_first_wav(char *name, size_t len)
 {
     snprintf(name, len, "%s", k_fake_wav[0]);

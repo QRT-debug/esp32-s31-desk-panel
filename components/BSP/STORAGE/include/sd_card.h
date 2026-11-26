@@ -45,3 +45,6 @@ bool sd_card_find_first_wav(char *name, size_t len);
 /** 扫描 /sdcard 根目录所有 .wav，按文件名升序写入 names（每项 64 字节）。
  *  返回找到的数量（最多 max 个）；未挂载返回 0。 */
 int sd_card_scan_wav(char names[][64], int max);
+
+/** 确保标准目录存在（music/wallpaper/voice/debug/data/font/cache/update）。幂等。 */
+void sd_card_ensure_dirs(void);

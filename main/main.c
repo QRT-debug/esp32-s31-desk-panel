@@ -191,6 +191,12 @@ void app_main(void)
         /* TF 卡（SDMMC 4-bit）：挂到 /sdcard；失败不阻塞（回退 /music 分区） */
         sd_card_mount();
 
+        /* 挂载成功后确保标准目录存在：插一张新卡进去也能直接看到 music/ wallpaper/ 等结构 */
+        if (sd_card_ready())
+        {
+            sd_card_ensure_dirs();
+        }
+
         /* 麦克风开机自检：连读 5 次（看电平是否从上电瞬态衰减到稳态） */
         vTaskDelay(pdMS_TO_TICKS(1500));
         for (int i = 0; i < 5; i++)

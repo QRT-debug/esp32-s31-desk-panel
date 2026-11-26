@@ -8,6 +8,7 @@
 #include "sd_card.h"
 
 #include <dirent.h>
+#include <sys/stat.h>   /* mkdir */
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -231,6 +232,52 @@ static int cmp_str(const void *a, const void *b)
     return strcmp((const char *)a, (const char *)b);
 }
 
+/** 扫一个目录里的 .wav（内部工具，返回扫到的数量） */
+static int scan_dir_wav(const char *dir, char names[][64], int max, int n0)
+{
+    DIR *d = opendir(dir);
+    if (d == NULL)
+    {
+        return n0;
+    }
+    int n = n0;
+    struct dirent *e;
+    while ((e = readdir(d)) != NULL && n < max)
+    {
+        size_t len = strlen(e->d_name);
+        if (len > 4 && len < 64 &&
+            strcmp(e->d_name, "voice_last.wav") != 0 &&   /* 语音调试文件必须排除 */
+            e->d_name[len - 4] == '.' &&
+            (e->d_name[len - 3] == 'w' || e->d_name[len - 3] == 'W') &&
+            (e->d_name[len - 2] == 'a' || e->d_name[len - 2] == 'A') &&
+            (e->d_name[len - 1] == 'v' || e->d_name[len - 1] == 'V'))
+        {
+            /* 同名去重：music/ 和根目录都可能有同一首 */
+            bool dup = false;
+            for (int i = 0; i < n; i++)
+            {
+                if (strcmp(names[i], e->d_name) == 0)
+                {
+                    dup = true;
+                    break;
+                }
+            }
+            if (!dup)
+            {
+                snprintf(names[n], 64, "%s", e->d_name);
+                n++;
+            }
+        }
+    }
+    closedir(d);
+    return n;
+}
+
+/**
+ * 扫描 SD 卡里的 .wav 曲目。
+ * ★ 目录顺序：/sdcard/music 优先，再扫根目录（兼容旧卡片布局）。
+ *   这样"音乐放子目录"和"音乐直接丢根目录"两种用法都能用，不需要用户记规则。
+ */
 int sd_card_scan_wav(char names[][64], int max)
 {
     if (!s_ready || names == NULL || max <= 0)
@@ -238,29 +285,9 @@ int sd_card_scan_wav(char names[][64], int max)
         return 0;
     }
 
-    DIR *d = opendir("/sdcard");
-    if (d == NULL)
-    {
-        return 0;
-    }
-
     int n = 0;
-    struct dirent *e;
-    while ((e = readdir(d)) != NULL && n < max)
-    {
-        size_t len = strlen(e->d_name);
-        if (len > 4 && len < 64 &&
-            strcmp(e->d_name, "voice_last.wav") != 0 &&   /* ★ 同上：语音调试文件必须排除 */
-            e->d_name[len - 4] == '.' &&
-            (e->d_name[len - 3] == 'w' || e->d_name[len - 3] == 'W') &&
-            (e->d_name[len - 2] == 'a' || e->d_name[len - 2] == 'A') &&
-            (e->d_name[len - 1] == 'v' || e->d_name[len - 1] == 'V'))
-        {
-            snprintf(names[n], 64, "%s", e->d_name);
-            n++;
-        }
-    }
-    closedir(d);
+    n = scan_dir_wav("/sdcard/music", names, max, n);
+    n = scan_dir_wav("/sdcard", names, max, n);
 
     if (n > 1)
     {
@@ -268,6 +295,20 @@ int sd_card_scan_wav(char names[][64], int max)
     }
     ESP_LOGI(TAG, "scan: %d wav file(s)", n);
     return n;
+}
+
+/** 确保标准目录存在（幂等，已存在时 mkdir 返回 EEXIST 无害） */
+void sd_card_ensure_dirs(void)
+{
+    static const char *dirs[] = {
+        "/sdcard/music", "/sdcard/wallpaper", "/sdcard/voice",
+        "/sdcard/debug", "/sdcard/data", "/sdcard/font",
+        "/sdcard/cache", "/sdcard/update",
+    };
+    for (size_t i = 0; i < sizeof(dirs) / sizeof(dirs[0]); i++)
+    {
+        mkdir(dirs[i], 0777);
+    }
 }
 
 esp_err_t sd_card_unmount(void)

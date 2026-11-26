@@ -1153,9 +1153,14 @@ static void sd_task(void *arg)
     }
 
     char path[96];
-    snprintf(path, sizeof(path), "/sdcard/%s", name);
-
+    /* ★ 优先 /sdcard/music，回退根目录：兼容"音乐放子目录"和"音乐直接放根目录"两种卡 */
+    snprintf(path, sizeof(path), "/sdcard/music/%s", name);
     FILE *f = fopen(path, "rb");
+    if (f == NULL)
+    {
+        snprintf(path, sizeof(path), "/sdcard/%s", name);
+        f = fopen(path, "rb");
+    }
     if (f == NULL)
     {
         ESP_LOGE(TAG, "sd: open %s failed", path);
