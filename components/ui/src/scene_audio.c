@@ -59,10 +59,6 @@ LV_IMG_DECLARE(album_cover);   /* album_cover.c，190x190 圆角插画封面 */
 #define A_SUB    0x8A93A3
 #define A_ACCENT 0x8B5CF6
 
-static const uint32_t COVER_COLORS[6] = {
-    0x5B8DEF, 0xE86A92, 0xF59E0B, 0x2DD4BF, 0x8B5CF6, 0x38BDF8,
-};
-
 
 static lv_obj_t *s_btn_play;
 static lv_obj_t *s_lbl_play;       /* 播放按钮里的字 */
@@ -497,7 +493,9 @@ static void split_name(const char *src, char *title, size_t tcap,
                        char *artist, size_t acap)
 {
     char nm[72];
-    snprintf(nm, sizeof(nm), "%s", src);
+    /* ★ 用 %.71s 而不是 %s：GCC 的 -Wformat-truncation 会按源串的**最坏长度**判断，
+     *   即使运行时不会超长也会报"可能截断"，真机 -Werror 直接失败。 */
+    snprintf(nm, sizeof(nm), "%.71s", src);
     char *dot = strrchr(nm, '.');
     if (dot != NULL)
     {
@@ -510,11 +508,11 @@ static void split_name(const char *src, char *title, size_t tcap,
         if (n >= tcap) { n = tcap - 1; }
         memcpy(artist, nm, n);
         artist[n] = '\0';
-        snprintf(title, tcap, "%s", sep + 3);
+        snprintf(title, tcap, "%.*s", (int)(tcap - 1), sep + 3);
     }
     else
     {
-        snprintf(title, tcap, "%s", nm);
+        snprintf(title, tcap, "%.*s", (int)(tcap - 1), nm);
         artist[0] = '\0';
     }
 }
