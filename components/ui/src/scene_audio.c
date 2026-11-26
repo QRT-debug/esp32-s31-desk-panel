@@ -138,7 +138,7 @@ static void pl_highlight(void)
         /* 蓝底上用半透明白高亮（紫色在这页看不出来） */
         bool cur = (i == s_wav_idx);
         lv_obj_set_style_bg_color(s_pl_row[i], lv_color_hex(0xFFFFFF), 0);
-        lv_obj_set_style_bg_opa(s_pl_row[i], cur ? LV_OPA_40 : LV_OPA_TRANSP, 0);
+        lv_obj_set_style_bg_opa(s_pl_row[i], cur ? LV_OPA_30 : LV_OPA_TRANSP, 0);
     }
 }
 
@@ -474,10 +474,10 @@ static void mk_cover(lv_obj_t *p, int x, int y, int size, uint32_t col)
  *   右栏 = 序号 + 歌名 + 右侧歌手（**没有缩略图**，参考图就是这样）
  */
 
-#define M_BG     0x7DD3FC      /* 天空蓝（sky-300）：明亮但不刺眼 */
-#define M_ACC    0x1E40AF      /* 强调色：深蓝（浅底上够清晰） */
-#define M_TXT    0x0B2B3C      /* 主文字：深蓝黑（浅底上的对比度约 8:1） */
-#define M_SUB    0x2C5A72      /* 次要文字：中蓝 */
+#define M_BG     0x0284C7      /* 天空蓝（sky-600）：白字对比度 4.5:1；再浅白字就看不清了 */
+#define M_ACC    0x7DD3FC      /* 强调：亮天空蓝（按钮/高亮/播放键） */
+#define M_TXT    0xFFFFFF      /* 主文字：白 */
+#define M_SUB    0xD6E4FF      /* 次要文字：浅蓝白 */
 
 static lv_obj_t *mk_lbl3(lv_obj_t *p, int x, int y, const lv_font_t *f,
                          uint32_t col, lv_opa_t opa, const char *txt)
@@ -530,7 +530,7 @@ static void build_audio(void)
 {
     lv_obj_t *scr = lv_screen_active();
     lv_obj_clean(scr);
-    ui_statusbar_show(true);             /* 浅色页，状态栏同色系可以留 */
+    ui_statusbar_show(false);            /* 深蓝底：浅色状态栏那块白很跳 */
 
     s_wav_n = sd_card_ready() ? sd_card_scan_wav(s_wav, 16) : 0;
     if (s_wav_idx >= s_wav_n)
@@ -563,7 +563,7 @@ static void build_audio(void)
         lv_obj_set_pos(back, 14, 8);
         lv_obj_set_style_radius(back, LV_RADIUS_CIRCLE, 0);
         lv_obj_set_style_bg_color(back, lv_color_hex(0xFFFFFF), 0);
-        lv_obj_set_style_bg_opa(back, LV_OPA_40, 0);
+        lv_obj_set_style_bg_opa(back, LV_OPA_30, 0);
         lv_obj_set_style_border_width(back, 0, 0);
         lv_obj_set_style_shadow_width(back, 0, 0);
         lv_obj_add_event_cb(back, home_cb, LV_EVENT_CLICKED, NULL);
@@ -611,7 +611,7 @@ static void build_audio(void)
         lv_obj_set_size(pb, 150, 38);
         lv_obj_set_pos(pb, 20, 330);
         lv_obj_set_style_radius(pb, 19, 0);
-        lv_obj_set_style_bg_color(pb, lv_color_hex(M_ACC), 0);
+        lv_obj_set_style_bg_color(pb, lv_color_hex(M_ACC), 0);   /* 亮天蓝块 */
         lv_obj_set_style_bg_opa(pb, LV_OPA_30, 0);
         lv_obj_set_style_border_width(pb, 0, 0);
         lv_obj_set_style_shadow_width(pb, 0, 0);
@@ -619,7 +619,7 @@ static void build_audio(void)
 
         s_lbl_play = lv_label_create(pb);
         lv_obj_set_style_text_font(s_lbl_play, &ui_font_cn18, 0);   /* ★ 含中文，必须 cn18 */
-        lv_obj_set_style_text_color(s_lbl_play, lv_color_hex(0xFFFFFF), 0);
+        lv_obj_set_style_text_color(s_lbl_play, lv_color_hex(0x06283D), 0);
         lv_label_set_text(s_lbl_play, "> 播放全部");
         lv_obj_center(s_lbl_play);
         s_btn_play = pb;
