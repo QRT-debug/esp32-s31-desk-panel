@@ -77,7 +77,6 @@ static int       s_track_idx = 0;  /* 当前曲目 */
 static char s_wav[AUDIO_MAX_TRACKS][64];
 static int  s_wav_n;
 static int  s_wav_idx;
-static lv_obj_t *s_lbl_name;
 
 /* 两级页面：0=播放页 1=歌单页 */
 static void to_playlist_cb(lv_event_t *e);
@@ -356,13 +355,13 @@ static const char *current_short_name(void)
 
 static void update_track_label(void)
 {
-    if (s_lbl_name == NULL)
+    if (s_lbl_title == NULL)     /* 旧版是 s_lbl_name，那个控件已经不存在了 */
     {
         return;
     }
     if (s_wav_n <= 0)
     {
-        lv_label_set_text(s_lbl_name, "no wav on SD card");
+        lv_label_set_text(s_lbl_title, "no wav on SD card");
         if (s_lbl_title != NULL)
         {
             lv_label_set_text(s_lbl_title, "No track");
@@ -371,16 +370,12 @@ static void update_track_label(void)
     }
 
     char nm[64];
-    snprintf(nm, sizeof(nm), "%s", s_wav[s_wav_idx]);
+    snprintf(nm, sizeof(nm), "%.63s", s_wav[s_wav_idx]);
     char *dot = strrchr(nm, '.');
     if (dot != NULL)
     {
         *dot = '\0';
     }
-
-    char b[96];
-    snprintf(b, sizeof(b), "%d/%d   %s", s_wav_idx + 1, s_wav_n, nm);
-    lv_label_set_text(s_lbl_name, b);
 
     if (s_lbl_title != NULL)
     {
@@ -396,7 +391,15 @@ static void prev_cb(lv_event_t *e)
         return;
     }
     s_wav_idx = (s_wav_idx - 1 + s_wav_n) % s_wav_n;
-    update_track_label();
+    /* ★ 播放中必须真的切歌：之前只改索引和标签，音频还在放上一首 */
+    if (audio_player_state() != AUD_STATE_IDLE)
+    {
+        start_current_track();
+    }
+    else if (s_lbl_title != NULL)
+    {
+        lv_label_set_text(s_lbl_title, current_short_name());
+    }
 }
 
 static void next_cb(lv_event_t *e)
@@ -407,7 +410,14 @@ static void next_cb(lv_event_t *e)
         return;
     }
     s_wav_idx = (s_wav_idx + 1) % s_wav_n;
-    update_track_label();
+    if (audio_player_state() != AUD_STATE_IDLE)
+    {
+        start_current_track();
+    }
+    else if (s_lbl_title != NULL)
+    {
+        lv_label_set_text(s_lbl_title, current_short_name());
+    }
 }
 
 static void play_current_cb(lv_event_t *e)
@@ -1052,10 +1062,11 @@ void scene_audio_selftest(void)
            (int)audio_player_state(), s_wav_idx);
 
     next_cb(NULL);
-    printf("[st] 下一首    : idx=%d\n", s_wav_idx);
+    printf("[st] 下一首    : idx=%d  state=%d (应为 2，播放中切歌要接着放)\n",
+           s_wav_idx, (int)audio_player_state());
 
     prev_cb(NULL);
-    printf("[st] 上一首    : idx=%d\n", s_wav_idx);
+    printf("[st] 上一首    : idx=%d  state=%d\n", s_wav_idx, (int)audio_player_state());
 
     to_playlist_cb(NULL);
     printf("[st] 进歌单    : subpage=%d  第一行=%s  条数=%d\n",
