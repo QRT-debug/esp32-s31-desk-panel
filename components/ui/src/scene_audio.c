@@ -684,11 +684,11 @@ static lv_obj_t *mk_lbl5(lv_obj_t *p, int x, int y, const lv_font_t *f,
 static void mk_cover_box(lv_obj_t *p, int x, int y, int size, int radius, uint32_t sh_col)
 {
     lv_obj_t *wrap = lv_obj_create(p);
-    lv_obj_set_size(wrap, size, size);
-    lv_obj_set_pos(wrap, x, y);
+    lv_obj_set_size(wrap, size + 10, size + 10);   /* 留 5px 余量给 clip */
+    lv_obj_set_pos(wrap, x - 5, y - 5);
     lv_obj_set_style_bg_opa(wrap, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(wrap, 0, 0);
-    lv_obj_set_style_radius(wrap, radius, 0);
+    lv_obj_set_style_radius(wrap, radius + 5, 0);
     lv_obj_set_style_pad_all(wrap, 0, 0);
     /* ★ 不加阴影：圆形 + 下偏移会在底部聚成一条"月牙"，看着很脏 */
     lv_obj_set_style_shadow_width(wrap, 0, 0);
@@ -775,20 +775,20 @@ static void build_player(void)
     build_topbar(root, "Music", C_TITLE, "歌单 >", to_playlist_cb);
 
     /* 大封面 */
-    mk_cover_box(root, 45, 145, 190, 95, C_SHADOW);   /* 左侧区域垂直居中 */
+    mk_cover_box(root, 38, 128, 220, 110, C_SHADOW);   /* 220 圆形，垂直居中 */
 
     /* 右侧信息 */
-    s_lbl_title  = mk_lbl5(root, 290, 150, &ui_font_28, C_TITLE, LV_OPA_COVER, "No track");
+    s_lbl_title  = mk_lbl5(root, 300, 138, &ui_font_32, C_TITLE, LV_OPA_COVER, "No track");
     {
         char b[48];
         snprintf(b, sizeof(b), "%d songs  /  SD CARD", s_wav_n);
-        s_lbl_artist = mk_lbl5(root, 290, 192, &ui_font_14, C_SUB, LV_OPA_COVER, b);
+        s_lbl_artist = mk_lbl5(root, 300, 184, &ui_font_14, C_SUB, LV_OPA_COVER, b);
     }
 
     /* 进度 */
     s_bar = lv_bar_create(root);
-    lv_obj_set_size(s_bar, 440, 6);
-    lv_obj_set_pos(s_bar, 290, 250);
+    lv_obj_set_size(s_bar, 470, 6);
+    lv_obj_set_pos(s_bar, 300, 252);
     lv_bar_set_range(s_bar, 0, 1000);
     lv_bar_set_value(s_bar, 0, LV_ANIM_OFF);
     lv_obj_set_style_bg_color(s_bar, lv_color_hex(C_ACCENT_L2), LV_PART_MAIN);
@@ -797,16 +797,16 @@ static void build_player(void)
     lv_obj_set_style_bg_color(s_bar, lv_color_hex(C_ACCENT), LV_PART_INDICATOR);
     lv_obj_set_style_radius(s_bar, 3, LV_PART_INDICATOR);
 
-    s_lbl_pos = mk_lbl5(root, 290, 264, &ui_font_14, C_SUB, LV_OPA_COVER, "0:00");
-    s_lbl_dur = mk_lbl5(root, 692, 264, &ui_font_14, C_SUB, LV_OPA_COVER, "0:00");
+    s_lbl_pos = mk_lbl5(root, 300, 266, &ui_font_14, C_SUB, LV_OPA_COVER, "0:00");
+    s_lbl_dur = mk_lbl5(root, 732, 266, &ui_font_14, C_SUB, LV_OPA_COVER, "0:00");
     lv_obj_set_width(s_lbl_dur, 38);
     lv_obj_set_style_text_align(s_lbl_dur, LV_TEXT_ALIGN_RIGHT, 0);
 
     /* 传输控制：上一首 / 播放 / 下一首 */
     {
         lv_obj_t *bp = lv_button_create(root);
-        lv_obj_set_size(bp, 48, 48);
-        lv_obj_set_pos(bp, 330, 314);
+        lv_obj_set_size(bp, 54, 54);
+        lv_obj_set_pos(bp, 336, 312);
         lv_obj_set_style_radius(bp, LV_RADIUS_CIRCLE, 0);
         lv_obj_set_style_bg_color(bp, lv_color_hex(C_CARD), 0);
         lv_obj_set_style_bg_opa(bp, LV_OPA_COVER, 0);
@@ -821,8 +821,8 @@ static void build_player(void)
     }
     {
         s_btn_play = lv_button_create(root);
-        lv_obj_set_size(s_btn_play, 84, 84);
-        lv_obj_set_pos(s_btn_play, 402, 296);
+        lv_obj_set_size(s_btn_play, 96, 96);
+        lv_obj_set_pos(s_btn_play, 414, 291);
         lv_obj_set_style_radius(s_btn_play, LV_RADIUS_CIRCLE, 0);
         lv_obj_set_style_bg_color(s_btn_play, lv_color_hex(C_ACCENT), 0);
         lv_obj_set_style_border_width(s_btn_play, 0, 0);
@@ -837,8 +837,8 @@ static void build_player(void)
     }
     {
         lv_obj_t *bn = lv_button_create(root);
-        lv_obj_set_size(bn, 48, 48);
-        lv_obj_set_pos(bn, 506, 314);
+        lv_obj_set_size(bn, 54, 54);
+        lv_obj_set_pos(bn, 534, 312);
         lv_obj_set_style_radius(bn, LV_RADIUS_CIRCLE, 0);
         lv_obj_set_style_bg_color(bn, lv_color_hex(C_CARD), 0);
         lv_obj_set_style_bg_opa(bn, LV_OPA_COVER, 0);
@@ -855,8 +855,8 @@ static void build_player(void)
     /* 底部：喇叭按钮（点击呼出音量弹窗；低频操作不该常驻占版面） */
     {
         lv_obj_t *vb = lv_button_create(root);
-        lv_obj_set_size(vb, 36, 36);
-        lv_obj_set_pos(vb, 572, 324);   /* 与 ⏭ 同一排，作为工具栏的一员 */
+        lv_obj_set_size(vb, 40, 40);
+        lv_obj_set_pos(vb, 612, 319);   /* 与 ⏭ 同一排，作为工具栏的一员 */
         lv_obj_set_style_radius(vb, LV_RADIUS_CIRCLE, 0);
         lv_obj_set_style_bg_color(vb, lv_color_hex(C_CARD), 0);
         lv_obj_set_style_bg_opa(vb, LV_OPA_COVER, 0);
