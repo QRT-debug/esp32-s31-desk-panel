@@ -472,8 +472,8 @@ static void mk_cover(lv_obj_t *p, int x, int y, int size, uint32_t col)
  *   右栏 = 序号 + 歌名 + 右侧歌手（**没有缩略图**，参考图就是这样）
  */
 
-#define M_TOP    0x1D4ED8      /* 渐变：深蓝 */
-#define M_BOT    0x38BDF8      /*       亮青 */
+#define M_TOP    0x1E3A8A      /* 渐变：深靛蓝（不是亮蓝，太亮会发荧光） */
+#define M_BOT    0x1E40AF      /*       深蓝（与顶几乎同色，只留极轻层次） */
 #define M_WHITE  0xFFFFFF
 #define M_SOFT   0xD6E4FF      /* 次要文字（配合 text_opa 用） */
 
@@ -579,8 +579,8 @@ static void build_audio(void)
         lv_obj_set_size(cover, 200, 200);
         lv_obj_set_pos(cover, 20, 56);
         lv_obj_set_style_radius(cover, 16, 0);
-        lv_obj_set_style_bg_color(cover, lv_color_hex(0x6366F1), 0);
-        lv_obj_set_style_bg_grad_color(cover, lv_color_hex(0x22D3EE), 0);
+        lv_obj_set_style_bg_color(cover, lv_color_hex(0x4F46E5), 0);
+        lv_obj_set_style_bg_grad_color(cover, lv_color_hex(0x3B82F6), 0);
         lv_obj_set_style_bg_grad_dir(cover, LV_GRAD_DIR_VER, 0);
         lv_obj_set_style_bg_opa(cover, LV_OPA_COVER, 0);
         lv_obj_set_style_border_width(cover, 0, 0);
