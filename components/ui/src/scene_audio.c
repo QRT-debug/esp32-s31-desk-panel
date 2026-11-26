@@ -78,6 +78,78 @@ static lv_obj_t *s_lbl_name;
 /* 两级页面：0=播放页 1=歌单页 */
 static void to_playlist_cb(lv_event_t *e);
 static void to_player_cb(lv_event_t *e);
+/* 前向声明：下面的弹窗函数用到这些（定义在文件后半部） */
+static lv_obj_t *mk_lbl5(lv_obj_t *p, int x, int y, const lv_font_t *f,
+                         uint32_t col, lv_opa_t opa, const char *txt);
+static void slider_cb(lv_event_t *e);
+static void close_vol_panel(void);
+
+static lv_obj_t *s_vol_panel = NULL;    /* 音量弹窗（按需创建/销毁） */
+
+/* 音量弹窗：低频操作，按需呼出，不占常驻页面 */
+static void vol_btn_cb(lv_event_t *e)
+{
+    (void)e;
+    if (s_vol_panel != NULL)
+    {
+        close_vol_panel();
+        return;
+    }
+
+    lv_obj_t *mask = lv_obj_create(lv_screen_active());
+    lv_obj_set_size(mask, 800, 480);
+    lv_obj_set_pos(mask, 0, 0);
+    lv_obj_set_style_bg_color(mask, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(mask, LV_OPA_40, 0);
+    lv_obj_set_style_border_width(mask, 0, 0);
+    lv_obj_set_style_radius(mask, 0, 0);
+    lv_obj_set_style_pad_all(mask, 0, 0);
+    lv_obj_clear_flag(mask, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(mask, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(mask, vol_btn_cb, LV_EVENT_CLICKED, NULL);   /* 点遮罩关闭 */
+    s_vol_panel = mask;
+
+    lv_obj_t *card = lv_obj_create(mask);
+    lv_obj_set_size(card, 440, 132);
+    lv_obj_center(card);
+    lv_obj_set_style_bg_color(card, lv_color_hex(C_CARD), 0);
+    lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(card, 22, 0);
+    lv_obj_set_style_border_width(card, 0, 0);
+    lv_obj_set_style_pad_all(card, 0, 0);
+    lv_obj_set_style_shadow_width(card, 40, 0);
+    lv_obj_set_style_shadow_opa(card, LV_OPA_30, 0);
+    lv_obj_set_style_shadow_color(card, lv_color_hex(C_SHADOW), 0);
+    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+
+    mk_lbl5(card, 30, 22, &ui_font_cn18, C_TITLE, LV_OPA_COVER, "音量");
+
+    lv_obj_t *ic = lv_image_create(card);
+    lv_image_set_src(ic, &ic_volume);
+    lv_obj_set_pos(ic, 30, 62);
+    lv_obj_set_style_image_recolor(ic, lv_color_hex(C_SUB), 0);
+    lv_obj_set_style_image_recolor_opa(ic, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(ic, LV_OBJ_FLAG_CLICKABLE);
+
+    lv_obj_t *sl = lv_slider_create(card);
+    lv_obj_set_size(sl, 290, 8);
+    lv_obj_set_pos(sl, 90, 82);
+    lv_slider_set_range(sl, 0, 100);
+    lv_slider_set_value(sl, audio_player_get_volume(), LV_ANIM_OFF);
+    lv_obj_set_style_bg_color(sl, lv_color_hex(C_ACCENT_L2), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(sl, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(sl, lv_color_hex(C_ACCENT), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(sl, lv_color_hex(C_ACCENT), LV_PART_KNOB);
+    lv_obj_set_style_pad_all(sl, 5, LV_PART_KNOB);
+    lv_obj_set_style_radius(sl, LV_RADIUS_CIRCLE, LV_PART_KNOB);
+    lv_obj_set_style_shadow_width(sl, 0, LV_PART_KNOB);
+    lv_obj_add_event_cb(sl, slider_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    char vb[8];
+    snprintf(vb, sizeof(vb), "%d", audio_player_get_volume());
+    s_lbl_vol = mk_lbl5(card, 396, 70, &ui_font_20, C_TITLE, LV_OPA_COVER, vb);
+}
+
 static void build_player(void);
 static void build_playlist(void);
 
@@ -105,8 +177,19 @@ static lv_obj_t *s_lbl_diag;
  *   静态指针仍然指向被释放的内存。下一帧刷新（进度条每 100ms、状态轮询每 20ms）
  *   就会往野指针里写字 ⇒ Guru Meditation（真机实测崩过一次）。
  */
+static void close_vol_panel(void)
+{
+    if (s_vol_panel != NULL)
+    {
+        lv_obj_delete(s_vol_panel);
+        s_vol_panel = NULL;
+        s_lbl_vol = NULL;          /* 弹窗里的数字标签已随弹窗销毁 */
+    }
+}
+
 static void reset_widget_ptrs(void)
 {
+    s_vol_panel = NULL;
     s_bar = NULL;
     s_lbl_pos = NULL;
     s_lbl_dur = NULL;
@@ -769,31 +852,26 @@ static void build_player(void)
         lv_obj_center(l);
     }
 
-    /* 音量 */
+    /* 底部：喇叭按钮（点击呼出音量弹窗；低频操作不该常驻占版面） */
     {
-        lv_obj_t *vi = lv_image_create(root);
+        lv_obj_t *vb = lv_button_create(root);
+        lv_obj_set_size(vb, 52, 52);
+        lv_obj_set_pos(vb, 418, 400);   /* 与播放键同一竖轴（中心 x=444） */
+        lv_obj_set_style_radius(vb, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_bg_color(vb, lv_color_hex(C_CARD), 0);
+        lv_obj_set_style_bg_opa(vb, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(vb, 0, 0);
+        lv_obj_set_style_shadow_width(vb, 0, 0);
+        lv_obj_add_event_cb(vb, vol_btn_cb, LV_EVENT_CLICKED, NULL);
+
+        lv_obj_t *vi = lv_image_create(vb);
         lv_image_set_src(vi, &ic_volume);
-        lv_obj_set_pos(vi, 290, 400);
-        lv_obj_set_style_image_recolor(vi, lv_color_hex(C_SUB), 0);
+        lv_obj_set_style_image_recolor(vi, lv_color_hex(C_ACCENT), 0);
         lv_obj_set_style_image_recolor_opa(vi, LV_OPA_COVER, 0);
+        lv_obj_center(vi);
         lv_obj_clear_flag(vi, LV_OBJ_FLAG_CLICKABLE);
     }
-    {
-        lv_obj_t *vsl = lv_slider_create(root);
-        lv_obj_set_size(vsl, 300, 4);
-        lv_obj_set_pos(vsl, 342, 422);
-        lv_slider_set_range(vsl, 0, 100);
-        lv_slider_set_value(vsl, audio_player_get_volume(), LV_ANIM_OFF);
-        lv_obj_set_style_bg_color(vsl, lv_color_hex(C_ACCENT_L2), LV_PART_MAIN);
-        lv_obj_set_style_bg_opa(vsl, LV_OPA_COVER, LV_PART_MAIN);
-        lv_obj_set_style_bg_color(vsl, lv_color_hex(C_ACCENT), LV_PART_INDICATOR);
-        lv_obj_set_style_bg_color(vsl, lv_color_hex(C_ACCENT), LV_PART_KNOB);
-        lv_obj_set_style_pad_all(vsl, 4, LV_PART_KNOB);
-        lv_obj_set_style_radius(vsl, LV_RADIUS_CIRCLE, LV_PART_KNOB);
-        lv_obj_set_style_shadow_width(vsl, 0, LV_PART_KNOB);
-        lv_obj_add_event_cb(vsl, slider_cb, LV_EVENT_VALUE_CHANGED, NULL);
-    }
-    s_lbl_vol = mk_lbl5(root, 660, 410, &ui_font_14, C_SUB, LV_OPA_COVER, "40");
+    s_lbl_vol = NULL;      /* 音量数字只在弹窗里，弹窗关闭时为空 */
 
     s_lbl_state = mk_lbl5(root, 320, 424, &ui_font_14, P_SUB, LV_OPA_0, "");
 }
