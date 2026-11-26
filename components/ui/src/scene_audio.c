@@ -233,6 +233,15 @@ static void set_playing_ui(bool on, const char *what)
     {
         lv_image_set_src(s_lbl_play, on ? &ic_pause : &ic_play);
     }
+    /* ★ 按钮配色必须在这里统一管：之前只在 LOADING 分支设了红色，
+     *   停止/空闲没有任何地方恢复紫色，所以按一次播放后按钮永远是红的。 */
+    if (s_btn_play != NULL)
+    {
+        lv_obj_set_style_bg_color(s_btn_play,
+                                  lv_color_hex(on ? 0xE8556D : C_ACCENT),
+                                  LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
+
     /* ★ 必须判 NULL：歌单页没有这个控件（reset_widget_ptrs 已置 NULL），
      *   而状态轮询每 20ms 都会调到这里 —— 少了这个判断就是野指针写入，实测崩溃。 */
     if (s_lbl_title == NULL)
@@ -246,7 +255,9 @@ static void set_playing_ui(bool on, const char *what)
     }
     else
     {
-        snprintf(b, sizeof(b), "No track");
+        /* 空闲时显示"当前选中的曲目"，而不是写死的 No track */
+        const char *nm = current_short_name();
+        snprintf(b, sizeof(b), "%.63s", (nm != NULL) ? nm : "no track");
     }
     lv_label_set_text(s_lbl_title, b);
 }
@@ -283,12 +294,13 @@ static void refresh_state_ui(void)
     }
     else if (st == AUD_STATE_LOADING)
     {
+        set_playing_ui(true, current_short_name());
         char b[80];
-        lv_image_set_src(s_lbl_play, &ic_pause);
-        lv_obj_set_style_bg_color(s_btn_play, lv_color_hex(0xE8556D),
-                                  LV_PART_MAIN | LV_STATE_DEFAULT);
         snprintf(b, sizeof(b), "loading %s ...", current_short_name());
-        lv_label_set_text(s_lbl_state, b);
+        if (s_lbl_state != NULL)
+        {
+            lv_label_set_text(s_lbl_state, b);
+        }
     }
     else
     {
@@ -359,13 +371,13 @@ static void update_track_label(void)
     {
         return;
     }
+    if (s_lbl_title == NULL)
+    {
+        return;
+    }
     if (s_wav_n <= 0)
     {
         lv_label_set_text(s_lbl_title, "no wav on SD card");
-        if (s_lbl_title != NULL)
-        {
-            lv_label_set_text(s_lbl_title, "No track");
-        }
         return;
     }
 
@@ -797,7 +809,7 @@ static void build_player(void)
     mk_cover_box(root, 38, 128, 220, 110);     /* radius = size/2 -> 圆 */
 
     /* 右侧信息 */
-    s_lbl_title  = mk_lbl5(root, 300, 138, &ui_font_32, C_TITLE, LV_OPA_COVER, "No track");
+    s_lbl_title  = mk_lbl5(root, 300, 138, &ui_font_32, C_TITLE, LV_OPA_COVER, current_short_name());
     {
         char b[48];
         snprintf(b, sizeof(b), "%d songs  /  SD CARD", s_wav_n);
