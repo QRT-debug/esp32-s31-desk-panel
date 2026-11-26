@@ -26,7 +26,9 @@
 #include "ui_theme.h"
 
 LV_IMG_DECLARE(bg_glow);       /* bg_glow.c，径向光晕（当前未使用） */
-LV_IMG_DECLARE(album_cover);   /* album_cover.c，190x190 圆角插画封面 */
+LV_IMG_DECLARE(album_cover);
+LV_IMG_DECLARE(ic_play);       /* play_icons.c */
+LV_IMG_DECLARE(ic_pause);
 
 /* ★ 11-20 01:35 主题化：原浅色硬编码全部指向 ui_theme() 色板（可切深色）。
  *   COL_BG 已无使用处（旧黑主题残留，保留定义防外链）。 */
@@ -142,7 +144,7 @@ static void set_playing_ui(bool on, const char *what)
     /* 胶囊按钮文字随状态切换（用 ASCII 竖线，避免图标字体缺字） */
     if (s_lbl_play != NULL)
     {
-        lv_label_set_text(s_lbl_play, on ? "暂停" : "播放");
+        lv_image_set_src(s_lbl_play, on ? &ic_pause : &ic_play);
     }
     /* ★ 必须判 NULL：歌单页没有这个控件（reset_widget_ptrs 已置 NULL），
      *   而状态轮询每 20ms 都会调到这里 —— 少了这个判断就是野指针写入，实测崩溃。 */
@@ -195,7 +197,7 @@ static void refresh_state_ui(void)
     else if (st == AUD_STATE_LOADING)
     {
         char b[80];
-        lv_label_set_text(s_lbl_play, "暂停");
+        lv_image_set_src(s_lbl_play, &ic_pause);
         lv_obj_set_style_bg_color(s_btn_play, lv_color_hex(0xE8556D),
                                   LV_PART_MAIN | LV_STATE_DEFAULT);
         snprintf(b, sizeof(b), "loading %s ...", current_short_name());
@@ -691,20 +693,20 @@ static void build_player(void)
     build_topbar(root, "Music", C_TITLE, "歌单 >", to_playlist_cb);
 
     /* 大封面 */
-    mk_cover_box(root, 70, 102, 190, 95, C_SHADOW);   /* 与图片同尺寸，radius=size/2 */
+    mk_cover_box(root, 45, 145, 190, 95, C_SHADOW);   /* 左侧区域垂直居中 */
 
     /* 右侧信息 */
-    s_lbl_title  = mk_lbl5(root, 320, 96, &ui_font_28, C_TITLE, LV_OPA_COVER, "No track");
+    s_lbl_title  = mk_lbl5(root, 290, 150, &ui_font_28, C_TITLE, LV_OPA_COVER, "No track");
     {
         char b[48];
         snprintf(b, sizeof(b), "%d songs  /  SD CARD", s_wav_n);
-        s_lbl_artist = mk_lbl5(root, 320, 136, &ui_font_14, C_SUB, LV_OPA_COVER, b);
+        s_lbl_artist = mk_lbl5(root, 290, 192, &ui_font_14, C_SUB, LV_OPA_COVER, b);
     }
 
     /* 进度 */
     s_bar = lv_bar_create(root);
-    lv_obj_set_size(s_bar, 380, 6);
-    lv_obj_set_pos(s_bar, 320, 214);
+    lv_obj_set_size(s_bar, 440, 6);
+    lv_obj_set_pos(s_bar, 290, 250);
     lv_bar_set_range(s_bar, 0, 1000);
     lv_bar_set_value(s_bar, 0, LV_ANIM_OFF);
     lv_obj_set_style_bg_color(s_bar, lv_color_hex(C_ACCENT_L2), LV_PART_MAIN);
@@ -713,8 +715,8 @@ static void build_player(void)
     lv_obj_set_style_bg_color(s_bar, lv_color_hex(C_ACCENT), LV_PART_INDICATOR);
     lv_obj_set_style_radius(s_bar, 3, LV_PART_INDICATOR);
 
-    s_lbl_pos = mk_lbl5(root, 320, 228, &ui_font_14, C_SUB, LV_OPA_COVER, "0:00");
-    s_lbl_dur = mk_lbl5(root, 662, 228, &ui_font_14, C_SUB, LV_OPA_COVER, "0:00");
+    s_lbl_pos = mk_lbl5(root, 290, 264, &ui_font_14, C_SUB, LV_OPA_COVER, "0:00");
+    s_lbl_dur = mk_lbl5(root, 692, 264, &ui_font_14, C_SUB, LV_OPA_COVER, "0:00");
     lv_obj_set_width(s_lbl_dur, 38);
     lv_obj_set_style_text_align(s_lbl_dur, LV_TEXT_ALIGN_RIGHT, 0);
 
@@ -722,7 +724,7 @@ static void build_player(void)
     {
         lv_obj_t *bp = lv_button_create(root);
         lv_obj_set_size(bp, 48, 48);
-        lv_obj_set_pos(bp, 344, 272);
+        lv_obj_set_pos(bp, 330, 314);
         lv_obj_set_style_radius(bp, LV_RADIUS_CIRCLE, 0);
         lv_obj_set_style_bg_color(bp, lv_color_hex(C_CARD), 0);
         lv_obj_set_style_bg_opa(bp, LV_OPA_COVER, 0);
@@ -737,8 +739,8 @@ static void build_player(void)
     }
     {
         s_btn_play = lv_button_create(root);
-        lv_obj_set_size(s_btn_play, 72, 72);
-        lv_obj_set_pos(s_btn_play, 424, 260);
+        lv_obj_set_size(s_btn_play, 84, 84);
+        lv_obj_set_pos(s_btn_play, 402, 296);
         lv_obj_set_style_radius(s_btn_play, LV_RADIUS_CIRCLE, 0);
         lv_obj_set_style_bg_color(s_btn_play, lv_color_hex(C_ACCENT), 0);
         lv_obj_set_style_border_width(s_btn_play, 0, 0);
@@ -746,16 +748,15 @@ static void build_player(void)
         lv_obj_set_style_shadow_opa(s_btn_play, LV_OPA_30, 0);
         lv_obj_set_style_shadow_color(s_btn_play, lv_color_hex(C_ACCENT), 0);
         lv_obj_add_event_cb(s_btn_play, play_cb, LV_EVENT_CLICKED, NULL);
-        s_lbl_play = lv_label_create(s_btn_play);
-        lv_obj_set_style_text_font(s_lbl_play, &ui_font_cn18, 0);   /* 用文字代替图标 */
-        lv_obj_set_style_text_color(s_lbl_play, lv_color_hex(0xFFFFFF), 0);
-        lv_label_set_text(s_lbl_play, "播放");
+        s_lbl_play = lv_image_create(s_btn_play);
+        lv_image_set_src(s_lbl_play, &ic_play);
+        lv_obj_clear_flag(s_lbl_play, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_center(s_lbl_play);
     }
     {
         lv_obj_t *bn = lv_button_create(root);
         lv_obj_set_size(bn, 48, 48);
-        lv_obj_set_pos(bn, 528, 272);
+        lv_obj_set_pos(bn, 506, 314);
         lv_obj_set_style_radius(bn, LV_RADIUS_CIRCLE, 0);
         lv_obj_set_style_bg_color(bn, lv_color_hex(C_CARD), 0);
         lv_obj_set_style_bg_opa(bn, LV_OPA_COVER, 0);
@@ -770,11 +771,11 @@ static void build_player(void)
     }
 
     /* 音量 */
-    mk_lbl5(root, 320, 372, &ui_font_cn18, C_SUB, LV_OPA_COVER, "音量");
+    mk_lbl5(root, 290, 410, &ui_font_cn18, C_SUB, LV_OPA_COVER, "音量");
     {
         lv_obj_t *vsl = lv_slider_create(root);
-        lv_obj_set_size(vsl, 240, 6);
-        lv_obj_set_pos(vsl, 372, 376);
+        lv_obj_set_size(vsl, 260, 6);
+        lv_obj_set_pos(vsl, 348, 414);
         lv_slider_set_range(vsl, 0, 100);
         lv_slider_set_value(vsl, audio_player_get_volume(), LV_ANIM_OFF);
         lv_obj_set_style_bg_color(vsl, lv_color_hex(C_ACCENT_L2), LV_PART_MAIN);
@@ -786,7 +787,7 @@ static void build_player(void)
         lv_obj_set_style_shadow_width(vsl, 0, LV_PART_KNOB);
         lv_obj_add_event_cb(vsl, slider_cb, LV_EVENT_VALUE_CHANGED, NULL);
     }
-    s_lbl_vol = mk_lbl5(root, 626, 368, &ui_font_20, C_TITLE, LV_OPA_COVER, "40");
+    s_lbl_vol = mk_lbl5(root, 622, 406, &ui_font_20, C_TITLE, LV_OPA_COVER, "40");
 
     s_lbl_state = mk_lbl5(root, 320, 424, &ui_font_14, P_SUB, LV_OPA_0, "");
 }
