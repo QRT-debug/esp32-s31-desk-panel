@@ -138,7 +138,7 @@ static void pl_highlight(void)
         /* 蓝底上用半透明白高亮（紫色在这页看不出来） */
         bool cur = (i == s_wav_idx);
         lv_obj_set_style_bg_color(s_pl_row[i], lv_color_hex(0xFFFFFF), 0);
-        lv_obj_set_style_bg_opa(s_pl_row[i], cur ? LV_OPA_20 : LV_OPA_TRANSP, 0);
+        lv_obj_set_style_bg_opa(s_pl_row[i], cur ? LV_OPA_40 : LV_OPA_TRANSP, 0);
     }
 }
 
@@ -474,10 +474,10 @@ static void mk_cover(lv_obj_t *p, int x, int y, int size, uint32_t col)
  *   右栏 = 序号 + 歌名 + 右侧歌手（**没有缩略图**，参考图就是这样）
  */
 
-#define M_TOP    0x1E3A8A      /* 渐变：深靛蓝（不是亮蓝，太亮会发荧光） */
-#define M_BOT    0x1E40AF      /*       深蓝（与顶几乎同色，只留极轻层次） */
-#define M_WHITE  0xFFFFFF
-#define M_SOFT   0xD6E4FF      /* 次要文字（配合 text_opa 用） */
+#define M_BG     0x7DD3FC      /* 天空蓝（sky-300）：明亮但不刺眼 */
+#define M_ACC    0x1E40AF      /* 强调色：深蓝（浅底上够清晰） */
+#define M_TXT    0x0B2B3C      /* 主文字：深蓝黑（浅底上的对比度约 8:1） */
+#define M_SUB    0x2C5A72      /* 次要文字：中蓝 */
 
 static lv_obj_t *mk_lbl3(lv_obj_t *p, int x, int y, const lv_font_t *f,
                          uint32_t col, lv_opa_t opa, const char *txt)
@@ -530,7 +530,7 @@ static void build_audio(void)
 {
     lv_obj_t *scr = lv_screen_active();
     lv_obj_clean(scr);
-    ui_statusbar_show(false);            /* 浅色状态栏压在蓝底上很跳 */
+    ui_statusbar_show(true);             /* 浅色页，状态栏同色系可以留 */
 
     s_wav_n = sd_card_ready() ? sd_card_scan_wav(s_wav, 16) : 0;
     if (s_wav_idx >= s_wav_n)
@@ -538,25 +538,14 @@ static void build_audio(void)
         s_wav_idx = 0;
     }
 
-    /* 背景：近黑底 + 中间一团青色光晕
-     * ★ 参考图实测是径向渐变（边缘 #020811 近黑、中心 #0196D8 亮青），
-     *   但本版 LVGL 没有 LV_GRAD_TYPE_RADIAL，只能用「圆 + 大阴影」模拟衰减。 */
-    lv_obj_set_style_bg_color(scr, lv_color_hex(0x020811), 0);
+    /* 背景：天空蓝纯色
+     * ★ 换掉径向光晕贴图的原因：RGB565 只有 32/64/32 级色，暗色渐变必然出色带，
+     *   抖动 + 放大也压不住（实测 90 行里 75 行与上一行同色）。纯色没有这个问题。 */
+    lv_obj_set_style_bg_color(scr, lv_color_hex(M_BG), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
     lv_obj_set_style_pad_all(scr, 0, 0);
     lv_obj_set_style_border_width(scr, 0, 0);
     lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
-
-    /* 背景：预生成的径向光晕图（1/8 尺寸放大 8 倍铺满）
-     * ★ 为什么不用 LVGL 的渐变：本版没有 RADIAL 类型；线性渐变做不出"中心亮四周暗"；
-     *   用「圆 + 大 shadow」模拟实测是硬边圆盘。只有贴图能得到连续衰减。 */
-    {
-        lv_obj_t *bg = lv_image_create(scr);
-        lv_image_set_src(bg, &bg_glow);
-        lv_image_set_scale(bg, 2048);          /* 256 = 1x，8x = 2048 */
-        lv_obj_center(bg);
-        lv_obj_clear_flag(bg, LV_OBJ_FLAG_CLICKABLE);
-    }
 
     lv_obj_t *root = lv_obj_create(scr);
     lv_obj_set_size(root, 800, 480);
@@ -573,18 +562,18 @@ static void build_audio(void)
         lv_obj_set_size(back, 34, 34);
         lv_obj_set_pos(back, 14, 8);
         lv_obj_set_style_radius(back, LV_RADIUS_CIRCLE, 0);
-        lv_obj_set_style_bg_color(back, lv_color_hex(M_WHITE), 0);
-        lv_obj_set_style_bg_opa(back, LV_OPA_20, 0);
+        lv_obj_set_style_bg_color(back, lv_color_hex(0xFFFFFF), 0);
+        lv_obj_set_style_bg_opa(back, LV_OPA_40, 0);
         lv_obj_set_style_border_width(back, 0, 0);
         lv_obj_set_style_shadow_width(back, 0, 0);
         lv_obj_add_event_cb(back, home_cb, LV_EVENT_CLICKED, NULL);
         lv_obj_t *bl = lv_label_create(back);
         lv_obj_set_style_text_font(bl, &ui_font_20, 0);
-        lv_obj_set_style_text_color(bl, lv_color_hex(M_WHITE), 0);
+        lv_obj_set_style_text_color(bl, lv_color_hex(M_TXT), 0);
         lv_label_set_text(bl, "<");
         lv_obj_center(bl);
     }
-    mk_lbl3(root, 58, 12, &ui_font_28, M_WHITE, LV_OPA_COVER, "Playlist");
+    mk_lbl3(root, 58, 12, &ui_font_28, M_TXT, LV_OPA_COVER, "Playlist");
 
     /* ---- 左栏：封面 + 歌单信息 ---- */
     {
@@ -604,16 +593,16 @@ static void build_audio(void)
 
         lv_obj_t *ic = lv_label_create(cover);
         lv_obj_set_style_text_font(ic, &ui_font_hw48, 0);
-        lv_obj_set_style_text_color(ic, lv_color_hex(M_WHITE), 0);
+        lv_obj_set_style_text_color(ic, lv_color_hex(0xFFFFFF), 0);
         lv_obj_set_style_text_opa(ic, LV_OPA_80, 0);
         lv_label_set_text(ic, "\xEF\x80\x81");     /* fa-music */
         lv_obj_center(ic);
     }
-    mk_lbl3(root, 20, 268, &ui_font_28, M_WHITE, LV_OPA_COVER, "Local Songs");
+    mk_lbl3(root, 20, 268, &ui_font_28, M_TXT, LV_OPA_COVER, "Local Songs");
     {
         char b[48];
         snprintf(b, sizeof(b), "%d songs   /   SD CARD", s_wav_n);
-        mk_lbl3(root, 20, 302, &ui_font_14, M_SOFT, LV_OPA_90, b);
+        mk_lbl3(root, 20, 302, &ui_font_14, M_SUB, LV_OPA_COVER, b);
     }
 
     /* 「播放全部」半透明胶囊 */
@@ -622,7 +611,7 @@ static void build_audio(void)
         lv_obj_set_size(pb, 150, 38);
         lv_obj_set_pos(pb, 20, 330);
         lv_obj_set_style_radius(pb, 19, 0);
-        lv_obj_set_style_bg_color(pb, lv_color_hex(M_WHITE), 0);
+        lv_obj_set_style_bg_color(pb, lv_color_hex(M_ACC), 0);
         lv_obj_set_style_bg_opa(pb, LV_OPA_30, 0);
         lv_obj_set_style_border_width(pb, 0, 0);
         lv_obj_set_style_shadow_width(pb, 0, 0);
@@ -630,7 +619,7 @@ static void build_audio(void)
 
         s_lbl_play = lv_label_create(pb);
         lv_obj_set_style_text_font(s_lbl_play, &ui_font_cn18, 0);   /* ★ 含中文，必须 cn18 */
-        lv_obj_set_style_text_color(s_lbl_play, lv_color_hex(M_WHITE), 0);
+        lv_obj_set_style_text_color(s_lbl_play, lv_color_hex(0xFFFFFF), 0);
         lv_label_set_text(s_lbl_play, "> 播放全部");
         lv_obj_center(s_lbl_play);
         s_btn_play = pb;
@@ -647,7 +636,7 @@ static void build_audio(void)
 
     if (s_wav_n <= 0)
     {
-        mk_lbl3(s_pl_box, 16, 20, &ui_font_20, M_SOFT, LV_OPA_90, "no wav on SD card");
+        mk_lbl3(s_pl_box, 16, 20, &ui_font_20, M_SUB, LV_OPA_COVER, "no wav on SD card");
     }
     for (int i = 0; i < s_wav_n && i < 16; i++)
     {
@@ -667,11 +656,11 @@ static void build_audio(void)
 
         char nb[8];
         snprintf(nb, sizeof(nb), "%02d", i + 1);
-        mk_lbl3(row, 4, 13, &ui_font_14, M_SOFT, LV_OPA_70, nb);
+        mk_lbl3(row, 4, 13, &ui_font_14, M_SUB, LV_OPA_COVER, nb);
 
         lv_obj_t *t = lv_label_create(row);
         lv_obj_set_style_text_font(t, &ui_font_20, 0);
-        lv_obj_set_style_text_color(t, lv_color_hex(M_WHITE), 0);
+        lv_obj_set_style_text_color(t, lv_color_hex(M_TXT), 0);
         lv_obj_set_pos(t, 44, 10);
         lv_obj_set_width(t, 300);
         lv_obj_set_height(t, 26);
@@ -682,8 +671,8 @@ static void build_audio(void)
         {
             lv_obj_t *a = lv_label_create(row);
             lv_obj_set_style_text_font(a, &ui_font_14, 0);
-            lv_obj_set_style_text_color(a, lv_color_hex(M_WHITE), 0);
-            lv_obj_set_style_text_opa(a, LV_OPA_70, 0);
+            lv_obj_set_style_text_color(a, lv_color_hex(M_SUB), 0);
+            lv_obj_set_style_text_opa(a, LV_OPA_COVER, 0);
             lv_obj_set_width(a, 160);
             lv_obj_set_style_text_align(a, LV_TEXT_ALIGN_RIGHT, 0);
             lv_obj_set_pos(a, 356, 14);
