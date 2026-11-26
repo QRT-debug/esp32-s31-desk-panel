@@ -855,8 +855,8 @@ static void build_player(void)
     /* 底部：喇叭按钮（点击呼出音量弹窗；低频操作不该常驻占版面） */
     {
         lv_obj_t *vb = lv_button_create(root);
-        lv_obj_set_size(vb, 52, 52);
-        lv_obj_set_pos(vb, 418, 400);   /* 与播放键同一竖轴（中心 x=444） */
+        lv_obj_set_size(vb, 36, 36);
+        lv_obj_set_pos(vb, 572, 324);   /* 与 ⏭ 同一排，作为工具栏的一员 */
         lv_obj_set_style_radius(vb, LV_RADIUS_CIRCLE, 0);
         lv_obj_set_style_bg_color(vb, lv_color_hex(C_CARD), 0);
         lv_obj_set_style_bg_opa(vb, LV_OPA_COVER, 0);
@@ -866,7 +866,8 @@ static void build_player(void)
 
         lv_obj_t *vi = lv_image_create(vb);
         lv_image_set_src(vi, &ic_volume);
-        lv_obj_set_style_image_recolor(vi, lv_color_hex(C_ACCENT), 0);
+        lv_image_set_scale(vi, 150);                     /* 48px 图标缩到 ~28px */
+        lv_obj_set_style_image_recolor(vi, lv_color_hex(C_SUB), 0);
         lv_obj_set_style_image_recolor_opa(vi, LV_OPA_COVER, 0);
         lv_obj_center(vi);
         lv_obj_clear_flag(vi, LV_OBJ_FLAG_CLICKABLE);
